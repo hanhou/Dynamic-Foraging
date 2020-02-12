@@ -54,6 +54,8 @@ class Bandit:
   
     def reset(self):
         
+        #  print(self)
+        
         # Initialization
         self.time = 0
         self.q_estimation = np.zeros(self.k) # Estimation for each action 
@@ -144,7 +146,8 @@ class Bandit:
         reward_available_after_choice [choice] = 0   # The reward is depleted at the chosen lick port.
         
         self.time += 1   # Time ticks here.
-        if self.time == self.n_trials: return;   # Session terminates
+        if self.time == self.n_trials: 
+            return;   # Session terminates
         
         # For the next reward status, the "or" statement ensures the baiting property, gated by self.if_baited.
         self.reward_available[:, self.time] = np.logical_or(  reward_available_after_choice * self.if_baited,    

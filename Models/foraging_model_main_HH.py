@@ -18,14 +18,14 @@ from foraging_model_plots_HH import plot_one_session
 
 global_k_arm = 2
 global_n_trials = 700  # To cope with the one-argument limitation of map/imap
-global_n_runs = 2000
+global_n_sessions = 10
 
-def one_run(bandit):     
+def run_one_session(bandit):     
 # =============================================================================
 # Make one-run independently
 # =============================================================================
     
-    # === Perform one run ===
+    # === Simulate one run ===
     bandit.reset()
     for t in range(bandit.n_trials):        
         # Loop: (Act --> Reward & New state)
@@ -33,54 +33,64 @@ def one_run(bandit):
         bandit.step(action)
         
     # === Summarize results for this run ===
-    results_this_run = dict()
-    results_this_run['choice_history'] = bandit.choice_history
-    results_this_run['reward_history'] = bandit.reward_history
+    # - Blockwise statistics -
+    
+    results_this_session = dict()
+    results_this_session['n_trials'] = bandit.n_trials
+    results_this_session['p_reward'] = bandit.p_reward
+    results_this_session['reward_available'] = bandit.reward_available
+    results_this_session['choice_history'] = bandit.choice_history
+    results_this_session['reward_history'] = bandit.reward_history
+    results_this_session['description'] = bandit.description
       
-    return results_this_run
+    return results_this_session
 
 
-def repeat_runs(bandit, n_runs = global_n_runs):  
+def run_sessions_parallel(bandit, n_sessions = global_n_sessions):  
 # =============================================================================
-#  Run simulations in serial or in parallel, for the SAME bandit, repeating n_runs
+#  Run simulations with the SAME bandit in serial or in parallel, repeating n_sessions
 # =============================================================================
        
-    choice_all_runs = np.zeros([n_runs, bandit.n_trials])
-    reward_all_runs = np.zeros([n_runs, global_k_arm, bandit.n_trials])  # Assuming all bandits have the same n_trials
+    choice_all_runs = np.zeros([n_sessions, bandit.n_trials])
+    reward_all_runs = np.zeros([n_sessions, global_k_arm, bandit.n_trials])  # Assuming all bandits have the same n_trials
+    
+    
+    # bandits_all_sessions = [bandit] * n_sessions  # This does not work because all bandits have the same REFERENCE!
+    results_all_sessions = []
     
     if 'serial' in methods:
     
         start = time.time()         # Serial computing
-        for r in tqdm(range(n_runs), desc='serial'):     # trange: progress bar. HH
-            results_this_run = one_run(bandit)   
-            choice_all_runs[r, :] = results_this_run['choice_history']
-            reward_all_runs[r, :, :] = results_this_run['reward_history']
+        for ss in tqdm(range(n_sessions), total = n_sessions, desc='serial'):     # trange: progress bar. HH
+            results_all_sessions.append(run_one_session(bandit))     # Add bandit to results
+            choice_all_runs[ss, :] = results_all_sessions[ss]['choice_history']
+            reward_all_runs[ss, :, :] = results_all_sessions[ss]['reward_history']
             
         print('--- serial finished in %g s ---\n' % (time.time()-start))
 
     if 'apply_async' in methods:    # Using multiprocessing.apply_async()
 
         start = time.time()
-       
-        result_ids = [pool.apply_async(one_run, args=(bandit)) for r in range(n_runs)]
+        
+        # Note the "," in (bandit,). See here https://stackoverflow.com/questions/29585910/why-is-multiprocessings-apply-async-so-picky
+        result_ids = [pool.apply_async(run_one_session, args = (bandit,)) for ss in range(n_sessions)]  
                         
-        for r, result_id in tqdm(enumerate(result_ids), total = n_runs, desc='apply_async'):
-            results_this_run = one_run(bandit)
-            choice_all_runs[r, :] = results_this_run['choice_history']
-            reward_all_runs[r, :, :] = results_this_run['reward_history']
+        for ss, result_id in tqdm(enumerate(result_ids), total = n_sessions, desc='apply_async'):
+            results_all_sessions.append(result_id.get())
+            choice_all_runs[ss, :] = results_all_sessions[ss]['choice_history']
+            reward_all_runs[ss, :, :] = results_all_sessions[ss]['reward_history']
             
         print('\n--- apply_async finished in %g s--- \n' % (time.time()-start), flush=True)
 
-
-    plot_one_session(bandit)  # This is actually the "last run" of all the repeated runs
-
+    plot_one_session(results_all_sessions[0])  # Plot example session
+   
     
     return 
 
 
-def figure_2_2(runs = 1, n_trials = global_n_trials):
+def figure_2_2():
     
-    title_txt = '\n=== Figure 2.2: Sample-average \nDifferent eps (%g runs)===\n' % runs
+    title_txt = '\n=== Figure 2.2: Sample-average \nDifferent eps (%g runs)===\n' % global_n_sessions
     print(title_txt, flush = True)
         
     epsilons = [0.1]
@@ -89,10 +99,10 @@ def figure_2_2(runs = 1, n_trials = global_n_trials):
     
     # Generate a series of Bandit objects using different eps. HH
     
-    bandit = [Bandit(epsilon = eps, step_size = step_size, if_baited = True, n_trials = global_n_trials) for eps in epsilons]   # Use the [f(xxx) for xxx in yyy] trick. HH!!!
+    bandit = [Bandit(epsilon = eps, step_size = step_size, if_baited = True) for eps in epsilons]   # Use the [f(xxx) for xxx in yyy] trick. HH!!!
     
     # Run simulations, return best_action_counts and rewards. HH
-    repeat_runs(bandit[0], runs)
+    run_sessions_parallel(bandit[0])
     
 # =============================================================================
 # 
@@ -123,11 +133,15 @@ def figure_2_2(runs = 1, n_trials = global_n_trials):
 if __name__ == '__main__':
     
     n_worker = mp.cpu_count()
-    methods = [ 'serial',
-                # 'apply_async'   # This is best till now!!!
+    methods = [ 
+                # 'serial',
+                'apply_async'   # This is best till now!!!
               ]
     
     if any([x in methods for x in ('apply_async','map','imap_unordered','imap')]):
         pool = mp.Pool(processes = n_worker)
 
     figure_2_2()
+    
+    if any([x in methods for x in ('apply_async','map','imap_unordered','imap')]):
+        pool.close()   # This is a good practice
