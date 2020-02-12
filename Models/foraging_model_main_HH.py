@@ -1,20 +1,22 @@
 # =============================================================================
 # Main function for simulating foraging_model_HH
 # =============================================================================
-"""
-Created on Wed Feb 12 14:11:12 2020
+# - Use apply_async() in multiprocessing for parallel computing (10x speed-up in my 8/16 I9-9900k)
+#
+# Han Hou @ Houston, Feb 12 2020
+# Svoboda lab
+# =============================================================================
 
-@author: Han
-"""
 
 import numpy as np
 from tqdm import tqdm  # For progress bar. HH
 import time
 import multiprocessing as mp
+import copy
 
 # Import my own modules
 from foraging_model_HH import Bandit
-from foraging_model_plots_HH import plot_one_session
+from foraging_model_plots_HH import plot_all_sessions
 
 global_k_arm = 2
 global_n_trials = 700  # To cope with the one-argument limitation of map/imap
@@ -34,16 +36,14 @@ def run_one_session(bandit):
         
     # === Summarize results for this run ===
     # - Blockwise statistics -
-    
-    results_this_session = dict()
-    results_this_session['n_trials'] = bandit.n_trials
-    results_this_session['p_reward'] = bandit.p_reward
-    results_this_session['reward_available'] = bandit.reward_available
-    results_this_session['choice_history'] = bandit.choice_history
-    results_this_session['reward_history'] = bandit.reward_history
-    results_this_session['description'] = bandit.description
+# =============================================================================
+#     blockwise_reward_fraction = 
+#     blockwise_choice_fraction = 
+#     blockwise_reward_ratio = 
+#     blockwise_choice_ratio = 
+# =============================================================================
       
-    return results_this_session
+    return bandit  # Use deepcopy() to return an independent copy of bandit
 
 
 def run_sessions_parallel(bandit, n_sessions = global_n_sessions):  
@@ -51,38 +51,33 @@ def run_sessions_parallel(bandit, n_sessions = global_n_sessions):
 #  Run simulations with the SAME bandit in serial or in parallel, repeating n_sessions
 # =============================================================================
        
-    choice_all_runs = np.zeros([n_sessions, bandit.n_trials])
-    reward_all_runs = np.zeros([n_sessions, global_k_arm, bandit.n_trials])  # Assuming all bandits have the same n_trials
-    
-    
-    # bandits_all_sessions = [bandit] * n_sessions  # This does not work because all bandits have the same REFERENCE!
-    results_all_sessions = []
-    
-    if 'serial' in methods:
-    
-        start = time.time()         # Serial computing
-        for ss in tqdm(range(n_sessions), total = n_sessions, desc='serial'):     # trange: progress bar. HH
-            results_all_sessions.append(run_one_session(bandit))     # Add bandit to results
-            choice_all_runs[ss, :] = results_all_sessions[ss]['choice_history']
-            reward_all_runs[ss, :, :] = results_all_sessions[ss]['reward_history']
-            
+   
+    # Generate a series of deepcopys of bandit to make them independent!!
+    bandits_all_sessions = []
+    [bandits_all_sessions.append(copy.deepcopy(bandit)) for ss in range(n_sessions)]
+        
+    if 'serial' in methods:  # Serial computing (for test)
+        start = time.time()         
+        for ss, bb in tqdm(enumerate(bandits_all_sessions), total = n_sessions, desc='serial'):     # trange: progress bar. HH
+            run_one_session(bb)     # There is no need to assign back the resulting bandit. (Modified inside run_one_session())
+             
         print('--- serial finished in %g s ---\n' % (time.time()-start))
+        
 
-    if 'apply_async' in methods:    # Using multiprocessing.apply_async()
-
+    if 'apply_async' in methods:    # Parallel computing using multiprocessing.apply_async()
         start = time.time()
         
-        # Note the "," in (bandit,). See here https://stackoverflow.com/questions/29585910/why-is-multiprocessings-apply-async-so-picky
-        result_ids = [pool.apply_async(run_one_session, args = (bandit,)) for ss in range(n_sessions)]  
+        # Note the "," in (bb,). See here https://stackoverflow.com/questions/29585910/why-is-multiprocessings-apply-async-so-picky
+        result_ids = [pool.apply_async(run_one_session, args = (bb,)) for bb in bandits_all_sessions]  
                         
         for ss, result_id in tqdm(enumerate(result_ids), total = n_sessions, desc='apply_async'):
-            results_all_sessions.append(result_id.get())
-            choice_all_runs[ss, :] = results_all_sessions[ss]['choice_history']
-            reward_all_runs[ss, :, :] = results_all_sessions[ss]['reward_history']
+            # For apply_async, the assignment is required, because the bb passed to the workers are local independent copys.
+            bandits_all_sessions[ss] = result_id.get()  
             
         print('\n--- apply_async finished in %g s--- \n' % (time.time()-start), flush=True)
-
-    plot_one_session(results_all_sessions[0])  # Plot example session
+        
+        
+    plot_all_sessions(bandits_all_sessions)  # Plot summary statistics over repeated sessions for this bandit
    
     
     return 

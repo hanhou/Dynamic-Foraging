@@ -16,15 +16,15 @@ def moving_average(a, n=3) :
     ret[n:] = ret[n:] - ret[:-n]
     return ret[n - 1:] / n
 
-def plot_one_session(results_this_run, plottype='2lickport'):     # Part of code from Marton
+def plot_one_session(bandit, axis, plottype='2lickport'):     # Part of code from Marton
     
     # Fetch data
-    n_trials = results_this_run['n_trials']
-    p_reward = results_this_run['p_reward']
-    reward_available = results_this_run['reward_available']
-    choice_history = results_this_run['choice_history']
-    reward_history = results_this_run['reward_history']
-    description = results_this_run['description']
+    n_trials = bandit.n_trials
+    p_reward = bandit.p_reward
+    reward_available = bandit.reward_available
+    choice_history = bandit.choice_history
+    reward_history = bandit.reward_history
+    description = bandit.description
                                       
     rewarded_trials = np.any(reward_history, axis = 0)
     unrewarded_trials = np.logical_not(rewarded_trials)
@@ -42,27 +42,48 @@ def plot_one_session(results_this_run, plottype='2lickport'):     # Part of code
     
     p_reward_ratio = p_reward[RIGHT,:] / (np.sum(p_reward, axis = 0))
     
-    fig = plt.figure()
-    ax1 = plt.subplot(2,1,1)
+    if axis == '':
+        plt.figure()
+        axis = plt.subplot(2,1,1)
 
     # Rewarded trials
-    ax1.plot(np.nonzero(rewarded_trials)[0], choice_history[rewarded_trials], 'k|',color='black',markersize=30, markeredgewidth=2)
+    axis.plot(np.nonzero(rewarded_trials)[0], choice_history[rewarded_trials], 'k|',color='black',markersize=30, markeredgewidth=2)
     
     # Unrewarded trials
-    ax1.plot(np.nonzero(unrewarded_trials)[0], choice_history[unrewarded_trials], '|',color='gray', markersize=15, markeredgewidth=1)
+    axis.plot(np.nonzero(unrewarded_trials)[0], choice_history[unrewarded_trials], '|',color='gray', markersize=15, markeredgewidth=1)
     
     # Baited probability and smoothed choice history
-    ax1.plot(np.arange(0, n_trials), p_reward_ratio, color='orange')
-    ax1.plot(moving_average(choice_history, 10) , color='black')
+    axis.plot(np.arange(0, n_trials), p_reward_ratio, color='orange')
+    axis.plot(moving_average(choice_history, 10) , color='black')
     
-    ax1.set_yticks([0,1])
-    ax1.set_yticklabels(['Left','Right'])
+    axis.set_yticks([0,1])
+    axis.set_yticklabels(['Left','Right'])
     plt.xlabel('choice #')
     
     # Reward rate
     plt.title('%s, efficiency = %.02f' % (description, foraging_efficiency), fontsize = 10)
-    fig.show()
     
-def plot_all_sessions():
+    
+    return axis
+    
+def plot_all_sessions(results_all_sessions):
+    
+    fig = plt.figure()
+    
+    # == 1. Example Session ==
+
+    plot_one_session(results_all_sessions[-1], plt.subplot(2,1,1))   # Plot the last example session
+    plot_one_session(results_all_sessions[-2], plt.subplot(2,1,2))   # Plot the last example session
+    
+    # == 2. Blockwise matching ==
+    
+    # choice_all_runs = np.zeros([n_sessions, bandit.n_trials])
+    # reward_all_runs = np.zeros([n_sessions, global_k_arm, bandit.n_trials])  # Assuming all bandits have the same n_trials
+ 
+     
+    
+    # 2a.  
+    
+    fig.show()
     return
   

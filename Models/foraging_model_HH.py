@@ -1,12 +1,10 @@
 # =============================================================================
 # Models for dynamic foraging task
-# 
-# - Use apply_async() in multiprocessing for parallel computing
-# - Modified from the code for Sutton & Barto's RL book, Chapter 02
+# =============================================================================
+# - Initially modified from the code for Sutton & Barto's RL book, Chapter 02
 #   1. 2-bandit problem
 #   2. Introducing "baiting" property
 #   3. Baiting dynamics reflects in the reward probability rather than reward amplitude
-# 
 # 
 # Han Hou @ Houston Feb 2020
 # Svoboda lab
@@ -50,6 +48,8 @@ class Bandit:
         self.forager = forager
         self.if_baited = if_baited
         
+        
+        self.test_reference = np.zeros(10)
         self.description = '%s, epsi = %g, alpha = %g' % (forager,epsilon,step_size)
   
     def reset(self):
