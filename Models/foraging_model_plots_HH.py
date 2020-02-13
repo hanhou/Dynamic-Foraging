@@ -3,7 +3,9 @@
 # =============================================================================
 import numpy as np
 import matplotlib.pyplot as plt
-plt.rcParams.update({'font.size': 15})
+from matplotlib.gridspec import GridSpec
+
+plt.rcParams.update({'font.size': 13})
 
 LEFT = 0
 RIGHT = 1
@@ -16,64 +18,83 @@ def moving_average(a, n=3) :
     ret[n:] = ret[n:] - ret[:-n]
     return ret[n - 1:] / n
 
-def plot_one_session(bandit, axis, plottype='2lickport'):     # Part of code from Marton
+def plot_one_session(bandit, fig, plottype='2lickport'):     # Part of code from Marton
     
-    # Fetch data
+    # == Fetch data ==
     n_trials = bandit.n_trials
-    p_reward = bandit.p_reward
-    reward_available = bandit.reward_available
     choice_history = bandit.choice_history
     reward_history = bandit.reward_history
-    description = bandit.description
                                       
     rewarded_trials = np.any(reward_history, axis = 0)
     unrewarded_trials = np.logical_not(rewarded_trials)
     
-    # Foraging efficiency = Sum of actual rewards / Maximum number of rewards that could have been collected
-    actual_reward_rate = np.sum(reward_history) / n_trials
-    
-    '''Don't know which one is better'''
-    # maximum_reward_rate = np.mean(np.max(p_reward, axis = 0)) #??? Method 1: Average of max(p_reward) 
-    maximum_reward_rate = np.mean(np.sum(p_reward, axis = 0)) #??? Method 2: Average of sum(p_reward).   [Corrado et al 2005: efficienty = 50% for choosing only one color]
-    # maximum_reward_rate = np.sum(np.any(reward_available, axis = 0)) / n_trials  #??? Method 3: Maximum reward given the fixed reward_available (one choice per trial constraint) [Sugrue 2004???]
-    # maximum_reward_rate = np.sum(np.sum(reward_available, axis = 0)) / n_trials  #??? Method 4: Sum of all ever-baited rewards (not fair)  
-
-    foraging_efficiency = actual_reward_rate / maximum_reward_rate
-    
-    p_reward_ratio = p_reward[RIGHT,:] / (np.sum(p_reward, axis = 0))
-    
-    if axis == '':
-        plt.figure()
-        axis = plt.subplot(2,1,1)
+    # == Choice trace ==
+    if fig == '':
+        fig = plt.figure()
+        
+    gs = GridSpec(3,3)        
+    ax = fig.add_subplot(gs[0,0:2])
 
     # Rewarded trials
-    axis.plot(np.nonzero(rewarded_trials)[0], choice_history[rewarded_trials], 'k|',color='black',markersize=30, markeredgewidth=2)
+    ax.plot(np.nonzero(rewarded_trials)[0], 0.5 + (choice_history[rewarded_trials]-0.5) * 1.4, 
+            'k|',color='black',markersize=20, markeredgewidth=2)
     
     # Unrewarded trials
-    axis.plot(np.nonzero(unrewarded_trials)[0], choice_history[unrewarded_trials], '|',color='gray', markersize=15, markeredgewidth=1)
+    ax.plot(np.nonzero(unrewarded_trials)[0], 0.5 + (choice_history[unrewarded_trials] - 0.5) * 1.4, 
+            '|',color='gray', markersize=10, markeredgewidth=1)
     
     # Baited probability and smoothed choice history
-    axis.plot(np.arange(0, n_trials), p_reward_ratio, color='orange')
-    axis.plot(moving_average(choice_history, 10) , color='black')
+    ax.plot(np.arange(0, n_trials), bandit.p_reward_fraction, color='DarkOrange')
+    ax.plot(moving_average(choice_history, 10) , color='black')
     
-    axis.set_yticks([0,1])
-    axis.set_yticklabels(['Left','Right'])
-    plt.xlabel('choice #')
+    ax.set_yticks([0,1])
+    ax.set_yticklabels(['Left','Right'])
+    plt.xlabel('Example session')
     
     # Reward rate
-    plt.title('%s, efficiency = %.02f' % (description, foraging_efficiency), fontsize = 10)
+    plt.title('%s, efficiency = %.02f' % (bandit.description, bandit.foraging_efficiency), fontsize = 10)
     
+    # == Cumulative choice plot ==  [Sugrue 2004]
+    bandit.cumulative_choice_L = np.cumsum(bandit.choice_history == LEFT)
+    bandit.cumulative_choice_R = np.cumsum(bandit.choice_history == RIGHT)
     
-    return axis
+    # Actual choices
+    ax = fig.add_subplot(gs[0,2])
+    ax.plot(bandit.cumulative_choice_L, bandit.cumulative_choice_R, color='black')
+    ax.yaxis.set_label_position('right')
+    ax.yaxis.tick_right()
+    
+    # p_rewards
+    
+    # bandit.block_trans_time = np.cumsum(np.hstack([0,bandit.n_trials_per_block]))
+    
+    for i_block, block_start in enumerate(bandit.block_trans_time[:-1]):   # For each block in this session
+        
+        # Find the starting point and slope for each block
+        
+        x0 = bandit.cumulative_choice_L[block_start]
+        y0 = bandit.cumulative_choice_R[block_start]
+        slope = bandit.p_reward_ratio[block_start]    # Note that this should be p_reward_ratio, not p_reward_fraction!!
+        
+        # next_x = bandit.cumulative_choice_L[bandit.block_trans_time[i_block+1] - 1]   # To ensure horizontal continuity
+        dx = bandit.n_trials_per_block[i_block]/(1 + slope)   # To ensure total number of trials be the same
+        dy = dx * slope
+        
+        # Plot p_reward_fraction
+        ax.plot([x0 , x0 + dx], [y0, y0 + dy],'-', color='DarkOrange')
+        
+    plt.xlabel('Cumulative Left choices')
+    plt.ylabel('Cumulative Right choices')
+    ax.set_aspect('equal')
+
+    return fig
     
 def plot_all_sessions(results_all_sessions):
     
-    fig = plt.figure()
+    fig = plt.figure(figsize=(12, 8))
     
     # == 1. Example Session ==
-
-    plot_one_session(results_all_sessions[-1], plt.subplot(2,1,1))   # Plot the last example session
-    plot_one_session(results_all_sessions[-2], plt.subplot(2,1,2))   # Plot the last example session
+    plot_one_session(results_all_sessions[-1], fig)   # Plot the last example session
     
     # == 2. Blockwise matching ==
     

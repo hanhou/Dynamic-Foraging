@@ -18,6 +18,8 @@ import copy
 from foraging_model_HH import Bandit
 from foraging_model_plots_HH import plot_all_sessions
 
+LEFT = 0
+RIGHT = 1
 global_k_arm = 2
 global_n_trials = 700  # To cope with the one-argument limitation of map/imap
 global_n_sessions = 10
@@ -35,16 +37,46 @@ def run_one_session(bandit):
         bandit.step(action)
         
     # === Summarize results for this run ===
-    # - Blockwise statistics -
-# =============================================================================
-#     blockwise_reward_fraction = 
-#     blockwise_choice_fraction = 
-#     blockwise_reward_ratio = 
-#     blockwise_choice_ratio = 
-# =============================================================================
-      
-    return bandit  # Use deepcopy() to return an independent copy of bandit
+    # -- 1. Foraging efficiency = Sum of actual rewards / Maximum number of rewards that could have been collected --
+    bandit.actual_reward_rate = np.sum(bandit.reward_history) / bandit.n_trials
+    
+    '''Don't know which one is better'''
+    # bandit.maximum_reward_rate = np.mean(np.max(bandit.p_reward, axis = 0)) #??? Method 1: Average of max(p_reward) 
+    bandit.maximum_reward_rate = np.mean(np.sum(bandit.p_reward, axis = 0)) #??? Method 2: Average of sum(p_reward).   [Corrado et al 2005: efficienty = 50% for choosing only one color]
+    # bandit.maximum_reward_rate = np.sum(np.any(bandit.reward_available, axis = 0)) / bandit.n_trials  #??? Method 3: Maximum reward given the fixed reward_available (one choice per trial constraint) [Sugrue 2004???]
+    # bandit.maximum_reward_rate = np.sum(np.sum(bandit.reward_available, axis = 0)) / bandit.n_trials  #??? Method 4: Sum of all ever-baited rewards (not fair)  
 
+    bandit.foraging_efficiency = bandit.actual_reward_rate / bandit.maximum_reward_rate
+    
+    # -- 2. Blockwise statistics --
+    temp_nans = np.zeros(bandit.n_blocks)
+    temp_nans[:] = np.nan   # Better way?
+    
+    bandit.blockwise_choice_fraction = temp_nans.copy()
+    bandit.blockwise_reward_fraction = temp_nans.copy()
+    bandit.blockwise_log_choice_ratio = temp_nans.copy()
+    bandit.blockwise_log_reward_ratio = temp_nans.copy()
+    
+    bandit.block_trans_time = np.cumsum(np.hstack([0,bandit.n_trials_per_block]))
+    
+    for i_block in range(bandit.n_blocks):   # For each block in this session
+        trial_range = np.r_[bandit.block_trans_time[i_block] : bandit.block_trans_time[i_block+1]]  # r_ trick
+       
+        choice_R = np.sum(bandit.choice_history[trial_range] == RIGHT)
+        choice_L = np.sum(bandit.choice_history[trial_range] == LEFT)
+        rew_R = np.sum(bandit.reward_history[RIGHT, trial_range])
+        rew_L = np.sum(bandit.reward_history[LEFT, trial_range])
+                
+        if (rew_R + rew_L):    # Non-zero total reward. Otherwise, leaves nan
+            bandit.blockwise_choice_fraction[i_block] = choice_R / (choice_R + choice_L)
+            bandit.blockwise_reward_fraction[i_block] = rew_R / (rew_R + rew_L)
+        
+        if all([rew_R, rew_L, choice_R, choice_L]):   # All non-zero. Otherwise, leaves nan
+            bandit.blockwise_log_choice_ratio[i_block] = np.log(choice_R / choice_L)
+            bandit.blockwise_log_reward_ratio[i_block] = np.log(rew_R / rew_L)
+        
+    return bandit   # For apply_async, in-place change is impossible since each worker uses "bandit" as 
+                    # an independent local object. So I have to return "bandit" explicitly
 
 def run_sessions_parallel(bandit, n_sessions = global_n_sessions):  
 # =============================================================================
@@ -129,8 +161,8 @@ if __name__ == '__main__':
     
     n_worker = mp.cpu_count()
     methods = [ 
-                # 'serial',
-                'apply_async'   # This is best till now!!!
+                'serial',
+                # 'apply_async'   # This is best till now!!!
               ]
     
     if any([x in methods for x in ('apply_async','map','imap_unordered','imap')]):

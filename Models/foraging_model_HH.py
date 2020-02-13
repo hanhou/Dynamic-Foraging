@@ -23,6 +23,9 @@
 
 import numpy as np
 
+LEFT = 0
+RIGHT = 1
+
 global_n_trials_per_block_base = 80
 global_n_trials_per_block_sd = 20
 
@@ -63,7 +66,7 @@ class Bandit:
         self.reward_history = np.zeros([self.k, self.n_trials])    # Reward history, separated for each port (Corrado Newsome 2005)
         
         # Generate baiting prob in block structure
-        [self.p_reward, self.n_trials_per_block] = self.generate_p_reward()
+        self.generate_p_reward()
         
         # Prepare reward for the first trial
         # For example, [0,1] represents there is reward baited at the RIGHT but not LEFT port.
@@ -75,7 +78,7 @@ class Bandit:
     # =============================================================================
     def generate_p_reward(self, n_trials_per_block_base = global_n_trials_per_block_base, 
                                 n_trials_per_block_sd = global_n_trials_per_block_sd,
-                                reward_ratio_pairs = [[.4,.05],[.3857,.0643],[.3375,.1125],[.225,.225]]):
+                                p_reward_pairs = [[.4,.05],[.3857,.0643],[.3375,.1125],[.225,.225]]):
         
         n_trials_now = 0
         n_trials_per_block = []  
@@ -93,15 +96,15 @@ class Bandit:
                   
             # Get values to fill for this block
             if n_trials_now == 0:  # The first block is set to 50% reward rate (as Marton did)
-                p_reward_this_block = np.array([[sum(reward_ratio_pairs[0])/2] * 2])  # Note the outer brackets
+                p_reward_this_block = np.array([[sum(p_reward_pairs[0])/2] * 2])  # Note the outer brackets
             else:
                 # Choose reward_ratio_pair
                 if not(np.diff(p_reward_this_block)):   # If we had equal p_reward in the last trial
-                    ratiopairidx = np.random.choice(range(len(reward_ratio_pairs)-1))   # We should not let it happen again immediately
+                    pair_idx = np.random.choice(range(len(p_reward_pairs)-1))   # We should not let it happen again immediately
                 else:
-                    ratiopairidx = np.random.choice(range(len(reward_ratio_pairs)))
+                    pair_idx = np.random.choice(range(len(p_reward_pairs)))
                     
-                p_reward_this_block = np.array([reward_ratio_pairs[ratiopairidx]])   # Note the outer brackets
+                p_reward_this_block = np.array([p_reward_pairs[pair_idx]])   # Note the outer brackets
 
                 # To ensure flipping of p_reward during transition (Marton)
                 if len(n_trials_per_block) % 2:     
@@ -110,9 +113,11 @@ class Bandit:
             # Fill in trials for this block
             p_reward[:, n_trials_now : n_trials_now + n_trials_this_block] = p_reward_this_block.T
             n_trials_now += n_trials_this_block
-
-
-        return p_reward, np.array(n_trials_per_block)
+        
+        self.n_blocks = len(n_trials_per_block)
+        self.p_reward, self.n_trials_per_block = (p_reward, np.array(n_trials_per_block))
+        self.p_reward_fraction = p_reward[RIGHT,:] / (np.sum(p_reward, axis = 0))   # For future use
+        self.p_reward_ratio = p_reward[RIGHT,:] / p_reward[LEFT,:]   # For future use
 
 
     def act(self):
