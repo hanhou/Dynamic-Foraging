@@ -120,7 +120,7 @@ def plot_all_sessions(results_all_reps, example_session = []):
     results_all_reps['linear_fit_log_ratio'] = np.block([[slope, slope_CI95], [intercept, intercept_CI95],[r_square, p[1]]])
     
     ax.plot(x,y_pred,'r')
-    ax.text(0,-2,'a = %.2g +/- %.2g\nr^2 = %.2g\np = %.2g' % (slope, slope_CI95, r_square, p[1]))
+    ax.text(0,min(plt.ylim()),'a = %.2g +/- %.2g\nr^2 = %.2g\np = %.2g' % (slope, slope_CI95, r_square, p[1]))
     plt.xlabel('Blockwise log reward ratio')
     plt.ylabel('Blockwise log choice ratio')
     plt.axis('square')

@@ -22,11 +22,12 @@ methods = [
             # 'serial',
             'apply_async'   # This is best till now!!!
           ]
+
 LEFT = 0
 RIGHT = 1
 global_k_arm = 2
 global_n_trials = 700  # To cope with the one-argument limitation of map/imap
-global_n_sessions = 1000
+global_n_sessions = 100
 
 def run_one_session(bandit):     
     # =============================================================================
@@ -187,7 +188,6 @@ def figure_2_2():
 if __name__ == '__main__':
     
     n_worker = mp.cpu_count()
-
     
     if any([x in methods for x in ('apply_async','map','imap_unordered','imap')]):
         pool = mp.Pool(processes = n_worker)
@@ -195,4 +195,5 @@ if __name__ == '__main__':
     figure_2_2()
     
     if any([x in methods for x in ('apply_async','map','imap_unordered','imap')]):
-        pool.close()   # This is a good practice
+        pool.close()   # Just a good practice
+        pool.join()
