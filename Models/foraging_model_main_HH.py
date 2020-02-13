@@ -18,25 +18,29 @@ import copy
 from foraging_model_HH import Bandit
 from foraging_model_plots_HH import plot_all_sessions
 
+methods = [ 
+            # 'serial',
+            'apply_async'   # This is best till now!!!
+          ]
 LEFT = 0
 RIGHT = 1
 global_k_arm = 2
 global_n_trials = 700  # To cope with the one-argument limitation of map/imap
-global_n_sessions = 10
+global_n_sessions = 1000
 
 def run_one_session(bandit):     
-# =============================================================================
-# Make one-run independently
-# =============================================================================
-    
-    # === Simulate one run ===
+    # =============================================================================
+    # Simulate one session
+    # =============================================================================
     bandit.reset()
     for t in range(bandit.n_trials):        
         # Loop: (Act --> Reward & New state)
         action = bandit.act()
         bandit.step(action)
         
-    # === Summarize results for this run ===
+    # =============================================================================
+    # Compute results for this session
+    # =============================================================================
     # -- 1. Foraging efficiency = Sum of actual rewards / Maximum number of rewards that could have been collected --
     bandit.actual_reward_rate = np.sum(bandit.reward_history) / bandit.n_trials
     
@@ -79,22 +83,20 @@ def run_one_session(bandit):
                     # an independent local object. So I have to return "bandit" explicitly
 
 def run_sessions_parallel(bandit, n_sessions = global_n_sessions):  
-# =============================================================================
-#  Run simulations with the SAME bandit in serial or in parallel, repeating n_sessions
-# =============================================================================
-       
+    # =============================================================================
+    # Run simulations with the SAME bandit in serial or in parallel, repeating n_sessions
+    # =============================================================================
    
     # Generate a series of deepcopys of bandit to make them independent!!
     bandits_all_sessions = []
     [bandits_all_sessions.append(copy.deepcopy(bandit)) for ss in range(n_sessions)]
         
-    if 'serial' in methods:  # Serial computing (for test)
+    if 'serial' in methods:  # Serial computing (for debugging)
         start = time.time()         
         for ss, bb in tqdm(enumerate(bandits_all_sessions), total = n_sessions, desc='serial'):     # trange: progress bar. HH
             run_one_session(bb)     # There is no need to assign back the resulting bandit. (Modified inside run_one_session())
              
         print('--- serial finished in %g s ---\n' % (time.time()-start))
-        
 
     if 'apply_async' in methods:    # Parallel computing using multiprocessing.apply_async()
         start = time.time()
@@ -108,11 +110,36 @@ def run_sessions_parallel(bandit, n_sessions = global_n_sessions):
             
         print('\n--- apply_async finished in %g s--- \n' % (time.time()-start), flush=True)
         
-        
-    plot_all_sessions(bandits_all_sessions)  # Plot summary statistics over repeated sessions for this bandit
-   
+    # =============================================================================
+    # Compute summarizing results for all repetitions
+    # =============================================================================
+    results_all_reps = dict()
+    results_all_reps['foraging_efficiency'] = np.zeros(n_sessions)
     
-    return 
+    n_blocks_now = 0    
+    for ss, bb in enumerate(bandits_all_sessions):
+        results_all_reps['foraging_efficiency'][ss] = bb.foraging_efficiency
+        n_blocks_now += bb.n_blocks
+    
+    # Preallocation
+    results_all_reps['blockwise_stats'] = np.zeros([4,n_blocks_now])   # [choice_frac, reward_frac, log_choice_ratio, log_reward_ratio]
+    n_blocks_now = 0        
+    for ss, bb in enumerate(bandits_all_sessions):
+        results_all_reps['blockwise_stats'][:, n_blocks_now : n_blocks_now + bb.n_blocks] =  \
+            np.vstack([bb.blockwise_choice_fraction, 
+                       bb.blockwise_reward_fraction, 
+                       bb.blockwise_log_choice_ratio, 
+                       bb.blockwise_log_reward_ratio])
+        n_blocks_now += bb.n_blocks
+        
+    # Basic info
+    results_all_reps['n_trials'] = n_sessions * bandit.n_trials
+    results_all_reps['n_blocks'] = n_blocks_now
+
+    # Plot summary statistics over repeated sessions for this bandit
+    plot_all_sessions(results_all_reps, example_session = bandits_all_sessions[0]) 
+    
+    return results_all_reps
 
 
 def figure_2_2():
@@ -160,10 +187,7 @@ def figure_2_2():
 if __name__ == '__main__':
     
     n_worker = mp.cpu_count()
-    methods = [ 
-                'serial',
-                # 'apply_async'   # This is best till now!!!
-              ]
+
     
     if any([x in methods for x in ('apply_async','map','imap_unordered','imap')]):
         pool = mp.Pool(processes = n_worker)
