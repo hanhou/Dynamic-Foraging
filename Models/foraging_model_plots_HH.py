@@ -1,9 +1,11 @@
 # =============================================================================
 # Plotting functions for foraging_model_HH
+# Han Hou @ Houston, Feb 12 2020
+# Svoboda lab
 # =============================================================================
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy import stats
+# from scipy import stats
 import statsmodels.api as sm
 
 from matplotlib.gridspec import GridSpec
@@ -12,6 +14,8 @@ plt.rcParams.update({'font.size': 13})
 
 LEFT = 0
 RIGHT = 1
+
+smooth_factor = 5
 
 # matplotlib.use('Agg')  # Agg -> non-GUI backend. HH
 # matplotlib.use('qt5agg')  # We can see the figure by qt5. HH
@@ -48,14 +52,18 @@ def plot_one_session(bandit, fig, plottype='2lickport'):     # Part of code from
     
     # Baited probability and smoothed choice history
     ax.plot(np.arange(0, n_trials), bandit.p_reward_fraction, color='DarkOrange')
-    ax.plot(moving_average(choice_history, 10) , color='black')
+    ax.plot(moving_average(choice_history, smooth_factor) , color='black')
+    
+    # "Scalar variable"
+    if bandit.forager == 'Sugrue2004':
+        ax.plot(moving_average(bandit.q_estimation[RIGHT,:], smooth_factor), color='Green')
     
     ax.set_yticks([0,1])
     ax.set_yticklabels(['Left','Right'])
     plt.xlabel('Example session')
     
     # Reward rate
-    plt.title('%s, efficiency = %.3g%%' % (bandit.description, bandit.foraging_efficiency*100), fontsize = 10)
+    plt.title('efficiency = %.3g%%' % (bandit.foraging_efficiency*100), fontsize = 10)
     
     # == Cumulative choice plot ==  [Sugrue 2004]
     bandit.cumulative_choice_L = np.cumsum(bandit.choice_history == LEFT)
@@ -95,17 +103,19 @@ def plot_one_session(bandit, fig, plottype='2lickport'):     # Part of code from
 def plot_all_sessions(results_all_reps):
     
     fig = plt.figure(figsize=(12, 8))
-    
-    fig.text(0.05,0.97,'%g sessions, %g blks, %g trials' % (results_all_reps['n_sessions'], 
-                                                            results_all_reps['n_blocks'], 
-                                                            results_all_reps['n_trials']
-                                                            ))
-    fig.text(0.05,0.94,'Efficiency: %.3g%% +/- %.2g%%' % (results_all_reps['foraging_efficiency'][0]*100,
+        
+    fig.text(0.05,0.95,'%s\n%g sessions, %g blks, %g trials' % (results_all_reps['description'], 
+                                                                results_all_reps['n_sessions'], 
+                                                                results_all_reps['n_blocks'], 
+                                                                results_all_reps['n_trials']
+                                                                ))
+    fig.text(0.05,0.92,'Efficiency: %.3g%% +/- %.2g%%' % (results_all_reps['foraging_efficiency'][0]*100,
                                                           results_all_reps['foraging_efficiency'][1]*100,
                                                           ))
     
     # == 1. Example Session ==
-    plot_one_session(results_all_reps['example_session'], fig)
+    if 'example_session' in results_all_reps:
+        plot_one_session(results_all_reps['example_session'], fig)
     
     # == 2. Blockwise matching ==
     
