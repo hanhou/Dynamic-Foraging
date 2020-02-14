@@ -27,7 +27,7 @@ LEFT = 0
 RIGHT = 1
 global_k_arm = 2
 global_n_trials = 700  # To cope with the one-argument limitation of map/imap
-global_n_sessions = 100
+global_n_sessions = 1000
 
 def run_one_session(bandit):     
     # =============================================================================
@@ -115,13 +115,19 @@ def run_sessions_parallel(bandit, n_sessions = global_n_sessions):
     # Compute summarizing results for all repetitions
     # =============================================================================
     results_all_reps = dict()
-    results_all_reps['foraging_efficiency'] = np.zeros(n_sessions)
+    
+    # -- Foraging efficienty --
+    results_all_reps['foraging_efficiency_per_session'] = np.zeros(n_sessions)
     
     n_blocks_now = 0    
     for ss, bb in enumerate(bandits_all_sessions):
-        results_all_reps['foraging_efficiency'][ss] = bb.foraging_efficiency
+        results_all_reps['foraging_efficiency_per_session'][ss] = bb.foraging_efficiency
         n_blocks_now += bb.n_blocks
     
+    results_all_reps['foraging_efficiency'] = np.array([np.mean(results_all_reps['foraging_efficiency_per_session']),
+                                                        np.std(results_all_reps['foraging_efficiency_per_session'])])
+        
+    # -- Blockwise statistics --
     # Preallocation
     results_all_reps['blockwise_stats'] = np.zeros([4,n_blocks_now])   # [choice_frac, reward_frac, log_choice_ratio, log_reward_ratio]
     n_blocks_now = 0        
@@ -134,16 +140,19 @@ def run_sessions_parallel(bandit, n_sessions = global_n_sessions):
         n_blocks_now += bb.n_blocks
         
     # Basic info
+    results_all_reps['n_sessions'] = n_sessions
     results_all_reps['n_trials'] = n_sessions * bandit.n_trials
     results_all_reps['n_blocks'] = n_blocks_now
+    
+    results_all_reps['example_session'] = bandits_all_sessions[0]
 
     # Plot summary statistics over repeated sessions for this bandit
-    plot_all_sessions(results_all_reps, example_session = bandits_all_sessions[0]) 
+    plot_all_sessions(results_all_reps) 
     
     return results_all_reps
 
 
-def figure_2_2():
+def para_scan():
     
     title_txt = '\n=== Figure 2.2: Sample-average \nDifferent eps (%g runs)===\n' % global_n_sessions
     print(title_txt, flush = True)
@@ -153,8 +162,9 @@ def figure_2_2():
     step_size = 1 - np.exp(-1/effective_tau)
     
     # Generate a series of Bandit objects using different eps. HH
+    # 'Random', 'OCD', 'IdealGreedy', 'Sutton_Barto', 'Sugrue2004', 'Corrado2005'
     
-    bandit = [Bandit(epsilon = eps, step_size = step_size, if_baited = True) for eps in epsilons]   # Use the [f(xxx) for xxx in yyy] trick. HH!!!
+    bandit = [Bandit(forager = 'IdealGreedy', epsilon = eps, step_size = step_size, if_baited = True) for eps in epsilons]   # Use the [f(xxx) for xxx in yyy] trick. HH!!!
     
     # Run simulations, return best_action_counts and rewards. HH
     run_sessions_parallel(bandit[0])
@@ -186,14 +196,16 @@ def figure_2_2():
 
 
 if __name__ == '__main__':
-    
-    n_worker = mp.cpu_count()
-    
-    if any([x in methods for x in ('apply_async','map','imap_unordered','imap')]):
+   
+    if 'apply_async' in methods:
+        n_worker = mp.cpu_count()
         pool = mp.Pool(processes = n_worker)
+        
 
-    figure_2_2()
+    para_scan()
     
-    if any([x in methods for x in ('apply_async','map','imap_unordered','imap')]):
+    
+    
+    if 'apply_async' in methods:
         pool.close()   # Just a good practice
         pool.join()

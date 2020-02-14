@@ -55,7 +55,7 @@ def plot_one_session(bandit, fig, plottype='2lickport'):     # Part of code from
     plt.xlabel('Example session')
     
     # Reward rate
-    plt.title('%s, efficiency = %.02f' % (bandit.description, bandit.foraging_efficiency), fontsize = 10)
+    plt.title('%s, efficiency = %.3g%%' % (bandit.description, bandit.foraging_efficiency*100), fontsize = 10)
     
     # == Cumulative choice plot ==  [Sugrue 2004]
     bandit.cumulative_choice_L = np.cumsum(bandit.choice_history == LEFT)
@@ -92,57 +92,68 @@ def plot_one_session(bandit, fig, plottype='2lickport'):     # Part of code from
 
     return fig
     
-def plot_all_sessions(results_all_reps, example_session = []):
+def plot_all_sessions(results_all_reps):
     
     fig = plt.figure(figsize=(12, 8))
     
+    fig.text(0.05,0.97,'%g sessions, %g blks, %g trials' % (results_all_reps['n_sessions'], 
+                                                            results_all_reps['n_blocks'], 
+                                                            results_all_reps['n_trials']
+                                                            ))
+    fig.text(0.05,0.94,'Efficiency: %.3g%% +/- %.2g%%' % (results_all_reps['foraging_efficiency'][0]*100,
+                                                          results_all_reps['foraging_efficiency'][1]*100,
+                                                          ))
+    
     # == 1. Example Session ==
-    if example_session:
-        plot_one_session(example_session, fig)
+    plot_one_session(results_all_reps['example_session'], fig)
     
     # == 2. Blockwise matching ==
-    c_frac, r_frac, c_log_ratio, r_log_ratio = results_all_reps['blockwise_stats']
     
-    # 2b. -- Log_ratio
-    ax = fig.add_subplot(224)
-    ax.plot(r_log_ratio, c_log_ratio, '.')
+    if not 'OCD' in results_all_reps['example_session'].forager:
+        
+        c_frac, r_frac, c_log_ratio, r_log_ratio = results_all_reps['blockwise_stats']
+        
+        # 2b. -- Log_ratio
+        ax = fig.add_subplot(224)
+        ax.plot(r_log_ratio, c_log_ratio, '.')
+        
+        x = r_log_ratio[~np.isnan(r_log_ratio)]
+        y = c_log_ratio[~np.isnan(c_log_ratio)]
+        
+        # slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
+        model = sm.OLS(y, sm.add_constant(x)).fit()
+        y_pred = model.predict()
+        
+        intercept, slope  = model.params
+        intercept_CI95, slope_CI95  = np.diff(model.conf_int(), axis=1)/2
+        r_square, p = (model.rsquared, model.pvalues)
+        results_all_reps['linear_fit_log_ratio'] = np.block([[slope, slope_CI95], [intercept, intercept_CI95],[r_square, p[1]]])
+        
+        ax.plot(x,y_pred,'r')
+        ax.text(0,min(plt.ylim()),'a = %.2g +/- %.2g\nr^2 = %.2g\np = %.2g' % (slope, slope_CI95, r_square, p[1]))
+        
     
-    x = r_log_ratio[~np.isnan(r_log_ratio)]
-    y = c_log_ratio[~np.isnan(c_log_ratio)]
+        plt.xlabel('Blockwise log reward ratio')
+        plt.ylabel('Blockwise log choice ratio')
+        plt.axis('square')
     
-    # slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
-    model = sm.OLS(y, sm.add_constant(x)).fit()
-    y_pred = model.predict()
-    
-    intercept, slope  = model.params
-    intercept_CI95, slope_CI95  = np.diff(model.conf_int(), axis=1)/2
-    r_square, p = (model.rsquared, model.pvalues)
-    results_all_reps['linear_fit_log_ratio'] = np.block([[slope, slope_CI95], [intercept, intercept_CI95],[r_square, p[1]]])
-    
-    ax.plot(x,y_pred,'r')
-    ax.text(0,min(plt.ylim()),'a = %.2g +/- %.2g\nr^2 = %.2g\np = %.2g' % (slope, slope_CI95, r_square, p[1]))
-    plt.xlabel('Blockwise log reward ratio')
-    plt.ylabel('Blockwise log choice ratio')
-    plt.axis('square')
-
-    
-    # 2a. -- Fraction
-    ax = fig.add_subplot(223)
-    ax.plot(r_frac, c_frac, '.')
-    ax.plot([0,1],[0,1],'k--')
-    
-    # Non-linear relationship using the linear fit of log_ratio
-    a = slope
-    b = np.exp(intercept)
-    xx = np.linspace(min(r_frac), max(r_frac), 100)
-    yy = (xx ** a ) / (xx ** a + b * (1-xx) ** a)
-    ax.plot(xx, yy, 'r')    
-    
-    plt.xlabel('Blockwise reward fraction')
-    plt.ylabel('Blockwise choice fraction')
-    plt.axis('square')
-    plt.title('%g blocks, %g trials' % (results_all_reps['n_blocks'], results_all_reps['n_trials']) )
-    
+        
+        # 2a. -- Fraction
+        ax = fig.add_subplot(223)
+        ax.plot(r_frac, c_frac, '.')
+        ax.plot([0,1],[0,1],'k--')
+        
+        # Non-linear relationship using the linear fit of log_ratio
+        a = slope
+        b = np.exp(intercept)
+        xx = np.linspace(min(r_frac), max(r_frac), 100)
+        yy = (xx ** a ) / (xx ** a + b * (1-xx) ** a)
+        ax.plot(xx, yy, 'r')    
+        
+        plt.xlabel('Blockwise reward fraction')
+        plt.ylabel('Blockwise choice fraction')
+        plt.axis('square')
+        
   
     fig.show()
     
