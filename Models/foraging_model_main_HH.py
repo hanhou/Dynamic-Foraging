@@ -20,14 +20,14 @@ from foraging_model_plots_HH import plot_all_sessions
 
 methods = [ 
             # 'serial',
-            'apply_async'  
+            'apply_async'     # Use multiprocessing.apply_async() for parallel computing (8~10x speed-up in my 8/16 I9-9900k)
           ]
 
 LEFT = 0
 RIGHT = 1
 global_k_arm = 2
-global_n_trials = 700  # To cope with the one-argument limitation of map/imap
-global_n_sessions = 100
+global_n_trials = 700  
+global_n_sessions = 1000
 
 def run_one_session(bandit):     
     # =============================================================================
@@ -62,13 +62,13 @@ def run_one_session(bandit):
     bandit.blockwise_log_choice_ratio = temp_nans.copy()
     bandit.blockwise_log_reward_ratio = temp_nans.copy()
     
-    bandit.block_trans_time = np.cumsum(np.hstack([0,bandit.n_trials_per_block]))
+    bandit.block_trans_time = np.cumsum(np.hstack([0,bandit.block_size]))
     
     for i_block in range(bandit.n_blocks):   # For each block in this session
         trial_range = np.r_[bandit.block_trans_time[i_block] : bandit.block_trans_time[i_block+1]]  # r_ trick
        
-        choice_R = np.sum(bandit.choice_history[trial_range] == RIGHT)
-        choice_L = np.sum(bandit.choice_history[trial_range] == LEFT)
+        choice_R = np.sum(bandit.choice_history[0,trial_range] == RIGHT)
+        choice_L = np.sum(bandit.choice_history[0,trial_range] == LEFT)
         rew_R = np.sum(bandit.reward_history[RIGHT, trial_range])
         rew_L = np.sum(bandit.reward_history[LEFT, trial_range])
                 
@@ -163,10 +163,12 @@ def para_scan():
     step_size = 1 - np.exp(-1/effective_tau)
     
     # Generate a series of Bandit objects using different eps. HH
-    # 'Random', 'OCD', 'IdealGreedy', 'Sutton_Barto', 'Sugrue2004', 'Corrado2005'
+    # 'Random', 'AlwaysLEFT', 'IdealGreedy', 'Sutton_Barto', 'Sugrue2004', 'Corrado2005', 'IIgaya2019'
     
     # bandit = [Bandit(forager = 'Sutton_Barto', epsilon = eps, step_size = step_size, if_baited = True) for eps in epsilons]   # Use the [f(xxx) for xxx in yyy] trick. HH!!!
-    bandit = [Bandit(forager = 'Sugrue2004', epsilon = eps,  tau = 10, random_before_total_reward = 0,  if_baited = True) for eps in epsilons]   # Use the [f(xxx) for xxx in yyy] trick. HH!!!
+    # bandit = [Bandit(forager = 'Sugrue2004', epsilon = eps,  tau = 15, if_baited = True) for eps in epsilons]   # Use the [f(xxx) for xxx in yyy] trick. HH!!!
+    # bandit = [Bandit(forager = 'Corrado2005', epsilon = 0,  tau_fast = 5, tau_slow = 15, w_tau_slow = 0.1, softmax_temperature = 3, if_baited = True) for eps in epsilons]   # Use the [f(xxx) for xxx in yyy] trick. HH!!!
+    bandit = [Bandit(forager = 'IIgaya2019', epsilon = 0,  tau_fast = 5, tau_slow = 100, w_tau_slow = 0.1, random_before_total_reward = 20, if_baited = True) for eps in epsilons]   # Use the [f(xxx) for xxx in yyy] trick. HH!!!
     
     # Run simulations, return best_action_counts and rewards. HH
     run_sessions_parallel(bandit[0])
@@ -200,7 +202,7 @@ def para_scan():
 if __name__ == '__main__':
    
     if 'apply_async' in methods:
-        n_worker = mp.cpu_count()
+        n_worker = int(mp.cpu_count()/2)  # This would be optimal
         pool = mp.Pool(processes = n_worker)
         
 

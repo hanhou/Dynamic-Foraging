@@ -8,11 +8,12 @@
 #
 # - Forager types:
 #   1. 'Random'
-#   2. 'OCD': only chooses LEFT
+#   2. 'AlwaysLEFT': only chooses LEFT
 #   3. 'IdealGreedy': knows p_reward and always chooses the largest one
-#   4. 'Sutton_Barto':   return  ->   exp filter                              -> epsilon-greedy
-#   5. 'Sugrue2004':     income  ->   exp filter   ->  fractional               -> Poisson
-#   6. 'Corrado2005':    income  ->  2-exp filter  ->  difference -> softmax  -> Poisson
+#   4. 'Sutton_Barto':   return  ->   exp filter                                    -> epsilon-greedy
+#   5. 'Sugrue2004':     income  ->   exp filter   ->  fractional                   -> epsilon-Poisson 
+#   5.1 'IIgaya2019':    income  ->  2-exp filter  ->  fractional                   -> epsilon-Poisson (epsilon has the same effect as tau_long??)
+#   6. 'Corrado2005':    income  ->  2-exp filter  ->  softmax ( = diff + sigmoid)  -> epsilon-Poisson (epsilon has the same effect as tau_long??)
 # 
 # Han Hou @ Houston Feb 2020
 # Svoboda & Li lab
@@ -34,8 +35,10 @@ import numpy as np
 LEFT = 0
 RIGHT = 1
 
-global_n_trials_per_block_base = 80
-global_n_trials_per_block_sd = 20
+global_block_size_mean = 100
+global_block_size_sd = 30
+
+softmax = lambda x, softmax_temperature: np.exp(x/softmax_temperature)/np.sum(np.exp(x/softmax_temperature))  # Accept np.arrays
 
 
 class Bandit:
@@ -45,10 +48,11 @@ class Bandit:
     # @initial: initial estimation for each action
     # @step_size: constant step size for updating estimations
     
-    def __init__(self, k_arm = 2, n_trials = 1000, if_baited = True, forager = 'Sutton_Barto',    # Shared paras
-                 step_size = 0.1, epsilon = 0.1,            # For 'Sutton_Barto' (return + exp filter + epsilon-greedy)
-                 tau = 20, random_before_total_reward = 0, # For 'Sugrue2004'   (income + exp filter + fractional + Poisson)
-                 tau_1 = 2, tau_2 = 15,                     # For 'Corrado2005'  (income + 2-exp filter + difference + softmax + Poisson)
+    def __init__(self, k_arm = 2, n_trials = 1000, if_baited = True, epsilon = 0, softmax_temperature = np.nan, random_before_total_reward = 0, # Shared paras
+                 forager = 'Sutton_Barto', 
+                 step_size = 0.1,                        # For 'Sutton_Barto'. Other paras: epsilon
+                 tau = 20,                               # For 'Sugrue2004'  . Other paras: epsilon
+                 tau_fast = 2, tau_slow = 15, w_tau_slow = 0.3    # For 'Corrado2005' or 'Iigaya2019'. Other paras: epsilon, softmax_temperature 
                  ):     
 
         self.k = k_arm
@@ -58,10 +62,13 @@ class Bandit:
         
         self.epsilon = epsilon
         self.step_size = step_size
-        
-        self.tau = tau
+        self.softmax_temperature = softmax_temperature
         self.random_before_total_reward = random_before_total_reward
         
+        self.tau = tau
+        self.tau_fast = tau_fast
+        self.tau_slow  = tau_slow
+        self.w_tau_slow = w_tau_slow
           
     def reset(self):
         
@@ -69,7 +76,7 @@ class Bandit:
         
         # Initialization
         self.time = 0
-        self.choice_history = np.zeros(self.n_trials)  # Choice history
+        self.choice_history = np.zeros([1,self.n_trials])  # Choice history
         self.q_estimation = np.zeros([self.k, self.n_trials]) # Estimation for each action (e.g., Q in Bari2019, L-stage scalar value in Corrado2005) 
         self.reward_history = np.zeros([self.k, self.n_trials])    # Reward history, separated for each port (Corrado Newsome 2005)
         
@@ -86,23 +93,31 @@ class Bandit:
             self.description = 'Sutton_Barto, epsi = %g, alpha = %g' % (self.epsilon, self.step_size)
             
         elif self.forager == 'Sugrue2004':
-            self.description = 'Sugrue2004, tau = %g, epsi = %g, random_before_total_reward = %g' % (self.tau, self.epsilon, self.random_before_total_reward)
+            self.description = 'Sugrue2004, tau = %g, epsi = %g' % (self.tau, self.epsilon)
+            
             reversed_t = np.flipud(np.arange(self.n_trials))  # Use the full length of the session just in case of an extremely large tau.
             self.history_filter = np.exp(-reversed_t / self.tau)
-            self.local_fractional_income = np.zeros([self.k, self.n_trials]) 
-            self.q_estimation[:] = 0.5   # To be strict
+            self.q_estimation[:] = 1/self.k   # To be strict
+            
+        elif self.forager in ['Corrado2005', 'IIgaya2019']:
+            self.description = '%s, tau_fast = %g, tau_slow = %g, w_tau_slow = %g, softmax_temp = %g, epsi = %g, random_before_total_reward = %g' % \
+                                            (self.forager, self.tau_fast, self.tau_slow, self.w_tau_slow , self.softmax_temperature, self.epsilon, self.random_before_total_reward)
+                                            
+            reversed_t = np.flipud(np.arange(self.n_trials))  # Use the full length of the session just in case of an extremely large tau.
+            self.history_filter = (1-self.w_tau_slow) * np.exp(-reversed_t / self.tau_fast) + self.w_tau_slow * np.exp(-reversed_t / self.tau_slow)
+            self.q_estimation[:] = 1/self.k   # To be strict
                   
         else:
             self.description = self.forager
 
         
 
-    def generate_p_reward(self, n_trials_per_block_base = global_n_trials_per_block_base, 
-                                n_trials_per_block_sd = global_n_trials_per_block_sd,
+    def generate_p_reward(self, block_size_base = global_block_size_mean, 
+                                block_size_sd = global_block_size_sd,
                                 p_reward_pairs = [[.4,.05],[.3857,.0643],[.3375,.1125],[.225,.225]]):  # (Bari-Cohen 2019)
         
         n_trials_now = 0
-        n_trials_per_block = []  
+        block_size = []  
         p_reward = np.zeros([2,self.n_trials])
         
         # Fill in trials until the required length
@@ -110,10 +125,10 @@ class Bandit:
         
             # Number of trials in each block (Gaussian distribution)
             # I treat p_reward[0,1] as the ENTIRE lists of reward probability. RIGHT = 0, LEFT = 1. HH
-            n_trials_this_block = np.rint(np.random.normal(0, n_trials_per_block_sd) + n_trials_per_block_base).astype(int) 
+            n_trials_this_block = np.rint(np.random.normal(0, block_size_sd) + block_size_base).astype(int) 
             n_trials_this_block = min(n_trials_this_block, self.n_trials - n_trials_now)
             
-            n_trials_per_block.append(n_trials_this_block)
+            block_size.append(n_trials_this_block)
                               
             # Get values to fill for this block
             if n_trials_now == -1:  # If 0, the first block is set to 50% reward rate (as Marton did)
@@ -128,16 +143,16 @@ class Bandit:
                 p_reward_this_block = np.array([p_reward_pairs[pair_idx]])   # Note the outer brackets
 
                 # To ensure flipping of p_reward during transition (Marton)
-                if len(n_trials_per_block) % 2:     
+                if len(block_size) % 2:     
                     p_reward_this_block = np.flip(p_reward_this_block)
                 
             # Fill in trials for this block
             p_reward[:, n_trials_now : n_trials_now + n_trials_this_block] = p_reward_this_block.T
             n_trials_now += n_trials_this_block
         
-        self.n_blocks = len(n_trials_per_block)
+        self.n_blocks = len(block_size)
         self.p_reward = p_reward
-        self.n_trials_per_block  = np.array(n_trials_per_block)
+        self.block_size  = np.array(block_size)
         self.p_reward_fraction = p_reward[RIGHT,:] / (np.sum(p_reward, axis = 0))   # For future use
         self.p_reward_ratio = p_reward[RIGHT,:] / p_reward[LEFT,:]   # For future use
 
@@ -146,44 +161,40 @@ class Bandit:
         # =============================================================================
         #   Make a choice for this trial
         # =============================================================================
-        #  Forager types:
+        # - Forager types:
         #   1. 'Random'
-        #   2. 'OCD': only chooses LEFT
+        #   2. 'AlwaysLEFT': only chooses LEFT
         #   3. 'IdealGreedy': knows p_reward and always chooses the largest one
-        #   4. 'Sutton_Barto':   return  ->   exp filter                              -> epsilon-greedy
-        #   5. 'Sugrue2004':     income  ->   exp filter   ->  fractional               -> Poisson
-        #   6. 'Corrado2005':    income  ->  2-exp filter  ->  difference -> softmax  -> Poisson
-                
+        #   4. 'Sutton_Barto':   return  ->   exp filter                                    -> epsilon-greedy
+        #   5. 'Sugrue2004':     income  ->   exp filter   ->  fractional                   -> epsilon-Poisson 
+        #   5.1 'IIgaya2019':    income  ->  2-exp filter  ->  fractional                   -> epsilon-Poisson (epsilon has the same effect as tau_long??)
+        #   6. 'Corrado2005':    income  ->  2-exp filter  ->  softmax ( = diff + sigmoid)  -> epsilon-Poisson (epsilon has the same effect as tau_long??)
+               
         if self.forager == 'Random': 
             choice = np.random.choice(self.k)
             
-        elif self.forager == 'OCD':
+        elif self.forager == 'AlwaysLEFT':
             choice = LEFT
             
         elif self.forager == 'IdealGreedy':
             choice = np.random.choice(np.where(self.p_reward[:,self.time] == self.p_reward[:,self.time].max())[0])
                 
-        elif self.forager == 'Sutton_Barto':
-            if np.random.rand() < self.epsilon:  # Forced exploration with the prob. of epsilon
+        else:
+            if np.random.rand() < self.epsilon or np.sum(self.reward_history) < self.random_before_total_reward: 
+                # Forced exploration with the prob. of epsilon (to avoid AlwaysLEFT/RIGHT in Sugrue2004...) or before some rewards are collected #???
                 choice = np.random.choice(self.k)
-            else:    # Else, do hardmax (greedy)
-                choice = np.random.choice(np.where(self.q_estimation[:, self.time] == self.q_estimation[:, self.time].max())[0])
-
-        elif self.forager == 'Sugrue2004':
-            if np.random.rand() < self.epsilon:  # Forced exploration with the prob. of epsilon (to avoid OCD in Sugrue2004...) #???
-                choice = np.random.choice(self.k)
-            elif np.sum(self.reward_history) < self.random_before_total_reward:  # Not sure if this is necessary #???
-                choice = np.random.choice(self.k)
-            else:
-                p_LEFT = self.q_estimation[LEFT, self.time]
                 
-                if np.random.rand() < p_LEFT:
-                    choice = LEFT
-                else:
-                    choice = RIGHT
-            
+            else:   # Forager-dependent
+                if self.forager == 'Sutton_Barto':   # Greedy
+                    choice = np.random.choice(np.where(self.q_estimation[:, self.time] == self.q_estimation[:, self.time].max())[0])
+                    
+                elif self.forager in ['Sugrue2004', 'Corrado2005', 'IIgaya2019']:   # Poisson
+                    if np.random.rand() < self.q_estimation[LEFT, self.time]:
+                        choice = LEFT
+                    else:
+                        choice = RIGHT
                 
-        self.choice_history[self.time] = choice
+        self.choice_history[0, self.time] = choice
         
         return choice
             
@@ -209,35 +220,51 @@ class Bandit:
                                            np.random.uniform(0,1,self.k) < self.p_reward[:,self.time]).astype(int)  
             
         # =============================================================================
-        #  Update value estimation 
+        #  Update value estimation (or Poisson choice probability)
         # =============================================================================
-        #  Forager types:
+        # - Forager types:
         #   1. 'Random'
-        #   2. 'OCD': only chooses LEFT
+        #   2. 'AlwaysLEFT': only chooses LEFT
         #   3. 'IdealGreedy': knows p_reward and always chooses the largest one
-        #   4. 'Sutton_Barto':   return  ->   exp filter                              -> epsilon-greedy
-        #   5. 'Sugrue2004':     income  ->   exp filter   ->  fractional               -> Poisson
-        #   6. 'Corrado2005':    income  ->  2-exp filter  ->  difference -> softmax  -> Poisson
-        
-        if self.forager == 'Sutton_Barto':
-            # Update estimation based on ~return~ with constant step size
+        #   4. 'Sutton_Barto':   return  ->   exp filter                                    -> epsilon-greedy
+        #   5. 'Sugrue2004':     income  ->   exp filter   ->  fractional                   -> epsilon-Poisson 
+        #   5.1 'IIgaya2019':    income  ->  2-exp filter  ->  fractional                   -> epsilon-Poisson (epsilon has the same effect as tau_long??)
+        #   6. 'Corrado2005':    income  ->  2-exp filter  ->  softmax ( = diff + sigmoid)  -> epsilon-Poisson (epsilon has the same effect as tau_long??)
+                
+        if self.forager == 'Sutton_Barto':    
+            # Local ~return~
             # Note: It's "return" rather than "income" because only the ~chosen~ one is updated here
             self.q_estimation[:, self.time] = self.q_estimation[:, self.time - 1]  # Don't forget cache the old values!
             self.q_estimation[choice, self.time] += (reward - self.q_estimation[choice, self.time]) * self.step_size   
             
-        elif self.forager == 'Sugrue2004':
-            # Compute local income filtered by a exponential filter
+        elif self.forager in ['Sugrue2004', 'IIgaya2019']:
+            # Fractional local income
             # Note: It's "income" because the following computations do not dependent on the current ~choice~.
+            
+            # 1. Local income = Reward history + exp filter in Sugrue or 2-exp filter in IIgaya
             valid_reward_history = self.reward_history[:, :self.time]   # History till now
             valid_filter = self.history_filter[-self.time:]    # Corresponding filter
             local_income = np.sum(valid_reward_history * valid_filter, axis = 1)
             
+            # 2. Poisson choice probability = Fractional local income
             if np.sum(local_income) == 0:
                 # 50%-to-50%
-                self.q_estimation[:, self.time] = [0.5, 0.5]
+                self.q_estimation[:, self.time] = [1/self.k] * self.k
             else:
                 # Local fractional income
                 self.q_estimation[:, self.time] = local_income / np.sum(local_income)
+                
+        elif self.forager == 'Corrado2005':
+            # Softmaxed local income
+            
+            # 1. Local income = Reward history + hyperbolic (2-exps) filter
+            valid_reward_history = self.reward_history[:, :self.time]   # History till now
+            valid_filter = self.history_filter[-self.time:]    # Corresponding filter
+            local_income = np.sum(valid_reward_history * valid_filter, axis = 1)
+            
+            # 2. Poisson choice probability = Softmaxed local income (Note: Equivalent to "difference + sigmoid" in [Corrado etal 2005], for 2lp case)
+            self.q_estimation[:, self.time] = softmax(local_income, self.softmax_temperature)
+                 
             
         return reward
   

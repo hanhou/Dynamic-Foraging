@@ -25,7 +25,7 @@ def moving_average(a, n=3) :
     ret[n:] = ret[n:] - ret[:-n]
     return ret[n - 1:] / n
 
-def plot_one_session(bandit, fig, plottype='2lickport'):     # Part of code from Marton
+def plot_one_session(bandit, fig, plottype='2lickport'):
     
     # == Fetch data ==
     n_trials = bandit.n_trials
@@ -43,11 +43,11 @@ def plot_one_session(bandit, fig, plottype='2lickport'):     # Part of code from
     ax = fig.add_subplot(gs[0,0:2])
 
     # Rewarded trials
-    ax.plot(np.nonzero(rewarded_trials)[0], 0.5 + (choice_history[rewarded_trials]-0.5) * 1.4, 
+    ax.plot(np.nonzero(rewarded_trials)[0], 0.5 + (choice_history[0,rewarded_trials]-0.5) * 1.4, 
             'k|',color='black',markersize=20, markeredgewidth=2)
     
     # Unrewarded trials
-    ax.plot(np.nonzero(unrewarded_trials)[0], 0.5 + (choice_history[unrewarded_trials] - 0.5) * 1.4, 
+    ax.plot(np.nonzero(unrewarded_trials)[0], 0.5 + (choice_history[0,unrewarded_trials] - 0.5) * 1.4, 
             '|',color='gray', markersize=10, markeredgewidth=1)
     
     # Baited probability and smoothed choice history
@@ -56,7 +56,7 @@ def plot_one_session(bandit, fig, plottype='2lickport'):     # Part of code from
     
     # "Scalar variable"
     if bandit.forager == 'Sugrue2004':
-        ax.plot(moving_average(bandit.q_estimation[RIGHT,:], smooth_factor), color='Green')
+        ax.plot(moving_average(bandit.q_estimation[RIGHT,:], 1), color='Green')
     
     ax.set_yticks([0,1])
     ax.set_yticklabels(['Left','Right'])
@@ -77,7 +77,7 @@ def plot_one_session(bandit, fig, plottype='2lickport'):     # Part of code from
     
     # p_rewards
     
-    # bandit.block_trans_time = np.cumsum(np.hstack([0,bandit.n_trials_per_block]))
+    # bandit.block_trans_time = np.cumsum(np.hstack([0,bandit.block_size]))
     
     for i_block, block_start in enumerate(bandit.block_trans_time[:-1]):   # For each block in this session
         
@@ -88,7 +88,7 @@ def plot_one_session(bandit, fig, plottype='2lickport'):     # Part of code from
         slope = bandit.p_reward_ratio[block_start]    # Note that this should be p_reward_ratio, not p_reward_fraction!!
         
         # next_x = bandit.cumulative_choice_L[bandit.block_trans_time[i_block+1] - 1]   # To ensure horizontal continuity
-        dx = bandit.n_trials_per_block[i_block]/(1 + slope)   # To ensure total number of trials be the same
+        dx = bandit.block_size[i_block]/(1 + slope)   # To ensure total number of trials be the same
         dy = dx * slope
         
         # Plot p_reward_fraction
@@ -119,7 +119,7 @@ def plot_all_sessions(results_all_reps):
     
     # == 2. Blockwise matching ==
     
-    if not 'OCD' in results_all_reps['example_session'].forager:
+    if not 'AlwaysLEFT' in results_all_reps['example_session'].forager:
         
         c_frac, r_frac, c_log_ratio, r_log_ratio = results_all_reps['blockwise_stats']
         
