@@ -1,8 +1,10 @@
 # =============================================================================
 # Plotting functions for foraging_model_HH
-# Han Hou @ Houston, Feb 12 2020
+#
+# Feb 2020, Han Hou @ Houston
 # Svoboda lab
 # =============================================================================
+
 import numpy as np
 import matplotlib.pyplot as plt
 # from scipy import stats
@@ -55,8 +57,8 @@ def plot_one_session(bandit, fig, plottype='2lickport'):
     ax.plot(moving_average(choice_history, smooth_factor) , color='black')
     
     # "Scalar variable"
-    if bandit.forager == 'Sugrue2004':
-        ax.plot(moving_average(bandit.q_estimation[RIGHT,:], 1), color='Green')
+    # if bandit.forager == 'Sugrue2004':
+    ax.plot(moving_average(bandit.q_estimation[RIGHT,:], 1), color='Green')
     
     ax.set_yticks([0,1])
     ax.set_yticklabels(['Left','Right'])

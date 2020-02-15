@@ -2,8 +2,9 @@
 # Main function for simulating foraging_model_HH
 # =============================================================================
 # - Use apply_async() in multiprocessing for parallel computing (8~10x speed-up in my 8/16 I9-9900k)
+# - Ray is another option, but unfortunately they don't support Windows yet.
 #
-# Han Hou @ Houston, Feb 12 2020
+# Feb 2020, Han Hou @ Houston
 # Svoboda lab
 # =============================================================================
 
@@ -27,7 +28,7 @@ LEFT = 0
 RIGHT = 1
 global_k_arm = 2
 global_n_trials = 700  
-global_n_sessions = 1000
+global_n_sessions = 100
 
 def run_one_session(bandit):     
     # =============================================================================
@@ -45,7 +46,7 @@ def run_one_session(bandit):
     # -- 1. Foraging efficiency = Sum of actual rewards / Maximum number of rewards that could have been collected --
     bandit.actual_reward_rate = np.sum(bandit.reward_history) / bandit.n_trials
     
-    '''Don't know which one is the fairst''' #???
+    '''Don't know which one is the fairest''' #???
     # bandit.maximum_reward_rate = np.mean(np.max(bandit.p_reward, axis = 0)) # Method 1: Average of max(p_reward) 
     bandit.maximum_reward_rate = np.mean(np.sum(bandit.p_reward, axis = 0)) # Method 2: Average of sum(p_reward).   [Corrado et al 2005: efficienty = 50% for choosing only one color]
     # bandit.maximum_reward_rate = np.sum(np.any(bandit.reward_available, axis = 0)) / bandit.n_trials  # Method 3: Maximum reward given the fixed reward_available (one choice per trial constraint) [Sugrue 2004???]
@@ -158,57 +159,33 @@ def para_scan():
     title_txt = '\n=== Figure 2.2: Sample-average \nDifferent eps (%g runs)===\n' % global_n_sessions
     print(title_txt, flush = True)
         
-    epsilons = [0.15]
+
     effective_tau = 5
     step_size = 1 - np.exp(-1/effective_tau)
     
     # Generate a series of Bandit objects using different eps. HH
-    # 'Random', 'AlwaysLEFT', 'IdealGreedy', 'Sutton_Barto', 'Sugrue2004', 'Corrado2005', 'IIgaya2019'
+    # 'Random', 'AlwaysLEFT', 'IdealGreedy'; 'SuttonBartoRLBook', 'Sugrue2004', 'Corrado2005', 'IIgaya2019', 'Bari2019', 'Hattori2019'
     
-    # bandit = [Bandit(forager = 'Sutton_Barto', epsilon = eps, step_size = step_size, if_baited = True) for eps in epsilons]   # Use the [f(xxx) for xxx in yyy] trick. HH!!!
-    # bandit = [Bandit(forager = 'Sugrue2004', epsilon = eps,  tau = 15, if_baited = True) for eps in epsilons]   # Use the [f(xxx) for xxx in yyy] trick. HH!!!
-    # bandit = [Bandit(forager = 'Corrado2005', epsilon = 0,  tau_fast = 5, tau_slow = 15, w_tau_slow = 0.1, softmax_temperature = 3, if_baited = True) for eps in epsilons]   # Use the [f(xxx) for xxx in yyy] trick. HH!!!
-    bandit = [Bandit(forager = 'IIgaya2019', epsilon = 0,  tau_fast = 5, tau_slow = 100, w_tau_slow = 0.1, random_before_total_reward = 20, if_baited = True) for eps in epsilons]   # Use the [f(xxx) for xxx in yyy] trick. HH!!!
+    # bandit = Bandit(forager = 'SuttonBartoRLBook', epsilon = 0.1, step_sizes = step_size, if_baited = True)
+    # bandit = Bandit(forager = 'Bari2019', epsilon = 0,  step_sizes = 0.1, forget_rate = 0.05, softmax_temperature = 0.4, if_baited = True)  
+    bandit = Bandit(forager = 'Hattori2019', epsilon = 0,  step_sizes = [0.2, 0.2], forget_rate = 0.05, softmax_temperature = 0.4, if_baited = True)   
+   
+    # bandit = Bandit(forager = 'Sugrue2004', epsilon = 0.1,  taus = 15, if_baited = True) 
+    # bandit = Bandit(forager = 'Corrado2005', epsilon = 0,  taus = [5, 15], w_taus = [0.9, 0.1], softmax_temperature = 3, if_baited = True)  
+    # bandit = Bandit(forager = 'IIgaya2019', epsilon = 0,  taus = [15,100], w_taus = [0.9, 0.1], random_before_total_reward = 20, if_baited = True)
+   
     
     # Run simulations, return best_action_counts and rewards. HH
-    run_sessions_parallel(bandit[0])
-    
-# =============================================================================
-# 
-#     plt.figure(figsize=(10, 20))
-#     plt.clf
-#     plt.subplot(2, 1, 1)
-#     
-#     # Plotting average rewards. Use zip(epsilons, rewards), and plt.plot(rewards, label = 'xxx %X %X' %(X,X))
-#     
-#     
-#     for eps, rew in zip(epsilons, rewards):
-#         h = plt.plot(rew[0], label = 'epsilon = %2g' %eps)
-#         plt.fill_between(np.arange(0, n_trials), rew[0] - rew[1], rew[0] + rew[1], alpha = 0.2, color = h[0].get_color())
-#     
-#     
-#     plt.xlabel('steps')
-#     plt.ylabel('average reward')
-#     plt.legend()
-# 
-#     plt.subplot(2, 1, 2)
-#     
-# 
-#     plt.savefig('one_session.png')
-# #    plt.close()
-# =============================================================================
+    run_sessions_parallel(bandit)
 
 
-if __name__ == '__main__':
+if __name__ == '__main__':  # This line is essential for apply_async to run in Windows
    
     if 'apply_async' in methods:
-        n_worker = int(mp.cpu_count()/2)  # This would be optimal
+        n_worker = int(mp.cpu_count()/2)  # Optimal number = number of physical cores
         pool = mp.Pool(processes = n_worker)
-        
 
     para_scan()
-    
-    
     
     if 'apply_async' in methods:
         pool.close()   # Just a good practice

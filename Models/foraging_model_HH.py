@@ -1,21 +1,35 @@
 # =============================================================================
-# Models for dynamic foraging task
+# Testbed for dynamic foraging task modeling
 # =============================================================================
-# - Initially modified from the code for Sutton & Barto's RL book, Chapter 02
+# = Initially modified from the code for Sutton & Barto's RL book, Chapter 02
 #   1. 10-bandit --> 2-bandit problem
 #   2. Introducing "baiting" property
 #   3. Baiting dynamics reflects in the reward probability rather than reward amplitude
 #
-# - Forager types:
+# = Forager types:
 #   1. 'Random'
 #   2. 'AlwaysLEFT': only chooses LEFT
 #   3. 'IdealGreedy': knows p_reward and always chooses the largest one
-#   4. 'Sutton_Barto':   return  ->   exp filter                                    -> epsilon-greedy
-#   5. 'Sugrue2004':     income  ->   exp filter   ->  fractional                   -> epsilon-Poisson 
-#   5.1 'IIgaya2019':    income  ->  2-exp filter  ->  fractional                   -> epsilon-Poisson (epsilon has the same effect as tau_long??)
-#   6. 'Corrado2005':    income  ->  2-exp filter  ->  softmax ( = diff + sigmoid)  -> epsilon-Poisson (epsilon has the same effect as tau_long??)
-# 
-# Han Hou @ Houston Feb 2020
+#
+#   4. 'SuttonBartoRLBook': return  ->   exp filter                                    -> epsilon-greedy  (epsilon > 0 is essential)
+#    4.1 'Bari2019':        return/income  ->   exp filter (both forgetting)   -> softmax     -> epsilon-Poisson (epsilon = 0 in their paper, no necessary)
+#    4.2 'Hattori2019':     return/income  ->   exp filter (choice-dependent forgetting, reward-dependent step_size)  -> softmax  -> epsilon-Poisson (epsilon = 0 in their paper; no necessary)
+#
+#   5. 'Sugrue2004':        income  ->   exp filter   ->  fractional                   -> epsilon-Poisson (epsilon = 0 in their paper; I found it essential)
+#    5.1 'Corrado2005':     income  ->  2-exp filter  ->  softmax ( = diff + sigmoid)  -> epsilon-Poisson (epsilon = 0 in their paper; has the same effect as tau_long??)
+#    5.2 'IIgaya2019':      income  ->  2-exp filter  ->  fractional                   -> epsilon-Poisson (epsilon = 0 in their paper; has the same effect as tau_long??)
+#
+# = About epsilon (the probability of making a random choice on each trial):
+#  - Epsilon is a simple way of encouraging exploration. There is virtually no cost -- just be lazy. (see Sutton&Barto's RL book, p.28)
+#  - Just like 'Sugrue 2004', 'IIgaya2019' needs explicit exploration, because they use fractional income (could incorrectly converge to 1, resulting in making the same choice forever). 
+#     In contrast, Corrado 2005 may not need this, because softmax will prevent this.
+#  - 'IIgaya2019' can be (partly) rescued by random_before_total_reward, because it has a long time constant. 
+#     After some explicit exploration at the beginning of a session, the tau_long component actually prevent the choice probability to be fixed at 1.
+#  - However, random_before_total_reward cannot help 'Sugrue2004', because it only has one fast tau. 
+#     'Sugrue2004' definitely needs epsilon, which effectively sets a maximum choice probability of 1-epsilon/2.
+#
+#
+# Feb 2020, Han Hou (houhan@gmail.com) @ Houston 
 # Svoboda & Li lab
 # =============================================================================
 
@@ -48,27 +62,44 @@ class Bandit:
     # @initial: initial estimation for each action
     # @step_size: constant step size for updating estimations
     
-    def __init__(self, k_arm = 2, n_trials = 1000, if_baited = True, epsilon = 0, softmax_temperature = np.nan, random_before_total_reward = 0, # Shared paras
-                 forager = 'Sutton_Barto', 
-                 step_size = 0.1,                        # For 'Sutton_Barto'. Other paras: epsilon
-                 tau = 20,                               # For 'Sugrue2004'  . Other paras: epsilon
-                 tau_fast = 2, tau_slow = 15, w_tau_slow = 0.3    # For 'Corrado2005' or 'Iigaya2019'. Other paras: epsilon, softmax_temperature 
+    def __init__(self, forager = 'SuttonBartoRLBook', k_arm = 2, n_trials = 1000, if_baited = True,  
+                 epsilon = 0.1,          # Essential for 'SuttonBartoRLBook', 'Sugrue 2004', 'IIgaya2019'. See notes above.
+                 random_before_total_reward = 0, # Not needed by default. See notes above
+                 softmax_temperature = np.nan,   # For 'Bari2019', 'Hattori2019','Corrado2005'
+                 
+                 taus = 20,        # For 'Sugrue2004' (only one tau is needed), 'Corrado2005', 'IIgaya2019'. Could be any number of taus, e.g., [2,15]
+                 w_taus = 1,       # For 'Sugrue2004' (w_tau = 1), 'Corrado2005', 'IIgaya2019'.              Could be any number of taus, e.g., [0.3, 0.7]
+                 
+                 step_sizes = 0.1,      # For 'SuttonBartoRLBook'， 'Bari2019'， 'Hattori2019' (step_sizes = [unrewarded step_size, rewarded step_size]).
+                 forget_rate = 0,      # For 'SuttonBartoRLBook' (= 0)， 'Bari2019' (= 1-Zeta)， 'Hattori2019' ( = unchosen_forget_rate).
                  ):     
 
+        self.forager = forager
         self.k = k_arm
         self.n_trials = n_trials
         self.if_baited = if_baited
-        self.forager = forager
-        
         self.epsilon = epsilon
-        self.step_size = step_size
-        self.softmax_temperature = softmax_temperature
         self.random_before_total_reward = random_before_total_reward
+        self.softmax_temperature = softmax_temperature
         
-        self.tau = tau
-        self.tau_fast = tau_fast
-        self.tau_slow  = tau_slow
-        self.w_tau_slow = w_tau_slow
+        if forager == 'Sugrue2004':
+            self.taus = [taus]
+            self.w_taus = [w_taus]
+        else:
+            self.taus = taus
+            self.w_taus = w_taus
+
+        
+        # Turn step_size and forget_rate into reward- and choice- dependent, respectively. (for 'Hattori2019')
+        if forager == 'SuttonBartoRLBook':
+            self.step_sizes = [step_sizes] * 2  # Replication
+            self.forget_rates = [0, 0]   # Override
+        elif forager == 'Bari2019':
+            self.step_sizes = [step_sizes] * 2
+            self.forget_rates = [forget_rate, forget_rate]
+        elif forager == 'Hattori2019':
+            self.step_sizes = step_sizes            # Should be [unrewarded step_size, rewarded_step_size] by itself
+            self.forget_rates = [forget_rate, 0]   # Only unchosen target is forgetted
           
     def reset(self):
         
@@ -89,22 +120,23 @@ class Bandit:
         self.reward_available[:,0] = (np.random.uniform(0,1,self.k) < self.p_reward[:, self.time]).astype(int)
         
         # Forager-specific
-        if self.forager == 'Sutton_Barto':
-            self.description = 'Sutton_Barto, epsi = %g, alpha = %g' % (self.epsilon, self.step_size)
+        if self.forager in ['SuttonBartoRLBook', 'Bari2019', 'Hattori2019']:
+            effective_taus = -1/np.log(1-(np.array(self.step_sizes) + np.array(self.forget_rates)))
             
-        elif self.forager == 'Sugrue2004':
-            self.description = 'Sugrue2004, tau = %g, epsi = %g' % (self.tau, self.epsilon)
-            
-            reversed_t = np.flipud(np.arange(self.n_trials))  # Use the full length of the session just in case of an extremely large tau.
-            self.history_filter = np.exp(-reversed_t / self.tau)
-            self.q_estimation[:] = 1/self.k   # To be strict
-            
-        elif self.forager in ['Corrado2005', 'IIgaya2019']:
-            self.description = '%s, tau_fast = %g, tau_slow = %g, w_tau_slow = %g, softmax_temp = %g, epsi = %g, random_before_total_reward = %g' % \
-                                            (self.forager, self.tau_fast, self.tau_slow, self.w_tau_slow , self.softmax_temperature, self.epsilon, self.random_before_total_reward)
+            self.description = '%s, step_sizes = %s (effective tau = %s), softmax_temp = %g, epsi = %g' % \
+                               (self.forager, np.round(np.array(self.step_sizes),2), np.round(effective_taus,2), self.softmax_temperature, self.epsilon)
+ 
+        elif self.forager in ['Sugrue2004', 'Corrado2005', 'IIgaya2019']:
+            self.description = '%s, taus = %s, w_taus = %s, softmax_temp = %g, epsi = %g, random_before_total_reward = %g' % \
+                                            (self.forager, self.taus, self.w_taus , self.softmax_temperature, self.epsilon, self.random_before_total_reward)
                                             
+             # Handle any number of taus
             reversed_t = np.flipud(np.arange(self.n_trials))  # Use the full length of the session just in case of an extremely large tau.
-            self.history_filter = (1-self.w_tau_slow) * np.exp(-reversed_t / self.tau_fast) + self.w_tau_slow * np.exp(-reversed_t / self.tau_slow)
+            self.history_filter = np.zeros_like(reversed_t).astype('float64')
+            
+            for tau, w_tau in zip(self.taus, self.w_taus):
+                self.history_filter += w_tau * np.exp(-reversed_t / tau)
+            
             self.q_estimation[:] = 1/self.k   # To be strict
                   
         else:
@@ -161,14 +193,18 @@ class Bandit:
         # =============================================================================
         #   Make a choice for this trial
         # =============================================================================
-        # - Forager types:
+        # = Forager types:
         #   1. 'Random'
         #   2. 'AlwaysLEFT': only chooses LEFT
         #   3. 'IdealGreedy': knows p_reward and always chooses the largest one
-        #   4. 'Sutton_Barto':   return  ->   exp filter                                    -> epsilon-greedy
-        #   5. 'Sugrue2004':     income  ->   exp filter   ->  fractional                   -> epsilon-Poisson 
-        #   5.1 'IIgaya2019':    income  ->  2-exp filter  ->  fractional                   -> epsilon-Poisson (epsilon has the same effect as tau_long??)
-        #   6. 'Corrado2005':    income  ->  2-exp filter  ->  softmax ( = diff + sigmoid)  -> epsilon-Poisson (epsilon has the same effect as tau_long??)
+        #
+        #   4. 'SuttonBartoRLBook': return  ->   exp filter                                    -> epsilon-greedy  (epsilon > 0 is essential)
+        #    4.1 'Bari2019':        return/income  ->   exp filter (both forgetting)   -> softmax     -> epsilon-Poisson (epsilon = 0 in their paper, no necessary)
+        #    4.2 'Hattori2019':     return/income  ->   exp filter (choice-dependent forgetting, reward-dependent step_size)  -> softmax  -> epsilon-Poisson (epsilon = 0 in their paper; no necessary)
+        #
+        #   5. 'Sugrue2004':        income  ->   exp filter   ->  fractional                   -> epsilon-Poisson (epsilon = 0 in their paper; I found it essential)
+        #    5.1 'Corrado2005':     income  ->  2-exp filter  ->  softmax ( = diff + sigmoid)  -> epsilon-Poisson (epsilon = 0 in their paper; has the same effect as tau_long??)
+        #    5.2 'IIgaya2019':      income  ->  2-exp filter  ->  fractional                   -> epsilon-Poisson (epsilon = 0 in their paper; has the same effect as tau_long??)
                
         if self.forager == 'Random': 
             choice = np.random.choice(self.k)
@@ -185,10 +221,10 @@ class Bandit:
                 choice = np.random.choice(self.k)
                 
             else:   # Forager-dependent
-                if self.forager == 'Sutton_Barto':   # Greedy
+                if self.forager == 'SuttonBartoRLBook':   # Greedy
                     choice = np.random.choice(np.where(self.q_estimation[:, self.time] == self.q_estimation[:, self.time].max())[0])
                     
-                elif self.forager in ['Sugrue2004', 'Corrado2005', 'IIgaya2019']:   # Poisson
+                elif self.forager in ['Sugrue2004', 'Corrado2005', 'IIgaya2019', 'Bari2019', 'Hattori2019' ]:   # Poisson
                     if np.random.rand() < self.q_estimation[LEFT, self.time]:
                         choice = LEFT
                     else:
@@ -222,20 +258,44 @@ class Bandit:
         # =============================================================================
         #  Update value estimation (or Poisson choice probability)
         # =============================================================================
-        # - Forager types:
+        # = Forager types:
         #   1. 'Random'
         #   2. 'AlwaysLEFT': only chooses LEFT
         #   3. 'IdealGreedy': knows p_reward and always chooses the largest one
-        #   4. 'Sutton_Barto':   return  ->   exp filter                                    -> epsilon-greedy
-        #   5. 'Sugrue2004':     income  ->   exp filter   ->  fractional                   -> epsilon-Poisson 
-        #   5.1 'IIgaya2019':    income  ->  2-exp filter  ->  fractional                   -> epsilon-Poisson (epsilon has the same effect as tau_long??)
-        #   6. 'Corrado2005':    income  ->  2-exp filter  ->  softmax ( = diff + sigmoid)  -> epsilon-Poisson (epsilon has the same effect as tau_long??)
+        #
+        #   4. 'SuttonBartoRLBook': return  ->   exp filter                                    -> epsilon-greedy  (epsilon > 0 is essential)
+        #    4.1 'Bari2019':        return/income  ->   exp filter (both forgetting)   -> softmax     -> epsilon-Poisson (epsilon = 0 in their paper, no necessary)
+        #    4.2 'Hattori2019':     return/income  ->   exp filter (choice-dependent forgetting, reward-dependent step_size)  -> softmax  -> epsilon-Poisson (epsilon = 0 in their paper; no necessary)
+        #
+        #   5. 'Sugrue2004':        income  ->   exp filter   ->  fractional                   -> epsilon-Poisson (epsilon = 0 in their paper; I found it essential)
+        #    5.1 'Corrado2005':     income  ->  2-exp filter  ->  softmax ( = diff + sigmoid)  -> epsilon-Poisson (epsilon = 0 in their paper; has the same effect as tau_long??)
+        #    5.2 'IIgaya2019':      income  ->  2-exp filter  ->  fractional                   -> epsilon-Poisson (epsilon = 0 in their paper; has the same effect as tau_long??)
                 
-        if self.forager == 'Sutton_Barto':    
-            # Local ~return~
-            # Note: It's "return" rather than "income" because only the ~chosen~ one is updated here
-            self.q_estimation[:, self.time] = self.q_estimation[:, self.time - 1]  # Don't forget cache the old values!
-            self.q_estimation[choice, self.time] += (reward - self.q_estimation[choice, self.time]) * self.step_size   
+        if self.forager in ['SuttonBartoRLBook', 'Bari2019', 'Hattori2019']:    
+            # Local return
+            # Note 1: These three foragers only differ in how they handle step size and forget rate.
+            # Note 2: It's "return" rather than "income" because the unchosen Q is not updated (when forget_rate = 0 in SuttonBartoRLBook)
+            # Note 3: However, if forget_rate > 0, the unchosen one is also updated, and thus it's somewhere between "return" and "income".
+            #         In fact, when step_size = forget_rate, the unchosen Q is updated by exactly the same rule as chosen Q, so it becomes exactly "income"
+            
+            # Reward-dependent step size ('Hattori2019')
+            if reward:   
+                step_size_this = self.step_sizes[1]
+            else:
+                step_size_this = self.step_sizes[0]
+            
+            # Choice-dependent forgetting rate ('Hattori2019')
+            # Chosen:   Q(n+1) = (1- forget_rate_chosen) * Q(n) + step_size * (Reward - Q(n))
+            self.q_estimation[choice, self.time] = (1 - self.forget_rates[1]) * self.q_estimation[choice, self.time - 1]  \
+                                             + step_size_this * (reward - self.q_estimation[choice, self.time - 1])
+                                                 
+            # Unchosen: Q(n+1) = (1-forget_rate_unchosen) * Q(n)
+            unchosen_idx = [cc for cc in range(self.k) if cc != choice]
+            self.q_estimation[unchosen_idx, self.time] = (1 - self.forget_rates[0]) * self.q_estimation[unchosen_idx, self.time - 1] 
+            
+            # Softmax in 'Bari2019', 'Hattori2019'
+            if self.forager in ['Bari2019', 'Hattori2019']:
+                self.q_estimation[:, self.time] = softmax(self.q_estimation[:, self.time], self.softmax_temperature)
             
         elif self.forager in ['Sugrue2004', 'IIgaya2019']:
             # Fractional local income
