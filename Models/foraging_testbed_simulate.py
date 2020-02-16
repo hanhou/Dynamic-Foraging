@@ -16,8 +16,8 @@ import multiprocessing as mp
 import copy
 
 # Import my own modules
-from foraging_model_HH import Bandit
-from foraging_model_plots_HH import plot_all_sessions
+from foraging_testbed_models import Bandit
+from foraging_testbed_plots import plot_all_sessions
 
 methods = [ 
             # 'serial',
@@ -27,7 +27,7 @@ methods = [
 LEFT = 0
 RIGHT = 1
 global_k_arm = 2
-global_n_trials = 700  
+global_n_trials = 1000  
 global_n_sessions = 100
 
 def run_one_session(bandit):     
@@ -80,11 +80,16 @@ def run_one_session(bandit):
         if all([rew_R, rew_L, choice_R, choice_L]):   # All non-zero. Otherwise, leaves nan
             bandit.blockwise_log_choice_ratio[i_block] = np.log(choice_R / choice_L)
             bandit.blockwise_log_reward_ratio[i_block] = np.log(rew_R / rew_L)
+            
+    # -- 3. Stay duration --
+    temp = np.array([[-999]]) # -999 is to capture the first and the last stay
+    changeover_position = np.where(np.diff(np.hstack((temp, bandit.choice_history, temp))))[1] 
+    bandit.stay_durations = np.diff(changeover_position)
         
     return bandit   # For apply_async, in-place change is impossible since each worker uses "bandit" as 
                     # an independent local object. So I have to return "bandit" explicitly
 
-def run_sessions_parallel(bandit, n_sessions = global_n_sessions):  
+def run_sessions_parallel(bandit, n_sessions = global_n_sessions, pool = ''):  
     # =============================================================================
     # Run simulations with the SAME bandit in serial or in parallel, repeating n_sessions
     # =============================================================================
@@ -93,14 +98,14 @@ def run_sessions_parallel(bandit, n_sessions = global_n_sessions):
     bandits_all_sessions = []
     [bandits_all_sessions.append(copy.deepcopy(bandit)) for ss in range(n_sessions)]
         
-    if 'serial' in methods:  # Serial computing (for debugging)
+    if pool == '':  # Serial computing (for debugging)
         start = time.time()         
         for ss, bb in tqdm(enumerate(bandits_all_sessions), total = n_sessions, desc='serial'):     # trange: progress bar. HH
             run_one_session(bb)     # There is no need to assign back the resulting bandit. (Modified inside run_one_session())
              
-        print('--- serial finished in %g s ---\n' % (time.time()-start))
-
-    if 'apply_async' in methods:    # Parallel computing using multiprocessing.apply_async()
+        print('--- serial finished in %g s ---' % (time.time()-start))
+        
+    else:    # Parallel computing using multiprocessing.apply_async()
         start = time.time()
         
         # Note the "," in (bb,). See here https://stackoverflow.com/questions/29585910/why-is-multiprocessings-apply-async-so-picky
@@ -110,29 +115,31 @@ def run_sessions_parallel(bandit, n_sessions = global_n_sessions):
             # For apply_async, the assignment is required, because the bb passed to the workers are local independent copys.
             bandits_all_sessions[ss] = result_id.get()  
             
-        print('\n--- apply_async finished in %g s--- \n' % (time.time()-start), flush=True)
+        print('--- apply_async finished in %g s---' % (time.time()-start), flush=True)
         
     # =============================================================================
     # Compute summarizing results for all repetitions
     # =============================================================================
     results_all_reps = dict()
+    stay_duration_hist_bins = np.arange(21) + 0.5
     
-    # -- Foraging efficienty --
+    # -- Session-wise --
     results_all_reps['foraging_efficiency_per_session'] = np.zeros(n_sessions)
+    results_all_reps['stay_duration_hist'] = np.zeros(len(stay_duration_hist_bins)-1)
     
+    # -- Block-wise --
     n_blocks_now = 0    
-    for ss, bb in enumerate(bandits_all_sessions):
-        results_all_reps['foraging_efficiency_per_session'][ss] = bb.foraging_efficiency
-        n_blocks_now += bb.n_blocks
+    for ss, bb in enumerate(bandits_all_sessions): n_blocks_now += bb.n_blocks
+    results_all_reps['blockwise_stats'] = np.zeros([4, n_blocks_now])   # [choice_frac, reward_frac, log_choice_ratio, log_reward_ratio]
     
-    results_all_reps['foraging_efficiency'] = np.array([np.mean(results_all_reps['foraging_efficiency_per_session']),
-                                                        np.std(results_all_reps['foraging_efficiency_per_session'])])
-        
-    # -- Blockwise statistics --
-    # Preallocation
-    results_all_reps['blockwise_stats'] = np.zeros([4,n_blocks_now])   # [choice_frac, reward_frac, log_choice_ratio, log_reward_ratio]
+    # Loop over repetitions
     n_blocks_now = 0        
     for ss, bb in enumerate(bandits_all_sessions):
+        # -- Session-wise --
+        results_all_reps['foraging_efficiency_per_session'][ss] = bb.foraging_efficiency
+        results_all_reps['stay_duration_hist'] += np.histogram(bb.stay_durations, bins = stay_duration_hist_bins)[0]
+        
+        # -- Block-wise --
         results_all_reps['blockwise_stats'][:, n_blocks_now : n_blocks_now + bb.n_blocks] =  \
             np.vstack([bb.blockwise_choice_fraction, 
                        bb.blockwise_reward_fraction, 
@@ -140,6 +147,9 @@ def run_sessions_parallel(bandit, n_sessions = global_n_sessions):
                        bb.blockwise_log_reward_ratio])
         n_blocks_now += bb.n_blocks
         
+        
+    results_all_reps['foraging_efficiency'] = np.array([np.mean(results_all_reps['foraging_efficiency_per_session']),
+                                                        np.std(results_all_reps['foraging_efficiency_per_session'])])
     # Basic info
     results_all_reps['n_sessions'] = n_sessions
     results_all_reps['n_trials'] = n_sessions * bandit.n_trials
@@ -156,30 +166,28 @@ def run_sessions_parallel(bandit, n_sessions = global_n_sessions):
 
 def para_scan():
     
-    title_txt = '\n=== Figure 2.2: Sample-average \nDifferent eps (%g runs)===\n' % global_n_sessions
-    print(title_txt, flush = True)
-        
-
-    effective_tau = 5
-    step_size = 1 - np.exp(-1/effective_tau)
+    effective_tau = 10
+    step_size = 1 - np.exp(-1/effective_tau)  # Approximately 1/effective_tau, if tau >> 1
     
     # Generate a series of Bandit objects using different eps. HH
-    # 'Random', 'AlwaysLEFT', 'IdealGreedy'; 'SuttonBartoRLBook', 'Sugrue2004', 'Corrado2005', 'IIgaya2019', 'Bari2019', 'Hattori2019'
+    # 'Random', 'AlwaysLEFT', 'IdealGreedy'; 'SuttonBartoRLBook', 'Sugrue2004', 'Corrado2005', 'Iigaya2019', 'Bari2019', 'Hattori2019'
     
-    # bandit = Bandit(forager = 'SuttonBartoRLBook', epsilon = 0.1, step_sizes = step_size, if_baited = True)
-    # bandit = Bandit(forager = 'Bari2019', epsilon = 0,  step_sizes = 0.1, forget_rate = 0.05, softmax_temperature = 0.4, if_baited = True)  
-    bandit = Bandit(forager = 'Hattori2019', epsilon = 0,  step_sizes = [0.2, 0.2], forget_rate = 0.05, softmax_temperature = 0.4, if_baited = True)   
+    # bandit = Bandit(forager = 'SuttonBartoRLBook', epsilon = 0.2, step_sizes = step_size, if_baited = True, n_trials = global_n_trials)
+    # bandit = Bandit(forager = 'Bari2019', epsilon = 0,  step_sizes = 0.1, forget_rate = 0.05, softmax_temperature = 0.4, if_baited = True, n_trials = global_n_trials)  
+    bandit = Bandit(forager = 'Hattori2019', epsilon = 0,  step_sizes = [0.2, 0.1], forget_rate = 0.05, softmax_temperature = 0.4, if_baited = True, n_trials = global_n_trials)   
    
-    # bandit = Bandit(forager = 'Sugrue2004', epsilon = 0.1,  taus = 15, if_baited = True) 
-    # bandit = Bandit(forager = 'Corrado2005', epsilon = 0,  taus = [5, 15], w_taus = [0.9, 0.1], softmax_temperature = 3, if_baited = True)  
-    # bandit = Bandit(forager = 'IIgaya2019', epsilon = 0,  taus = [15,100], w_taus = [0.9, 0.1], random_before_total_reward = 20, if_baited = True)
+    # bandit = Bandit(forager = 'Sugrue2004', epsilon = 0.1,  taus = 15, if_baited = True, n_trials = global_n_trials) 
+    # bandit = Bandit(forager = 'Corrado2005', epsilon = 0,  taus = [5, 15], w_taus = [0.9, 0.1], softmax_temperature = 3, if_baited = True, n_trials = global_n_trials)  
+    # bandit = Bandit(forager = 'Iigaya2019', epsilon = 0,  taus = [15,100], w_taus = [0.9, 0.1], random_before_total_reward = 20, if_baited = True, n_trials = global_n_trials)
    
     
     # Run simulations, return best_action_counts and rewards. HH
-    run_sessions_parallel(bandit)
+    run_sessions_parallel(bandit, pool = pool)
 
 
 if __name__ == '__main__':  # This line is essential for apply_async to run in Windows
+    
+    pool = ''
    
     if 'apply_async' in methods:
         n_worker = int(mp.cpu_count()/2)  # Optimal number = number of physical cores

@@ -12,7 +12,7 @@ import statsmodels.api as sm
 
 from matplotlib.gridspec import GridSpec
 
-plt.rcParams.update({'font.size': 13})
+plt.rcParams.update({'font.size': 12})
 
 LEFT = 0
 RIGHT = 1
@@ -41,32 +41,32 @@ def plot_one_session(bandit, fig, plottype='2lickport'):
     if fig == '':
         fig = plt.figure()
         
-    gs = GridSpec(3,3)        
+    gs = GridSpec(2,3, top = 0.85)        
     ax = fig.add_subplot(gs[0,0:2])
 
     # Rewarded trials
     ax.plot(np.nonzero(rewarded_trials)[0], 0.5 + (choice_history[0,rewarded_trials]-0.5) * 1.4, 
             'k|',color='black',markersize=20, markeredgewidth=2)
-    
+
     # Unrewarded trials
     ax.plot(np.nonzero(unrewarded_trials)[0], 0.5 + (choice_history[0,unrewarded_trials] - 0.5) * 1.4, 
             '|',color='gray', markersize=10, markeredgewidth=1)
     
     # Baited probability and smoothed choice history
-    ax.plot(np.arange(0, n_trials), bandit.p_reward_fraction, color='DarkOrange')
-    ax.plot(moving_average(choice_history, smooth_factor) , color='black')
+    ax.plot(np.arange(0, n_trials), bandit.p_reward_fraction, color='DarkOrange', label = 'bait prob.')
+    ax.plot(moving_average(choice_history, smooth_factor) , color='black', label = 'smooth. choice')
     
     # "Scalar variable"
-    # if bandit.forager == 'Sugrue2004':
-    ax.plot(moving_average(bandit.q_estimation[RIGHT,:], 1), color='Green')
-    
+    if bandit.forager not in ['Random', 'AlwaysLEFT', 'IdealGreedy', 'SuttonBartoRLBook']:
+        ax.plot(moving_average(bandit.q_estimation[RIGHT,:], 1), color='Green', label = 'Q_estimation')
+        ax.legend(fontsize = 10)
+     
     ax.set_yticks([0,1])
     ax.set_yticklabels(['Left','Right'])
-    plt.xlabel('Example session')
     
-    # Reward rate
-    plt.title('efficiency = %.3g%%' % (bandit.foraging_efficiency*100), fontsize = 10)
-    
+    # Efficienty
+    plt.title('Example session, efficiency = %.3g%%' % (bandit.foraging_efficiency*100))
+   
     # == Cumulative choice plot ==  [Sugrue 2004]
     bandit.cumulative_choice_L = np.cumsum(bandit.choice_history == LEFT)
     bandit.cumulative_choice_R = np.cumsum(bandit.choice_history == RIGHT)
@@ -106,28 +106,32 @@ def plot_all_sessions(results_all_reps):
     
     fig = plt.figure(figsize=(12, 8))
         
-    fig.text(0.05,0.95,'%s\n%g sessions, %g blks, %g trials' % (results_all_reps['description'], 
+    fig.text(0.05,0.94,'%s\n%g sessions, %g blocks, %g trials' % (results_all_reps['description'], 
                                                                 results_all_reps['n_sessions'], 
                                                                 results_all_reps['n_blocks'], 
                                                                 results_all_reps['n_trials']
-                                                                ))
-    fig.text(0.05,0.92,'Efficiency: %.3g%% +/- %.2g%%' % (results_all_reps['foraging_efficiency'][0]*100,
+                                                                ), fontsize = 15)
+    fig.text(0.05,0.91,'Efficiency +/- std: %.3g%% +/- %.2g%%' % (results_all_reps['foraging_efficiency'][0]*100,
                                                           results_all_reps['foraging_efficiency'][1]*100,
-                                                          ))
+                                                          ), fontsize = 15)
     
     # == 1. Example Session ==
     if 'example_session' in results_all_reps:
         plot_one_session(results_all_reps['example_session'], fig)
     
     # == 2. Blockwise matching ==
+    c_frac, r_frac, c_log_ratio, r_log_ratio = results_all_reps['blockwise_stats']
     
-    if not 'AlwaysLEFT' in results_all_reps['example_session'].forager:
-        
-        c_frac, r_frac, c_log_ratio, r_log_ratio = results_all_reps['blockwise_stats']
-        
+    gs = GridSpec(2,3, wspace=0.3, hspace=0.5, bottom=0.13)    
+            
+    if results_all_reps['example_session'].forager not in ['AlwaysLEFT','IdealGreedy'] \
+        and not np.all(np.isnan(r_log_ratio)):
+         
         # 2b. -- Log_ratio
-        ax = fig.add_subplot(224)
-        ax.plot(r_log_ratio, c_log_ratio, '.')
+        # ax = fig.add_subplot(235)
+        ax = fig.add_subplot(gs[1,1])
+
+        ax.plot(r_log_ratio, c_log_ratio, '.k')
         
         x = r_log_ratio[~np.isnan(r_log_ratio)]
         y = c_log_ratio[~np.isnan(c_log_ratio)]
@@ -141,18 +145,18 @@ def plot_all_sessions(results_all_reps):
         r_square, p = (model.rsquared, model.pvalues)
         results_all_reps['linear_fit_log_ratio'] = np.block([[slope, slope_CI95], [intercept, intercept_CI95],[r_square, p[1]]])
         
-        ax.plot(x,y_pred,'r')
-        ax.text(0,min(plt.ylim()),'a = %.2g +/- %.2g\nr^2 = %.2g\np = %.2g' % (slope, slope_CI95, r_square, p[1]))
-        
-    
+        hh = ax.plot(x,y_pred,'r')
+        ax.legend(hh,['a = %.2g +/- %.2g\nr^2 = %.2g\np = %.2g' % (slope, slope_CI95, r_square, p[1])])
+     
         plt.xlabel('Blockwise log reward ratio')
         plt.ylabel('Blockwise log choice ratio')
+        # ax.set_aspect('equal','datalim')
         plt.axis('square')
     
-        
         # 2a. -- Fraction
-        ax = fig.add_subplot(223)
-        ax.plot(r_frac, c_frac, '.')
+        # ax = fig.add_subplot(234)
+        ax = fig.add_subplot(gs[1,0])
+        ax.plot(r_frac, c_frac, '.k')
         ax.plot([0,1],[0,1],'k--')
         
         # Non-linear relationship using the linear fit of log_ratio
@@ -165,9 +169,19 @@ def plot_all_sessions(results_all_reps):
         plt.xlabel('Blockwise reward fraction')
         plt.ylabel('Blockwise choice fraction')
         plt.axis('square')
-        
   
-    fig.show()
+    # 2c. -- Stay duration distribution
+    if np.sum(results_all_reps['stay_duration_hist']) > 0:
+        ax = fig.add_subplot(gs[1,2])
+        bin_center = np.arange(len(results_all_reps['stay_duration_hist']))
+        ax.bar(bin_center + 0.5, results_all_reps['stay_duration_hist'] / np.sum(results_all_reps['stay_duration_hist']), 
+               color = 'k', label = 'No COD')
+        ax.set_yscale('log')
+        plt.xlabel('Stay duration (trials)')
+        plt.ylabel('Proportion')
+        plt.legend()
+    
+    # fig.show()
     
     return results_all_reps
   
