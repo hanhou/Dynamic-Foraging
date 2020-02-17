@@ -139,7 +139,8 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = ''):
     
     
     results_all_sessions['foraging_efficiency_per_session'] = np.zeros([n_unique_bandits, n_reps])
-    results_all_sessions['linear_fit_log_ratio'] = np.zeros([n_unique_bandits, 3, 2])
+    results_all_sessions['linear_fit_log_ratio'] = np.zeros([n_unique_bandits, 4, 2])
+    results_all_sessions['linear_fit_log_ratio'][:] = np.nan
     
     # Loop over all unique bandits
     for unique_idx in range(n_unique_bandits):
@@ -171,17 +172,23 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = ''):
         c_log_ratio = blockwise_stats_this_bandit[2,:]
         r_log_ratio = blockwise_stats_this_bandit[3,:]
             
-        if bandit[0].forager not in ['AlwaysLEFT','IdealGreedy'] and not np.all(np.isnan(r_log_ratio)):
+        if bandit[0].forager not in ['AlwaysLEFT','IdealGreedy'] and np.sum(~np.isnan(r_log_ratio)) > 10:
             x = r_log_ratio[~np.isnan(r_log_ratio)]
             y = c_log_ratio[~np.isnan(c_log_ratio)]
             
             # Linear regression
             model = sm.OLS(y, sm.add_constant(x)).fit()
-            intercept, slope = model.params
-            intercept_CI95, slope_CI95  = np.diff(model.conf_int(), axis=1)/2
+            
+            intercept, a = model.params  # "a, b" in Corrado 2005
+            b = np.exp(intercept)
+            intercept_CI95, a_CI95  = np.diff(model.conf_int(), axis=1)/2
             r_square, p = (model.rsquared, model.pvalues)
-            results_all_sessions['linear_fit_log_ratio'][unique_idx,:,:] = [slope, slope_CI95], [intercept, intercept_CI95],[r_square, p[1]]
-        
+            
+            # From log ratio to fraction
+            slope = 4*a*b/(1+b)**2   #　"Slope" in Iigaya 2019: linear fitting of fractional choice vs fractional reward. By derivation  
+            slope_CI95 = a_CI95*4*b/(1+b)**2
+           
+            results_all_sessions['linear_fit_log_ratio'][unique_idx,:,:] = [a, a_CI95], [b, np.nan],[r_square, p[1]],[slope, slope_CI95]
         
     if not para_scan:    
         results_all_sessions['foraging_efficiency'] = np.array([np.mean(results_all_sessions['foraging_efficiency_per_session']),
@@ -217,9 +224,19 @@ def para_scan(forager, para_to_scan, n_reps = global_n_reps, pool = '', **kwargs
             kwargs_all = {**{para_name:pp}, **kwargs}   # All parameters
             bandits_to_scan.append(Bandit(forager = forager, **kwargs_all))   # Append to the list
             
+    elif n_nest == 2:
+        para_names = list(para_to_scan.keys())
+        para_ranges = list(para_to_scan.values())
+        
+        for pp_1 in para_ranges[0]:
+            for pp_2 in para_ranges[1]:
+                kwargs_all = {**{para_names[0]: pp_1, para_names[1]: pp_2}, **kwargs}
+                bandits_to_scan.append(Bandit(forager = forager, **kwargs_all))   # Append to the list
+            
     results_para_scan = run_sessions_parallel(bandits_to_scan, n_reps = n_reps, pool = pool)
     plot_para_scan(results_para_scan, para_to_scan, **kwargs)
             
+    return results_para_scan
    
 if __name__ == '__main__':  # This line is essential for apply_async to run in Windows
     
@@ -254,13 +271,32 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     #     Parameter scan (1-D or 2-D)
     # =============================================================================
     # 1-D
-    para_to_scan = {'taus': np.power(2, np.linspace(1,8,15)),
-                    # 'epsilon': np.linspace(0,0.5,6),
+        
+    #%% -- Figure 2C in Sugrue et al., 2004
+    # para_to_scan = {'taus': np.power(2, np.linspace(0,8,15)),
+    #                 # 'epsilon': np.linspace(0,0.5,6),
+    #                 }
+    # results_para_scan = para_scan('Sugrue2004', para_to_scan, epsilon = 0.15, n_reps = 100, pool = pool)
+    
+    #%% -- Figure 3 d and e of Iigaya et al, 2019
+    w_taus = [[1-w_slow, w_slow] for w_slow in np.linspace(0,1,10)]
+    para_to_scan = {'w_taus': w_taus
                     }
+    results_para_scan = para_scan('Iigaya2019', para_to_scan, taus = [2,1000],  epsilon = 0.1, n_reps = 100, pool = pool)
     
-    para_scan('Sugrue2004', para_to_scan, epsilon = 0.15, n_reps = 200, pool = pool)
+    #%% 2-D
+    #%% -- Sugrue et al., 2004 in 2D
+    # para_to_scan = {'taus': np.power(2, np.linspace(0,8,10)),
+    #                 'epsilon': np.linspace(0,0.6,10),
+    #                 }
+    # results_para_scan = para_scan('Sugrue2004', para_to_scan, n_reps = 100, pool = pool)
     
-
+    #%% -- Figure 11B of Corrado et al 2005
+    # taus = [[2, tau_2] for tau_2 in np.power(2, np.linspace(0,8,10))]
+    # para_to_scan = {'softmax_temperature': np.power(10, np.linspace(-1.5,0,10)),
+    #                 'taus': taus,
+    #                 }
+    # results_para_scan = para_scan('Corrado2005', para_to_scan, w_taus = [0.33, 0.67],  epsilon = 0, n_reps = 100, pool = pool)
 
     if pool != '':
         pool.close()   # Just a good practice

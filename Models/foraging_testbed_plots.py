@@ -7,7 +7,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-# from scipy import stats
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from matplotlib.gridspec import GridSpec
 
@@ -53,12 +53,13 @@ def plot_one_session(bandit, fig, plottype='2lickport'):
     
     # Baited probability and smoothed choice history
     ax.plot(np.arange(0, n_trials), bandit.p_reward_fraction, color='DarkOrange', label = 'bait prob.')
-    ax.plot(moving_average(choice_history, smooth_factor) , color='black', label = 'smooth. choice')
+    ax.plot(moving_average(choice_history, smooth_factor) , color='black', label = 'smoothed choice')
     
     # Choice probability
     if bandit.forager not in ['Random', 'AlwaysLEFT', 'IdealGreedy', 'SuttonBartoRLBook']:
-        ax.plot(moving_average(bandit.q_estimation[RIGHT,:], 1), color='Green', label = 'Q_estimation')
-        ax.legend(fontsize = 10)
+        ax.plot(moving_average(bandit.q_estimation[RIGHT,:], 1), color='Green', label = 'choice prob.')
+        
+    ax.legend(fontsize = 10)
      
     ax.set_yticks([0,1])
     ax.set_yticklabels(['Left','Right'])
@@ -134,13 +135,14 @@ def plot_all_reps(results_all_reps):
         ax.plot(r_log_ratio, c_log_ratio, '.k')
 
         # Get linear fit paras
-        [slope, slope_CI95], [intercept, _],[r_square, p] = results_all_reps['linear_fit_log_ratio'][0,:,:]
+        # "a,b" in Corrado 2005, "slope" in Iigaya 2019
+        [a, a_CI95], [b, _],[r_square, p],[slope, slope_CI95] = results_all_reps['linear_fit_log_ratio'][0,:,:]
 
         # Plot line
         xx = np.linspace(min(r_log_ratio), max(r_log_ratio), 100)
-        yy = intercept + xx * slope
+        yy = np.log(b) + xx * a
         hh = ax.plot(xx,yy,'r')
-        ax.legend(hh,['a = %.2g +/- %.2g\nr^2 = %.2g\np = %.2g' % (slope, slope_CI95, r_square, p)])
+        ax.legend(hh,['a = %.2g +/- %.2g\nr^2 = %.2g\np = %.2g' % (a, a_CI95, r_square, p)])
      
         plt.xlabel('Blockwise log reward ratio')
         plt.ylabel('Blockwise log choice ratio')
@@ -154,11 +156,14 @@ def plot_all_reps(results_all_reps):
         ax.plot([0,1],[0,1],'k--')
         
         # Non-linear relationship using the linear fit of log_ratio
-        a = slope
-        b = np.exp(intercept)
         xx = np.linspace(min(r_frac), max(r_frac), 100)
         yy = (xx ** a ) / (xx ** a + b * (1-xx) ** a)
         ax.plot(xx, yy, 'r')    
+        
+        # slope_fraction = 0.5 in theory
+        yy = 1/(1+b) + (xx-0.5)*slope
+        ax.plot(xx, yy, 'b--', linewidth=2, label='slope = %.3g' % slope)
+        plt.legend()       
         
         plt.xlabel('Blockwise reward fraction')
         plt.ylabel('Blockwise choice fraction')
@@ -177,7 +182,6 @@ def plot_all_reps(results_all_reps):
     
     # fig.show()
     
-    return results_all_reps
   
 def plot_para_scan(results_para_scan, para_to_scan, **kwargs):
     
@@ -189,6 +193,18 @@ def plot_para_scan(results_para_scan, para_to_scan, **kwargs):
         # === Reorganize data ==
         para_name, para_range = list(para_to_scan.items())[0]
         
+        
+        # Check para names in case it's taus, w_taus, etc...
+        if isinstance(para_range,list):
+            # Which one is change?
+            para_diff = np.array(para_range[0]) - np.array(para_range[1])
+            which_diff = np.where(para_diff)[0][-1]
+            
+            # Add workaround ...
+            para_name = para_name + '_' + str(which_diff+1)
+            para_range = np.array(para_range)[:, which_diff]
+
+        
         para_diff = np.diff(para_range)
         if_log = para_diff[0] != para_diff[1]
         
@@ -196,8 +212,8 @@ def plot_para_scan(results_para_scan, para_to_scan, **kwargs):
         fe_mean = np.mean(paras_foraging_efficiency, axis = 1)
         fe_CI95 = 1.96 * np.std(paras_foraging_efficiency, axis = 1) / np.sqrt(n_reps)
 
-        matching_slope = results_para_scan['linear_fit_log_ratio'][:,0,0]
-        matching_slope_CI95 = results_para_scan['linear_fit_log_ratio'][:,0,1]
+        matching_slope = results_para_scan['linear_fit_log_ratio'][:,3,0]  # "Slope" in Iigaya 2019
+        matching_slope_CI95 = results_para_scan['linear_fit_log_ratio'][:,3,1]
         
         # === Plotting ===
         gs = GridSpec(1,3, top = 0.85, wspace = 0.3, bottom = 0.12)
@@ -243,10 +259,96 @@ def plot_para_scan(results_para_scan, para_to_scan, **kwargs):
         plt.plot(matching_slope, fe_mean, 'o-')
         plt.xlabel('Matching slope (log ratio)')
         plt.ylabel('Foraging efficiency')
-               
         
-        pass
-    # elif len(para_to_scan) == 2:   # 2-D
+    elif len(para_to_scan) == 2:    # 2-D
+        
+        # === Reorganize data ==
+        para_names = list(para_to_scan.keys())
+        para_ranges = list(para_to_scan.values())
+        
+        # Check para names in case it's taus, w_taus, etc...
+        for nn, rr in enumerate(para_ranges):
+            if isinstance(rr,list):
+                # Which one is change?
+                para_diff = np.array(rr[0]) - np.array(rr[1])
+                which_diff = np.where(para_diff)[0][-1]
+                
+                # Add workaround ...
+                para_names[nn] = para_names[nn] + '_' + str(which_diff+1)
+                para_ranges[nn] = np.array(rr)[:, which_diff]
+                
+        
+        # Reshape the results to 2-D
+        paras_foraging_efficiency = results_para_scan['foraging_efficiency_per_session']
+        fe_mean = np.mean(paras_foraging_efficiency, axis = 1).reshape(len(para_ranges[0]), len(para_ranges[1]))
+        matching_slope = results_para_scan['linear_fit_log_ratio'][:,3,0].reshape(len(para_ranges[0]), len(para_ranges[1]))
+        
+        # === Plotting ===
+        gs = GridSpec(1,3, top = 0.9, wspace = .6, bottom = 0.15)
+        fig = plt.figure(figsize=(13, 4))
+        
+        fig.text(0.05,0.94,'Forager = %s, n_repetitions = %g, %s' % (forager, n_reps, kwargs), fontsize = 15)
+        
+        # -- 1. Foraging efficiency
+        interp = 'none'
+        cmap = plt.cm.get_cmap('hot')
+        cmap.set_bad('cyan')
+        
+        x_label_idx = np.r_[0:len(para_ranges[0]):2]
+        y_label_idx = np.r_[0:len(para_ranges[1]):2]
+        
+        ax = fig.add_subplot(gs[0,0])
+        im = plt.imshow(fe_mean.T, interpolation=interp, cmap=cmap)
+        
+        plt.xlabel(para_names[0])
+        ax.set_xlim(-0.5, len(para_ranges[0])-0.5)
+        ax.set_xticks(x_label_idx)
+        ax.set_xticklabels(np.round(para_ranges[0][x_label_idx],2))
+        plt.xticks(rotation=45)
+        
+        plt.ylabel(para_names[1])
+        ax.set_ylim(-0.5, len(para_ranges[1])-0.5)
+        ax.set_yticks(y_label_idx)
+        ax.set_yticklabels(np.round(para_ranges[1][y_label_idx],2))
+        
+        plt.title('Foraging efficiency')
+        
+        # create an axes on the right side of ax. The width of cax will be 5%
+        # of ax and the padding between cax and ax will be fixed at 0.05 inch.
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        plt.colorbar(im, cax=cax)
+        
+        # -- 2. Matching slope
+        ax = fig.add_subplot(gs[0,1])
+        im = plt.imshow(matching_slope.T, interpolation=interp, cmap=cmap)
+        
+        plt.xlabel(para_names[0])
+        ax.set_xlim(-0.5, len(para_ranges[0])-0.5)
+        ax.set_xticks(x_label_idx)
+        ax.set_xticklabels(np.round(para_ranges[0][x_label_idx],2))
+        plt.xticks(rotation=45)
+        
+        plt.ylabel(para_names[1])
+        ax.set_ylim(-0.5, len(para_ranges[1])-0.5)
+        ax.set_yticks(y_label_idx)
+        ax.set_yticklabels(np.round(para_ranges[1][y_label_idx],2))
+        
+        plt.title('Matching slope (log ratio)')
+        
+        # create an axes on the right side of ax. The width of cax will be 5%
+        # of ax and the padding between cax and ax will be fixed at 0.05 inch.
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        plt.colorbar(im, cax=cax)
+        
+        # -- 3. Foraging efficiency vs Matching slope
+        ax = fig.add_subplot(gs[0,2])
+        plt.plot(matching_slope.T, fe_mean.T, 'o')
+        
+        plt.xlabel('Matching slope (log ratio)')
+        plt.ylabel('Foraging efficiency')
+               
         
         
         

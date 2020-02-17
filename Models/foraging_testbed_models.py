@@ -150,7 +150,8 @@ class Bandit:
 
     def generate_p_reward(self, block_size_base = global_block_size_mean, 
                                 block_size_sd = global_block_size_sd,
-                                p_reward_pairs = [[.4,.05],[.3857,.0643],[.3375,.1125],[.225,.225]]):  # (Bari-Cohen 2019)
+                                p_reward_pairs = [[.4,.05],[.3857,.0643],[.3375,.1125],[.225,.225]]):  # (Bari-Cohen 2019)  
+        # Adapted from Marton's code
         
         n_trials_now = 0
         block_size = []  
