@@ -1,0 +1,8 @@
+numpy
+matplotlib
+multiprocessing
+time
+tqdm
+statsmodels
+mpl_toolkits
+pandas
