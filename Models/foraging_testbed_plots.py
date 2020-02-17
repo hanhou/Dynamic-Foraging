@@ -8,7 +8,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 # from scipy import stats
-import statsmodels.api as sm
 
 from matplotlib.gridspec import GridSpec
 
@@ -56,7 +55,7 @@ def plot_one_session(bandit, fig, plottype='2lickport'):
     ax.plot(np.arange(0, n_trials), bandit.p_reward_fraction, color='DarkOrange', label = 'bait prob.')
     ax.plot(moving_average(choice_history, smooth_factor) , color='black', label = 'smooth. choice')
     
-    # "Scalar variable"
+    # Choice probability
     if bandit.forager not in ['Random', 'AlwaysLEFT', 'IdealGreedy', 'SuttonBartoRLBook']:
         ax.plot(moving_average(bandit.q_estimation[RIGHT,:], 1), color='Green', label = 'Q_estimation')
         ax.legend(fontsize = 10)
@@ -64,7 +63,7 @@ def plot_one_session(bandit, fig, plottype='2lickport'):
     ax.set_yticks([0,1])
     ax.set_yticklabels(['Left','Right'])
     
-    # Efficienty
+    # Efficiency
     plt.title('Example session, efficiency = %.3g%%' % (bandit.foraging_efficiency*100))
    
     # == Cumulative choice plot ==  [Sugrue 2004]
@@ -102,16 +101,16 @@ def plot_one_session(bandit, fig, plottype='2lickport'):
 
     return fig
     
-def plot_all_sessions(results_all_reps):
+def plot_all_reps(results_all_reps):
     
     fig = plt.figure(figsize=(12, 8))
         
     fig.text(0.05,0.94,'%s\n%g sessions, %g blocks, %g trials' % (results_all_reps['description'], 
-                                                                results_all_reps['n_sessions'], 
+                                                                results_all_reps['n_reps'], 
                                                                 results_all_reps['n_blocks'], 
                                                                 results_all_reps['n_trials']
                                                                 ), fontsize = 15)
-    fig.text(0.05,0.91,'Efficiency +/- std: %.3g%% +/- %.2g%%' % (results_all_reps['foraging_efficiency'][0]*100,
+    fig.text(0.05,0.91,'Efficiency +/- 95%% CI: %.3g%% +/- %.2g%%' % (results_all_reps['foraging_efficiency'][0]*100,
                                                           results_all_reps['foraging_efficiency'][1]*100,
                                                           ), fontsize = 15)
     
@@ -130,23 +129,18 @@ def plot_all_sessions(results_all_reps):
         # 2b. -- Log_ratio
         # ax = fig.add_subplot(235)
         ax = fig.add_subplot(gs[1,1])
-
+        
+        # Scatter plot
         ax.plot(r_log_ratio, c_log_ratio, '.k')
-        
-        x = r_log_ratio[~np.isnan(r_log_ratio)]
-        y = c_log_ratio[~np.isnan(c_log_ratio)]
-        
-        # slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
-        model = sm.OLS(y, sm.add_constant(x)).fit()
-        y_pred = model.predict()
-        
-        intercept, slope  = model.params
-        intercept_CI95, slope_CI95  = np.diff(model.conf_int(), axis=1)/2
-        r_square, p = (model.rsquared, model.pvalues)
-        results_all_reps['linear_fit_log_ratio'] = np.block([[slope, slope_CI95], [intercept, intercept_CI95],[r_square, p[1]]])
-        
-        hh = ax.plot(x,y_pred,'r')
-        ax.legend(hh,['a = %.2g +/- %.2g\nr^2 = %.2g\np = %.2g' % (slope, slope_CI95, r_square, p[1])])
+
+        # Get linear fit paras
+        [slope, slope_CI95], [intercept, _],[r_square, p] = results_all_reps['linear_fit_log_ratio'][0,:,:]
+
+        # Plot line
+        xx = np.linspace(min(r_log_ratio), max(r_log_ratio), 100)
+        yy = intercept + xx * slope
+        hh = ax.plot(xx,yy,'r')
+        ax.legend(hh,['a = %.2g +/- %.2g\nr^2 = %.2g\np = %.2g' % (slope, slope_CI95, r_square, p)])
      
         plt.xlabel('Blockwise log reward ratio')
         plt.ylabel('Blockwise log choice ratio')
@@ -185,3 +179,89 @@ def plot_all_sessions(results_all_reps):
     
     return results_all_reps
   
+def plot_para_scan(results_para_scan, para_to_scan, **kwargs):
+    
+    forager = results_para_scan['forager']
+    n_reps = results_para_scan['n_reps']
+    
+    if len(para_to_scan) == 1:    # 1-D
+        
+        # === Reorganize data ==
+        para_name, para_range = list(para_to_scan.items())[0]
+        
+        para_diff = np.diff(para_range)
+        if_log = para_diff[0] != para_diff[1]
+        
+        paras_foraging_efficiency = results_para_scan['foraging_efficiency_per_session']
+        fe_mean = np.mean(paras_foraging_efficiency, axis = 1)
+        fe_CI95 = 1.96 * np.std(paras_foraging_efficiency, axis = 1) / np.sqrt(n_reps)
+
+        matching_slope = results_para_scan['linear_fit_log_ratio'][:,0,0]
+        matching_slope_CI95 = results_para_scan['linear_fit_log_ratio'][:,0,1]
+        
+        # === Plotting ===
+        gs = GridSpec(1,3, top = 0.85, wspace = 0.3, bottom = 0.12)
+        fig = plt.figure(figsize=(12, 4))
+        
+        fig.text(0.05,0.94,'Forager = %s, n_repetitions = %g, %s' % (forager, n_reps, kwargs), fontsize = 15)
+        
+        # -- 1. Foraging efficiency vs para
+        ax = fig.add_subplot(gs[0,0])
+        plt.plot(para_range, fe_mean, '-')
+        plt.fill_between(para_range, fe_mean - fe_CI95, fe_mean + fe_CI95, label = '95% CI', alpha = 0.2)
+        plt.xlabel(para_name)
+        plt.ylabel('Foraging efficiency')
+        ax.legend()
+        if if_log: ax.set_xscale('log')
+        
+        # Two baselines
+        # Run with rep = 1000, separately 
+        # Please change if you change the task structure !!!
+        random_result = [0.772, 0.002]    
+        ideal_result = [0.842, 0.0023]
+        xlim = [para_range[0], para_range[-1]]
+        
+        plt.plot(xlim, [random_result[0]]*2, 'k--')
+        plt.fill_between(xlim, - np.diff(random_result), np.sum(random_result), alpha = 0.2, color ='black')
+        plt.text(xlim[0], random_result[0], 'random')
+        
+        plt.plot(xlim, [ideal_result[0]]*2, 'k--')
+        plt.fill_between(xlim, - np.diff(ideal_result), np.sum(ideal_result), alpha = 0.2, color ='black')
+        plt.text(xlim[0], ideal_result[0], 'ideal')
+
+        # -- 2. Matching slope vs para
+        ax = fig.add_subplot(gs[0,1])
+        plt.plot(para_range, matching_slope, '-')
+        plt.fill_between(para_range, matching_slope - matching_slope_CI95, matching_slope + matching_slope_CI95, label = '95% CI', alpha = 0.2)
+        plt.xlabel(para_name)
+        plt.ylabel('Matching slope (log ratio)')
+        ax.legend()
+        if if_log: ax.set_xscale('log')
+        
+        # -- 3. Foraging efficiency vs Matching slope
+        ax = fig.add_subplot(gs[0,2])
+        plt.plot(matching_slope, fe_mean, 'o-')
+        plt.xlabel('Matching slope (log ratio)')
+        plt.ylabel('Foraging efficiency')
+               
+        
+        pass
+    # elif len(para_to_scan) == 2:   # 2-D
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+    
