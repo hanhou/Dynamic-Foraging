@@ -3,9 +3,11 @@
 
 ![Foraging models](https://github.com/hanhou/Dynamic-Foraging/blob/master/Models/Models.png)
 
-To play with the models, please begin with [this Jupyter Notebook](https://github.com/hanhou/Dynamic-Foraging/blob/master/Models/Foraging_Testbed.ipynb). [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/hanhou/Dynamic-Foraging/blob/master/Models/Foraging_Testbed.ipynb/master)
+To play with the models, please begin with [this Jupyter Notebook](https://github.com/hanhou/Dynamic-Foraging/blob/master/Models/Foraging_Testbed.ipynb).
+
+You can run it online [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/hanhou/Dynamic-Foraging/master?filepath=%2FModels%2FForaging_Testbed.ipynb). You may want to decrease n_trials and n_repetitions if it's too slow.
 
 I'm new to Python, so please let me know if you find any bugs:)
 
-Han Hou @ Houston
+Han Hou @ Houston<br>
 Feb 2020
