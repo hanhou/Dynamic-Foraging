@@ -55,9 +55,9 @@ def plot_one_session(bandit, fig, plottype='2lickport'):
     ax.plot(np.arange(0, n_trials), bandit.p_reward_fraction, color='DarkOrange', label = 'bait prob.')
     ax.plot(moving_average(choice_history, smooth_factor) , color='black', label = 'smoothed choice')
     
-    # Q_estimation
+    # Choice probability
     if bandit.forager not in ['Random', 'AlwaysLEFT', 'IdealGreedy', 'SuttonBartoRLBook']:
-        ax.plot(moving_average(bandit.q_estimation[RIGHT,:], 1), color='Green', label = 'Q_estimation')
+        ax.plot(moving_average(bandit.q_estimation[RIGHT,:], 1), color='Green', label = 'choice prob.')
         
     ax.legend(fontsize = 10)
      
