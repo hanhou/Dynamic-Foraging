@@ -9,7 +9,10 @@
 # = Forager types:
 #   1. Special foragers
 #       1). 'Random'
-#       2). 'AlwaysLEFT': only chooses LEFT
+#       2). 'LossCounting': switch to another option when loss count exceeds a threshold drawn from Gaussian [from Shahidi 2019]
+#           - 3.1: loss_count_threshold = inf --> Always One Side
+#           - 3.2: loss_count_threshold = 1 --> win-stay-lose-switch
+#           - 3.3: loss_count_threshold = 0 --> Always switch
 #       3). 'IdealGreedy': knows p_reward and always chooses the largest one
 #
 #   2. NLP-like foragers
@@ -76,6 +79,9 @@ class Bandit:
                  
                  step_sizes = 0.1,      # For 'SuttonBartoRLBook'， 'Bari2019'， 'Hattori2019' (step_sizes = [unrewarded step_size, rewarded step_size]).
                  forget_rate = 0,      # For 'SuttonBartoRLBook' (= 0)， 'Bari2019' (= 1-Zeta)， 'Hattori2019' ( = unchosen_forget_rate).
+                 
+                 loss_threshold_mean = 3,   # For 'LossCounting' [from Shahidi 2019]
+                 loss_threshold_std = 1,    # For 'LossCounting' [from Shahidi 2019]
                  ):     
 
         self.forager = forager
@@ -85,6 +91,9 @@ class Bandit:
         self.epsilon = epsilon
         self.random_before_total_reward = random_before_total_reward
         self.softmax_temperature = softmax_temperature
+        self.loss_threshold_mean = loss_threshold_mean
+        self.loss_threshold_std = loss_threshold_std
+        
         
         if forager == 'Sugrue2004':
             self.taus = [taus]
@@ -142,7 +151,14 @@ class Bandit:
                 self.history_filter += w_tau * np.exp(-reversed_t / tau) / np.sum(np.exp(-reversed_t / tau))  # Note the normalization term (= tau when n -> inf.)
             
             self.q_estimation[:] = 1/self.k   # To be strict
-                  
+            
+        elif self.forager in ['LossCounting']:
+            self.description = '%s, loss_thres +/- std = %g +/- %g' % (self.forager, self.loss_threshold_mean, self.loss_threshold_std)
+            
+            # Initialize
+            self.loss_count = np.zeros([1, self.n_trials]) 
+            self.loss_threshold_this = np.random.normal(self.loss_threshold_mean, self.loss_threshold_std)
+            
         else:
             self.description = self.forager
 
@@ -162,7 +178,7 @@ class Bandit:
         
             # Number of trials in each block (Gaussian distribution)
             # I treat p_reward[0,1] as the ENTIRE lists of reward probability. RIGHT = 0, LEFT = 1. HH
-            n_trials_this_block = np.rint(np.random.normal(0, block_size_sd) + block_size_base).astype(int) 
+            n_trials_this_block = np.rint(np.random.normal(block_size_base, block_size_sd)).astype(int) 
             n_trials_this_block = min(n_trials_this_block, self.n_trials - n_trials_now)
             
             block_size.append(n_trials_this_block)
@@ -196,12 +212,15 @@ class Bandit:
 
     def act(self):
         # =============================================================================
-        #   Make a choice for this trial
+        #  Update value estimation (or Poisson choice probability)
         # =============================================================================
         # = Forager types:
         #   1. Special foragers
         #       1). 'Random'
-        #       2). 'AlwaysLEFT': only chooses LEFT
+        #       2). 'LossCounting': switch to another option when loss count exceeds a threshold drawn from Gaussian [from Shahidi 2019]
+        #           - 3.1: loss_count_threshold = inf --> Always One Side
+        #           - 3.2: loss_count_threshold = 1 --> win-stay-lose-switch
+        #           - 3.3: loss_count_threshold = 0 --> Always switch
         #       3). 'IdealGreedy': knows p_reward and always chooses the largest one
         #
         #   2. NLP-like foragers
@@ -219,6 +238,24 @@ class Bandit:
             
         elif self.forager == 'AlwaysLEFT':
             choice = LEFT
+            
+        elif self.forager == 'LossCounting':
+            if self.time == 0:
+                choice = np.random.choice(self.k)  # Random on the first trial
+            else:
+                # Retrieve the last choice
+                last_choice = self.choice_history[0, self.time - 1]
+                
+                if self.loss_count[0, self.time] >= self.loss_threshold_this:
+                    # Switch
+                    choice = LEFT + RIGHT - last_choice
+                    
+                    # Reset loss counter threshold
+                    self.loss_count[0, self.time] = - self.loss_count[0, self.time] # A flag of "switch happens here"
+                    self.loss_threshold_this = np.random.normal(self.loss_threshold_mean, self.loss_threshold_std)
+                else:
+                    # Stay
+                    choice = last_choice
             
         elif self.forager == 'IdealGreedy':
             choice = np.random.choice(np.where(self.p_reward[:,self.time] == self.p_reward[:,self.time].max())[0])
@@ -238,9 +275,9 @@ class Bandit:
                     else:
                         choice = RIGHT
                 
-        self.choice_history[0, self.time] = choice
+        self.choice_history[0, self.time] = int(choice)
         
-        return choice
+        return int(choice)
             
   
     def step(self, choice):
@@ -255,7 +292,7 @@ class Bandit:
         reward_available_after_choice = self.reward_available[:, self.time].copy()  # An intermediate reward status. Note the .copy()!
         reward_available_after_choice [choice] = 0   # The reward is depleted at the chosen lick port.
         
-        self.time += 1   # Time ticks here.
+        self.time += 1   # Time ticks here !!!
         if self.time == self.n_trials: 
             return;   # Session terminates
         
@@ -269,7 +306,10 @@ class Bandit:
         # = Forager types:
         #   1. Special foragers
         #       1). 'Random'
-        #       2). 'AlwaysLEFT': only chooses LEFT
+        #       2). 'LossCounting': switch to another option when loss count exceeds a threshold drawn from Gaussian [from Shahidi 2019]
+        #           - 3.1: loss_count_threshold = inf --> Always One Side
+        #           - 3.2: loss_count_threshold = 1 --> win-stay-lose-switch
+        #           - 3.3: loss_count_threshold = 0 --> Always switch
         #       3). 'IdealGreedy': knows p_reward and always chooses the largest one
         #
         #   2. NLP-like foragers
@@ -282,7 +322,20 @@ class Bandit:
         #       2). 'Bari2019':        return/income  ->   exp filter (both forgetting)   -> softmax     -> epsilon-Poisson (epsilon = 0 in their paper, no necessary)
         #       3). 'Hattori2019':     return/income  ->   exp filter (choice-dependent forgetting, reward-dependent step_size)  -> softmax  -> epsilon-Poisson (epsilon = 0 in their paper; no necessary)
                 
-        if self.forager in ['SuttonBartoRLBook', 'Bari2019', 'Hattori2019']:    
+        if self.forager in ['LossCounting']:
+            if self.loss_count[0, self.time - 1] < 0:  # A switch just happened
+                self.loss_count[0, self.time - 1] = - self.loss_count[0, self.time - 1]  # Back to normal (Note that this = 0 in Shahidi 2019)
+                if reward:
+                    self.loss_count[0, self.time] = 0
+                else:
+                    self.loss_count[0, self.time] = 1
+            else:
+                if reward:
+                    self.loss_count[0, self.time] = self.loss_count[0, self.time - 1]
+                else:
+                    self.loss_count[0, self.time] = self.loss_count[0, self.time - 1] + 1
+                
+        elif self.forager in ['SuttonBartoRLBook', 'Bari2019', 'Hattori2019']:    
             # Local return
             # Note 1: These three foragers only differ in how they handle step size and forget rate.
             # Note 2: It's "return" rather than "income" because the unchosen Q is not updated (when forget_rate = 0 in SuttonBartoRLBook)

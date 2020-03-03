@@ -29,7 +29,7 @@ LEFT = 0
 RIGHT = 1
 global_k_arm = 2
 global_n_trials = 1000  
-global_n_reps = 1000
+global_n_reps = 500
 
 global pool
 
@@ -257,6 +257,12 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # bandit = Bandit('AlwaysLEFT', n_trials = global_n_trials)
     # bandit = Bandit('IdealGreedy', n_trials = global_n_trials)
     
+    # bandit = Bandit('LossCounting', loss_threshold_mean = 3, loss_threshold_std = 0)   # Loss counting
+    bandit = Bandit('LossCounting', loss_threshold_mean = 1, loss_threshold_std = 0)   # Win-stay-loss-shift
+    bandit = Bandit('LossCounting', loss_threshold_mean = 0, loss_threshold_std = 0)   # Always switching
+    # bandit = Bandit('LossCounting', loss_threshold_mean = 1000000, loss_threshold_std = 1)   # Always One Side
+    
+    
     # bandit = Bandit(forager = 'Sugrue2004', taus = 15, epsilon = 0.15, n_trials = global_n_trials) 
     # bandit = Bandit(forager = 'Corrado2005', taus = [3, 15], w_taus = [0.7, 0.3], softmax_temperature = 0.2, epsilon = 0, n_trials = global_n_trials) 
     # bandit = Bandit(forager = 'Iigaya2019', taus = [5,10000], w_taus = [0.7, 0.3], epsilon = 0.1, n_trials = global_n_trials) 
@@ -265,7 +271,7 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # bandit = Bandit(forager = 'Bari2019', step_sizes = 0.2, forget_rate = 0.05, softmax_temperature = 0.4,  epsilon = 0, n_trials = global_n_trials)
     # bandit = Bandit(forager = 'Hattori2019', epsilon = 0,  step_sizes = [0.2, 0.1], forget_rate = 0.05, softmax_temperature = 0.4, n_trials = global_n_trials)   
  
-    # run_sessions_parallel(bandit, n_reps = global_n_reps, pool = pool)
+    run_sessions_parallel(bandit, n_reps = global_n_reps, pool = pool)
 
     # =============================================================================
     #     Parameter scan (1-D or 2-D)
@@ -279,10 +285,10 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # results_para_scan = para_scan('Sugrue2004', para_to_scan, epsilon = 0.15, n_reps = 100, pool = pool)
     
     #%% -- Figure 3 d and e of Iigaya et al, 2019
-    w_taus = [[1-w_slow, w_slow] for w_slow in np.linspace(0,1,10)]
-    para_to_scan = {'w_taus': w_taus
-                    }
-    results_para_scan = para_scan('Iigaya2019', para_to_scan, taus = [2,1000],  epsilon = 0.1, n_reps = 100, pool = pool)
+    # w_taus = [[1-w_slow, w_slow] for w_slow in np.linspace(0,1,10)]
+    # para_to_scan = {'w_taus': w_taus
+    #                 }
+    # results_para_scan = para_scan('Iigaya2019', para_to_scan, taus = [2,1000],  epsilon = 0.1, n_reps = 100, pool = pool)
     
     #%% 2-D
     #%% -- Sugrue et al., 2004 in 2D
