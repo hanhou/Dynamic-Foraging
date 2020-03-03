@@ -156,7 +156,7 @@ def plot_all_reps(results_all_reps):
         # ax = fig.add_subplot(234)
         ax = fig.add_subplot(gs[1,0])
         ax.plot(r_frac, c_frac, '.k')
-        ax.plot([0,1],[0,1],'k--')
+        ax.plot([0,1],[0,1],'y--')
         
         # Non-linear relationship using the linear fit of log_ratio
         xx = np.linspace(min(r_frac), max(r_frac), 100)

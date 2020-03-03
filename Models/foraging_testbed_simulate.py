@@ -32,7 +32,6 @@ global_k_arm = 2
 global_n_trials = 1000  
 global_n_reps = 500
 
-global pool
 
 def run_one_session(bandit, para_scan = False, para_optim = False):     
     # =============================================================================
@@ -262,66 +261,89 @@ def para_scan(forager, para_to_scan, n_reps = global_n_reps, pool = '', **kwargs
 #  Score functions and for optimizing parameters 
 # =============================================================================
 
-global opti_name_global
-global forager_global
+def generate_kwargs(forager, opti_value):  # Helper function for parameter intepretation
+    
+    if forager == 'Corrado2005':  # Special workarounds
+        kwargs_all = {'forager': 'Corrado2005', 'taus': opti_value[0:2], 'w_taus': [1-opti_value[2], opti_value[2]], 'softmax_temperature': opti_value[3]}
+    
+    elif forager == 'Corrado2005_fixW':
+        kwargs_all = {'forager': 'Corrado2005', 'taus': opti_value[0:2], 'w_taus': [0.33, 0.67], 'softmax_temperature': opti_value[2]}
+    
+    elif forager == 'Hattori2019':
+        kwargs_all = {'forager': 'Hattori2019', 'step_sizes': opti_value[0:2], 'forget_rate': opti_value[2], 'softmax_temperature': opti_value[3]}
 
-def score_func(*args):
+    else:
+        kwargs_all = {'forager': forager}
+        for (nn, vv) in zip(opti_names, opti_value):
+            kwargs_all = {**kwargs_all, nn:vv}
+            
+    return kwargs_all
+            
+def score_func(opti_value, *argss):
         
-    global opti_name_global
-    global forager_global
-    
-    # Turn *args to **kwargs
-    opti_value = np.array(args)[0]
-    kwargs_all = {'para_optim': True}  # Let Bandit know that this is an optimization such that it uses the same random seed to generate p_reward
-    
-    for (nn, vv) in zip(opti_name_global, opti_value):
-        kwargs_all = {**kwargs_all, nn:vv}
+    # Arguments interpretation
+    forager, opti_names, n_reps_per_iter, pool = argss
+    kwargs_all = generate_kwargs(forager, opti_value)
         
     # Run simulation
-    bandit = Bandit(forager_global, **kwargs_all)
-    score = - run_sessions_parallel(bandit, n_reps = 48, pool = pool, para_optim = True)
+    bandit = Bandit(**kwargs_all, p_reward_seed_override = 20200303)  # The same reward schedule for fair comparison
+    score = - run_sessions_parallel(bandit, n_reps = n_reps_per_iter, pool = pool, para_optim = True)
     
-    print(np.round(opti_value,4), score, '\n')
+    # print(np.round(opti_value,4), score, '\n')
     
     return score
 
 
-def para_optimize(forager):
+def para_optimize(forager, n_reps_per_iter = 200, pool = ''):
     
-    global opti_name_global
-    global forager_global
+    start = time.time()
     
-    forager_global = forager
-    
+    # Define parameters to optimize and their bounds    
     if forager == 'LossCounting':
-    
-        opti_name_global = ['loss_count_threshold_mean','loss_count_threshold_std']
+        opti_names = ['loss_count_threshold_mean','loss_count_threshold_std']
         bounds = optimize.Bounds([0,0],[100,10])
         
-        opti_para = optimize.differential_evolution(func = score_func, bounds = bounds, workers = 1, disp=True, strategy = 'best1bin',
-                                                    mutation=(0.5, 1), recombination = 0.7, popsize = 15)
-        
-        # bounds = [(0,100),(0,10)]
-        # opti_para = optimize.shgo(func = score_func, bounds = bounds)
-    
-    if forager == 'Sugrue2004':
-        
-        opti_name_global = ['taus','epsilon']
+    elif forager == 'Sugrue2004':
+        opti_names = ['taus','epsilon']
         bounds = optimize.Bounds([1,0],[100,1])
-        opti_para = optimize.differential_evolution(score_func, bounds = bounds, workers = 1, disp=True, strategy = 'best1bin',
-                                                    mutation=(0.5, 1), recombination = 0.7, popsize = 15 )
-    if forager == 'Bari2019':
+
+    elif forager == 'Bari2019':
+        opti_names = ['step_sizes','forget_rate','softmax_temperature']
+        bounds = optimize.Bounds([0.01,0,0.01],[0.5,0.2,1])
         
-        opti_name_global = ['step_sizes','forget_rate','softmax_temperature']
-        bounds = optimize.Bounds([0.01,0,0.01],[0.5,1,1])
-        opti_para = optimize.differential_evolution(score_func, bounds = bounds, workers = 1, disp=True, strategy = 'best1bin',
-                                                    mutation=(0.5, 1), recombination = 0.7, popsize = 15 )   
+    elif forager == 'Corrado2005':
+        opti_names = ['tau1', 'tau2', 'w2', 'softmax_temperature']
+        bounds = optimize.Bounds([1,10,0,0.1],[10,50,1,1])
         
+    elif forager == 'Corrado2005_fixW':
+        opti_names = ['tau1', 'tau2', 'softmax_temperature']
+        bounds = optimize.Bounds([1,10,0.1],[10,50,1])
+
+    elif forager == 'Hattori2019':
+        opti_names = ['step_size_unrew', 'step_size_rew', 'forget_rate', 'softmax_temperature']
+        bounds = optimize.Bounds([0.01,0.01, 0, 0.1],[0.5, 0.5, 0.5, 1])
+        
+        
+    # Parameter optimization with DE    
+    opti_para = optimize.differential_evolution(func = score_func, args = (forager, opti_names, n_reps_per_iter, pool), bounds = bounds, 
+                                                workers = 1, disp=True, strategy = 'best1bin',
+                                                mutation=(0.5, 1), recombination = 0.7, popsize = 20)
+
+    # Rerun using the optimized parameters
+    kwargs_all = generate_kwargs(forager, opti_para.x)
+        
+    bandit = Bandit(**kwargs_all)
+    run_sessions_parallel(bandit, n_reps = 500, pool = pool)
+                          
     print(opti_para)
+    print(opti_names)
+    
+    print('--- para_optimize finished in %g s ---' % (time.time()-start))
+    
+    return opti_para
    
 if __name__ == '__main__':  # This line is essential for apply_async to run in Windows
     
-    global pool
     pool = ''
    
     if 'apply_async' in methods:
@@ -349,7 +371,7 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # bandit = Bandit(forager = 'Iigaya2019', taus = [5,10000], w_taus = [0.7, 0.3], epsilon = 0.1, n_trials = global_n_trials) 
     
     # bandit = Bandit(forager = 'SuttonBartoRLBook',step_sizes = 0.1, epsilon = 0.2, n_trials = global_n_trials)
-    # bandit = Bandit(forager = 'Bari2019', step_sizes = 0.2, forget_rate = 0.05, softmax_temperature = 0.4,  epsilon = 0, n_trials = global_n_trials)
+    # bandit = Bandit(forager = 'Bari2019', step_sizes = 0.28768228, forget_rate = 0.01592382, softmax_temperature = 0.37121355,  epsilon = 0, n_trials = global_n_trials)
     # bandit = Bandit(forager = 'Hattori2019', epsilon = 0,  step_sizes = [0.2, 0.1], forget_rate = 0.05, softmax_temperature = 0.4, n_trials = global_n_trials)   
  
     # run_sessions_parallel(bandit, n_reps = global_n_reps, pool = pool)
@@ -386,10 +408,25 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # results_para_scan = para_scan('Corrado2005', para_to_scan, w_taus = [0.33, 0.67],  epsilon = 0, n_reps = 100, pool = pool)
        
         
-    # para_optimize('LossCounting')    
-    # para_optimize('Sugrue2004')
-    para_optimize('Bari2019')
-
+    #%% =============================================================================
+    #   Automatic Parameter Optimization for Performance
+    # =============================================================================
+        
+    # Special     
+    # opti_para = para_optimize('LossCounting', n_reps_per_iter = 200, pool = pool)    # 85.4% @ [0.37879938, 0.18915971]
+        
+    # LNP-like
+    # opti_para = para_optimize('Sugrue2004', n_reps_per_iter = 200, pool = pool)  # 81.5% @ [9.88406144, 0.313648  ]
+    # opti_para = para_optimize('Corrado2005', n_reps_per_iter = 200, pool = pool)   #82.9% [ 6.17853872, 30.31342409,  0.04822465,  0.18704151]
+    # opti_para = para_optimize('Corrado2005_fixW', n_reps_per_iter = 200, pool = pool) # 82.1% [ 3.79352945, 12.93486304,  0.22950269]
+    
+    # RL-like
+    #  opti_para = para_optimize('Bari2019', n_reps_per_iter = 200, pool = pool)  # 83.7% @ [0.37058271, 0.07003851, 0.27212561]
+    opti_para = para_optimize('Hattori2019', n_reps_per_iter = 200, pool = pool)  # 83.7% @ [0.39740558, 0.22740528, 0.11980517, 0.33762251] 
+        
+    
+    
+    #%% Clear up
     if pool != '':
         pool.close()   # Just a good practice
         pool.join()

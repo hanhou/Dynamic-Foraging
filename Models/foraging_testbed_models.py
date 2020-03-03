@@ -83,7 +83,7 @@ class Bandit:
                  loss_count_threshold_mean = 3,   # For 'LossCounting' [from Shahidi 2019]
                  loss_count_threshold_std = 1,    # For 'LossCounting' [from Shahidi 2019]
                  
-                 para_optim = False,  # If true, use the same random seed!!
+                 p_reward_seed_override = '',  # If true, use the same random seed for generating p_reward!!
                  ):     
 
         self.forager = forager
@@ -95,7 +95,7 @@ class Bandit:
         self.softmax_temperature = softmax_temperature
         self.loss_count_threshold_mean = loss_count_threshold_mean
         self.loss_count_threshold_std = loss_count_threshold_std
-        self.para_optim = para_optim
+        self.p_reward_seed_override = p_reward_seed_override
         
         
         if forager == 'Sugrue2004':
@@ -174,11 +174,10 @@ class Bandit:
         
         # If para_optim, fix the random seed to ensure that p_reward schedule is fixed for all candidate parameters
         # However, we should make it random during a session (see the last line of this function)
-        if self.para_optim:
-            np.random.seed(0)
+        if self.p_reward_seed_override != '':
+            np.random.seed(self.p_reward_seed_override)
                 
         # Adapted from Marton's code
-        
         n_trials_now = 0
         block_size = []  
         p_reward = np.zeros([2,self.n_trials])
@@ -219,7 +218,7 @@ class Bandit:
         self.p_reward_fraction = p_reward[RIGHT,:] / (np.sum(p_reward, axis = 0))   # For future use
         self.p_reward_ratio = p_reward[RIGHT,:] / p_reward[LEFT,:]   # For future use
 
-        # However, we should make it random during a session
+        # We should make it random afterwards
         np.random.seed()
 
     def act(self):
