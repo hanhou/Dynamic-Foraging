@@ -15,6 +15,7 @@ import time
 import multiprocessing as mp
 import copy
 import statsmodels.api as sm
+import scipy.optimize as optimize
 
 # Import my own modules
 from foraging_testbed_models import Bandit
@@ -33,7 +34,7 @@ global_n_reps = 500
 
 global pool
 
-def run_one_session(bandit, para_scan = False):     
+def run_one_session(bandit, para_scan = False, para_optim = False):     
     # =============================================================================
     # Simulate one session
     # =============================================================================
@@ -58,42 +59,43 @@ def run_one_session(bandit, para_scan = False):
     bandit.foraging_efficiency = bandit.actual_reward_rate / bandit.maximum_reward_rate
     
     # -- 2. Blockwise statistics --
-    temp_nans = np.zeros(bandit.n_blocks)
-    temp_nans[:] = np.nan   # Better way?
-    
-    bandit.blockwise_choice_fraction = temp_nans.copy()
-    bandit.blockwise_reward_fraction = temp_nans.copy()
-    bandit.blockwise_log_choice_ratio = temp_nans.copy()
-    bandit.blockwise_log_reward_ratio = temp_nans.copy()
-    
-    bandit.block_trans_time = np.cumsum(np.hstack([0,bandit.block_size]))
-    
-    for i_block in range(bandit.n_blocks):   # For each block in this session
-        trial_range = np.r_[bandit.block_trans_time[i_block] : bandit.block_trans_time[i_block+1]]  # r_ trick
-       
-        choice_R = np.sum(bandit.choice_history[0,trial_range] == RIGHT)
-        choice_L = np.sum(bandit.choice_history[0,trial_range] == LEFT)
-        rew_R = np.sum(bandit.reward_history[RIGHT, trial_range])
-        rew_L = np.sum(bandit.reward_history[LEFT, trial_range])
-                
-        if (rew_R + rew_L):    # Non-zero total reward. Otherwise, leaves nan
-            bandit.blockwise_choice_fraction[i_block] = choice_R / (choice_R + choice_L)
-            bandit.blockwise_reward_fraction[i_block] = rew_R / (rew_R + rew_L)
+    if not para_optim:
+        temp_nans = np.zeros(bandit.n_blocks)
+        temp_nans[:] = np.nan   # Better way?
         
-        if all([rew_R, rew_L, choice_R, choice_L]):   # All non-zero. Otherwise, leaves nan
-            bandit.blockwise_log_choice_ratio[i_block] = np.log(choice_R / choice_L)
-            bandit.blockwise_log_reward_ratio[i_block] = np.log(rew_R / rew_L)
+        bandit.blockwise_choice_fraction = temp_nans.copy()
+        bandit.blockwise_reward_fraction = temp_nans.copy()
+        bandit.blockwise_log_choice_ratio = temp_nans.copy()
+        bandit.blockwise_log_reward_ratio = temp_nans.copy()
+        
+        bandit.block_trans_time = np.cumsum(np.hstack([0,bandit.block_size]))
+        
+        for i_block in range(bandit.n_blocks):   # For each block in this session
+            trial_range = np.r_[bandit.block_trans_time[i_block] : bandit.block_trans_time[i_block+1]]  # r_ trick
+           
+            choice_R = np.sum(bandit.choice_history[0,trial_range] == RIGHT)
+            choice_L = np.sum(bandit.choice_history[0,trial_range] == LEFT)
+            rew_R = np.sum(bandit.reward_history[RIGHT, trial_range])
+            rew_L = np.sum(bandit.reward_history[LEFT, trial_range])
+                    
+            if (rew_R + rew_L):    # Non-zero total reward. Otherwise, leaves nan
+                bandit.blockwise_choice_fraction[i_block] = choice_R / (choice_R + choice_L)
+                bandit.blockwise_reward_fraction[i_block] = rew_R / (rew_R + rew_L)
             
-    # -- 3. Stay duration --
-    if not para_scan:
-        temp = np.array([[-999]]) # -999 is to capture the first and the last stay
-        changeover_position = np.where(np.diff(np.hstack((temp, bandit.choice_history, temp))))[1] 
-        bandit.stay_durations = np.diff(changeover_position)
+            if all([rew_R, rew_L, choice_R, choice_L]):   # All non-zero. Otherwise, leaves nan
+                bandit.blockwise_log_choice_ratio[i_block] = np.log(choice_R / choice_L)
+                bandit.blockwise_log_reward_ratio[i_block] = np.log(rew_R / rew_L)
+                
+        # -- 3. Stay duration --
+        if not para_scan:
+            temp = np.array([[-999]]) # -999 is to capture the first and the last stay
+            changeover_position = np.where(np.diff(np.hstack((temp, bandit.choice_history, temp))))[1] 
+            bandit.stay_durations = np.diff(changeover_position)
         
     return bandit   # For apply_async, in-place change is impossible since each worker uses "bandit" as 
                     # an independent local object. So I have to return "bandit" explicitly
 
-def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = ''):  
+def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim = False):  
     # =============================================================================
     # Run simulations with the same bandit (para_scan = 0) or a list of bandits (para_scan = 1), in serial or in parallel, repeating n_reps.
     # =============================================================================
@@ -110,10 +112,16 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = ''):
         
     if pool == '':  # Serial computing (for debugging)
         start = time.time()         
-        for ss, bb in tqdm(enumerate(bandits_all_sessions), total = len(bandits_all_sessions), desc='serial'):     # trange: progress bar. HH
-            run_one_session(bb, para_scan)     # There is no need to assign back the resulting bandit. (Modified inside run_one_session())
-             
-        print('--- serial finished in %g s ---' % (time.time()-start))
+        
+        if not para_optim:  # Progress bar
+            for ss, bb in tqdm(enumerate(bandits_all_sessions), total = len(bandits_all_sessions), desc='serial'):     # trange: progress bar. HH
+                run_one_session(bb, para_scan)     # There is no need to assign back the resulting bandit. (Modified inside run_one_session())
+        else:
+            for ss, bb in enumerate(bandits_all_sessions):     # trange: progress bar. HH
+                run_one_session(bb, para_scan)     # There is no need to assign back the resulting bandit. (Modified inside run_one_session())
+            
+                
+        if not para_optim: print('--- serial finished in %g s ---' % (time.time()-start))
         
     else:    # Parallel computing using multiprocessing.apply_async()
         start = time.time()
@@ -121,11 +129,16 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = ''):
         # Note the "," in (bb,). See here https://stackoverflow.com/questions/29585910/why-is-multiprocessings-apply-async-so-picky
         result_ids = [pool.apply_async(run_one_session, args = (bb, para_scan)) for bb in bandits_all_sessions]  
                         
-        for ss, result_id in tqdm(enumerate(result_ids), total = len(bandits_all_sessions), desc='apply_async'):
-            # For apply_async, the assignment is required, because the bb passed to the workers are local independent copys.
-            bandits_all_sessions[ss] = result_id.get()  
+        if not para_optim:  # Progress bar
+            for ss, result_id in tqdm(enumerate(result_ids), total = len(bandits_all_sessions), desc='apply_async'):
+                # For apply_async, the assignment is required, because the bb passed to the workers are local independent copys.
+                bandits_all_sessions[ss] = result_id.get()  
+        else:
+            for ss, result_id in enumerate(result_ids):
+                # For apply_async, the assignment is required, because the bb passed to the workers are local independent copys.
+                bandits_all_sessions[ss] = result_id.get()
             
-        print('--- apply_async finished in %g s---' % (time.time()-start), flush=True)
+        if not para_optim: print('--- apply_async finished in %g s---' % (time.time()-start), flush=True)
         
     # =============================================================================
     # Compute summarizing results for all sessions
@@ -134,14 +147,16 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = ''):
     stay_duration_hist_bins = np.arange(21) + 0.5
     n_unique_bandits = len(bandit)
     
-    if not para_scan:
+    if not (para_scan or para_optim):
         results_all_sessions['stay_duration_hist'] = np.zeros(len(stay_duration_hist_bins)-1)
     
     
     results_all_sessions['foraging_efficiency_per_session'] = np.zeros([n_unique_bandits, n_reps])
-    results_all_sessions['linear_fit_log_ratio'] = np.zeros([n_unique_bandits, 4, 2])
-    results_all_sessions['linear_fit_log_ratio'][:] = np.nan
     
+    if not para_optim:
+        results_all_sessions['linear_fit_log_ratio'] = np.zeros([n_unique_bandits, 4, 2])
+        results_all_sessions['linear_fit_log_ratio'][:] = np.nan
+        
     # Loop over all unique bandits
     for unique_idx in range(n_unique_bandits):
         
@@ -157,38 +172,39 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = ''):
             # Session-wise
             results_all_sessions['foraging_efficiency_per_session'][unique_idx,ss] = bb.foraging_efficiency
             
-            if not para_scan:
+            if not (para_scan or para_optim):
                 results_all_sessions['stay_duration_hist'] += np.histogram(bb.stay_durations, bins = stay_duration_hist_bins)[0]
+                
+            if not para_optim:
+                blockwise_stats_this_bandit[:, n_blocks_now : n_blocks_now + bb.n_blocks] =  \
+                    np.vstack([bb.blockwise_choice_fraction, 
+                               bb.blockwise_reward_fraction, 
+                               bb.blockwise_log_choice_ratio, 
+                               bb.blockwise_log_reward_ratio])
+                n_blocks_now += bb.n_blocks
             
-            # Block-wise
-            blockwise_stats_this_bandit[:, n_blocks_now : n_blocks_now + bb.n_blocks] =  \
-                np.vstack([bb.blockwise_choice_fraction, 
-                           bb.blockwise_reward_fraction, 
-                           bb.blockwise_log_choice_ratio, 
-                           bb.blockwise_log_reward_ratio])
-            n_blocks_now += bb.n_blocks
-            
-        # --- Linear regression on log_ratios (moved here) ---
-        c_log_ratio = blockwise_stats_this_bandit[2,:]
-        r_log_ratio = blockwise_stats_this_bandit[3,:]
-            
-        if bandit[0].forager not in ['AlwaysLEFT','IdealGreedy'] and np.sum(~np.isnan(r_log_ratio)) > 10:
-            x = r_log_ratio[~np.isnan(r_log_ratio)]
-            y = c_log_ratio[~np.isnan(c_log_ratio)]
-            
-            # Linear regression
-            model = sm.OLS(y, sm.add_constant(x)).fit()
-            
-            intercept, a = model.params  # "a, b" in Corrado 2005
-            b = np.exp(intercept)
-            intercept_CI95, a_CI95  = np.diff(model.conf_int(), axis=1)/2
-            r_square, p = (model.rsquared, model.pvalues)
-            
-            # From log ratio to fraction
-            slope = 4*a*b/(1+b)**2   #　"Slope" in Iigaya 2019: linear fitting of fractional choice vs fractional reward. By derivation  
-            slope_CI95 = a_CI95*4*b/(1+b)**2
-           
-            results_all_sessions['linear_fit_log_ratio'][unique_idx,:,:] = [a, a_CI95], [b, np.nan],[r_square, p[1]],[slope, slope_CI95]
+        if not para_optim:
+            # --- Linear regression on log_ratios (moved here) ---
+            c_log_ratio = blockwise_stats_this_bandit[2,:]
+            r_log_ratio = blockwise_stats_this_bandit[3,:]
+                
+            if bandit[0].forager not in ['AlwaysLEFT','IdealGreedy'] and np.sum(~np.isnan(r_log_ratio)) > 10:
+                x = r_log_ratio[~np.isnan(r_log_ratio)]
+                y = c_log_ratio[~np.isnan(c_log_ratio)]
+                
+                # Linear regression
+                model = sm.OLS(y, sm.add_constant(x)).fit()
+                
+                intercept, a = model.params  # "a, b" in Corrado 2005
+                b = np.exp(intercept)
+                intercept_CI95, a_CI95  = np.diff(model.conf_int(), axis=1)/2
+                r_square, p = (model.rsquared, model.pvalues)
+                
+                # From log ratio to fraction
+                slope = 4*a*b/(1+b)**2   #　"Slope" in Iigaya 2019: linear fitting of fractional choice vs fractional reward. By derivation  
+                slope_CI95 = a_CI95*4*b/(1+b)**2
+               
+                results_all_sessions['linear_fit_log_ratio'][unique_idx,:,:] = [a, a_CI95], [b, np.nan],[r_square, p[1]],[slope, slope_CI95]
         
     if not para_scan:    
         results_all_sessions['foraging_efficiency'] = np.array([np.mean(results_all_sessions['foraging_efficiency_per_session']),
@@ -200,7 +216,7 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = ''):
     results_all_sessions['forager'] = bandits_all_sessions[0].forager
     
     # If not in para_scan, plot summary statistics over repeated sessions for the SAME bandit
-    if not para_scan:
+    if not (para_scan or para_optim):
         results_all_sessions['n_trials'] = n_reps * bandit[0].n_trials
         results_all_sessions['n_blocks'] = n_blocks_now
         results_all_sessions['description'] = bandits_all_sessions[0].description
@@ -208,7 +224,10 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = ''):
         
         plot_all_reps(results_all_sessions) 
     
-    return results_all_sessions
+    if not para_optim:
+        return results_all_sessions
+    else:  # if we are in automatica parameter optimization, we only care about the foraging efficiency
+        return results_all_sessions['foraging_efficiency'][0] 
 
 
 def para_scan(forager, para_to_scan, n_reps = global_n_reps, pool = '', **kwargs):
@@ -237,6 +256,68 @@ def para_scan(forager, para_to_scan, n_reps = global_n_reps, pool = '', **kwargs
     plot_para_scan(results_para_scan, para_to_scan, **kwargs)
             
     return results_para_scan
+
+
+# =============================================================================
+#  Score functions and for optimizing parameters 
+# =============================================================================
+
+global opti_name_global
+global forager_global
+
+def score_func(*args):
+        
+    global opti_name_global
+    global forager_global
+    
+    # Turn *args to **kwargs
+    opti_value = np.array(args)[0]
+    kwargs_all = {'para_optim': True}  # Let Bandit know that this is an optimization such that it uses the same random seed to generate p_reward
+    
+    for (nn, vv) in zip(opti_name_global, opti_value):
+        kwargs_all = {**kwargs_all, nn:vv}
+        
+    # Run simulation
+    bandit = Bandit(forager_global, **kwargs_all)
+    score = - run_sessions_parallel(bandit, n_reps = 48, pool = pool, para_optim = True)
+    
+    print(np.round(opti_value,4), score, '\n')
+    
+    return score
+
+
+def para_optimize(forager):
+    
+    global opti_name_global
+    global forager_global
+    
+    forager_global = forager
+    
+    if forager == 'LossCounting':
+    
+        opti_name_global = ['loss_count_threshold_mean','loss_count_threshold_std']
+        bounds = optimize.Bounds([0,0],[100,10])
+        
+        opti_para = optimize.differential_evolution(func = score_func, bounds = bounds, workers = 1, disp=True, strategy = 'best1bin',
+                                                    mutation=(0.5, 1), recombination = 0.7, popsize = 15)
+        
+        # bounds = [(0,100),(0,10)]
+        # opti_para = optimize.shgo(func = score_func, bounds = bounds)
+    
+    if forager == 'Sugrue2004':
+        
+        opti_name_global = ['taus','epsilon']
+        bounds = optimize.Bounds([1,0],[100,1])
+        opti_para = optimize.differential_evolution(score_func, bounds = bounds, workers = 1, disp=True, strategy = 'best1bin',
+                                                    mutation=(0.5, 1), recombination = 0.7, popsize = 15 )
+    if forager == 'Bari2019':
+        
+        opti_name_global = ['step_sizes','forget_rate','softmax_temperature']
+        bounds = optimize.Bounds([0.01,0,0.01],[0.5,1,1])
+        opti_para = optimize.differential_evolution(score_func, bounds = bounds, workers = 1, disp=True, strategy = 'best1bin',
+                                                    mutation=(0.5, 1), recombination = 0.7, popsize = 15 )   
+        
+    print(opti_para)
    
 if __name__ == '__main__':  # This line is essential for apply_async to run in Windows
     
@@ -257,13 +338,13 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # bandit = Bandit('AlwaysLEFT', n_trials = global_n_trials)
     # bandit = Bandit('IdealGreedy', n_trials = global_n_trials)
     
-    # bandit = Bandit('LossCounting', loss_threshold_mean = 3, loss_threshold_std = 0)   # Loss counting
-    bandit = Bandit('LossCounting', loss_threshold_mean = 1, loss_threshold_std = 0)   # Win-stay-loss-shift
-    bandit = Bandit('LossCounting', loss_threshold_mean = 0, loss_threshold_std = 0)   # Always switching
-    # bandit = Bandit('LossCounting', loss_threshold_mean = 1000000, loss_threshold_std = 1)   # Always One Side
+    # bandit = Bandit('LossCounting', loss_count_threshold_mean = 3, loss_count_threshold_std = 0)   # Loss counting
+    # bandit = Bandit('LossCounting', loss_count_threshold_mean = 1, loss_count_threshold_std = 0)   # Win-stay-loss-shift
+    # bandit = Bandit('LossCounting', loss_count_threshold_mean = 0, loss_count_threshold_std = 0)   # Always switching
+    # bandit = Bandit('LossCounting', loss_count_threshold_mean = np.inf, loss_count_threshold_std = 0)   # Always One Side
     
     
-    # bandit = Bandit(forager = 'Sugrue2004', taus = 15, epsilon = 0.15, n_trials = global_n_trials) 
+    # bandit = Bandit(forager = 'Sugrue2004', taus = 8.34597217, epsilon = 0.24859973, n_trials = global_n_trials) 
     # bandit = Bandit(forager = 'Corrado2005', taus = [3, 15], w_taus = [0.7, 0.3], softmax_temperature = 0.2, epsilon = 0, n_trials = global_n_trials) 
     # bandit = Bandit(forager = 'Iigaya2019', taus = [5,10000], w_taus = [0.7, 0.3], epsilon = 0.1, n_trials = global_n_trials) 
     
@@ -271,7 +352,7 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # bandit = Bandit(forager = 'Bari2019', step_sizes = 0.2, forget_rate = 0.05, softmax_temperature = 0.4,  epsilon = 0, n_trials = global_n_trials)
     # bandit = Bandit(forager = 'Hattori2019', epsilon = 0,  step_sizes = [0.2, 0.1], forget_rate = 0.05, softmax_temperature = 0.4, n_trials = global_n_trials)   
  
-    run_sessions_parallel(bandit, n_reps = global_n_reps, pool = pool)
+    # run_sessions_parallel(bandit, n_reps = global_n_reps, pool = pool)
 
     # =============================================================================
     #     Parameter scan (1-D or 2-D)
@@ -303,6 +384,11 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     #                 'taus': taus,
     #                 }
     # results_para_scan = para_scan('Corrado2005', para_to_scan, w_taus = [0.33, 0.67],  epsilon = 0, n_reps = 100, pool = pool)
+       
+        
+    # para_optimize('LossCounting')    
+    # para_optimize('Sugrue2004')
+    para_optimize('Bari2019')
 
     if pool != '':
         pool.close()   # Just a good practice
