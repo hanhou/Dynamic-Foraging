@@ -80,8 +80,10 @@ class Bandit:
                  step_sizes = 0.1,      # For 'SuttonBartoRLBook'， 'Bari2019'， 'Hattori2019' (step_sizes = [unrewarded step_size, rewarded step_size]).
                  forget_rate = 0,      # For 'SuttonBartoRLBook' (= 0)， 'Bari2019' (= 1-Zeta)， 'Hattori2019' ( = unchosen_forget_rate).
                  
-                 loss_threshold_mean = 3,   # For 'LossCounting' [from Shahidi 2019]
-                 loss_threshold_std = 1,    # For 'LossCounting' [from Shahidi 2019]
+                 loss_count_threshold_mean = 3,   # For 'LossCounting' [from Shahidi 2019]
+                 loss_count_threshold_std = 1,    # For 'LossCounting' [from Shahidi 2019]
+                 
+                 p_reward_seed_override = '',  # If true, use the same random seed for generating p_reward!!
                  ):     
 
         self.forager = forager
@@ -91,8 +93,9 @@ class Bandit:
         self.epsilon = epsilon
         self.random_before_total_reward = random_before_total_reward
         self.softmax_temperature = softmax_temperature
-        self.loss_threshold_mean = loss_threshold_mean
-        self.loss_threshold_std = loss_threshold_std
+        self.loss_count_threshold_mean = loss_count_threshold_mean
+        self.loss_count_threshold_std = loss_count_threshold_std
+        self.p_reward_seed_override = p_reward_seed_override
         
         
         if forager == 'Sugrue2004':
@@ -153,11 +156,11 @@ class Bandit:
             self.q_estimation[:] = 1/self.k   # To be strict
             
         elif self.forager in ['LossCounting']:
-            self.description = '%s, loss_thres +/- std = %g +/- %g' % (self.forager, self.loss_threshold_mean, self.loss_threshold_std)
+            self.description = '%s, loss_thres +/- std = %g +/- %g' % (self.forager, self.loss_count_threshold_mean, self.loss_count_threshold_std)
             
             # Initialize
             self.loss_count = np.zeros([1, self.n_trials]) 
-            self.loss_threshold_this = np.random.normal(self.loss_threshold_mean, self.loss_threshold_std)
+            self.loss_threshold_this = np.random.normal(self.loss_count_threshold_mean, self.loss_count_threshold_std)
             
         else:
             self.description = self.forager
@@ -166,9 +169,15 @@ class Bandit:
 
     def generate_p_reward(self, block_size_base = global_block_size_mean, 
                                 block_size_sd = global_block_size_sd,
-                                p_reward_pairs = [[.4,.05],[.3857,.0643],[.3375,.1125],[.225,.225]]):  # (Bari-Cohen 2019)  
-        # Adapted from Marton's code
+                                p_reward_pairs = [[.4,.05],[.3857,.0643],[.3375,.1125],[.225,.225]],  # (Bari-Cohen 2019)  
+                         ):  
         
+        # If para_optim, fix the random seed to ensure that p_reward schedule is fixed for all candidate parameters
+        # However, we should make it random during a session (see the last line of this function)
+        if self.p_reward_seed_override != '':
+            np.random.seed(self.p_reward_seed_override)
+                
+        # Adapted from Marton's code
         n_trials_now = 0
         block_size = []  
         p_reward = np.zeros([2,self.n_trials])
@@ -209,6 +218,8 @@ class Bandit:
         self.p_reward_fraction = p_reward[RIGHT,:] / (np.sum(p_reward, axis = 0))   # For future use
         self.p_reward_ratio = p_reward[RIGHT,:] / p_reward[LEFT,:]   # For future use
 
+        # We should make it random afterwards
+        np.random.seed()
 
     def act(self):
         # =============================================================================
@@ -252,7 +263,7 @@ class Bandit:
                     
                     # Reset loss counter threshold
                     self.loss_count[0, self.time] = - self.loss_count[0, self.time] # A flag of "switch happens here"
-                    self.loss_threshold_this = np.random.normal(self.loss_threshold_mean, self.loss_threshold_std)
+                    self.loss_threshold_this = np.random.normal(self.loss_count_threshold_mean, self.loss_count_threshold_std)
                 else:
                     # Stay
                     choice = last_choice
