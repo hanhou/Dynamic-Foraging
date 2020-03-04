@@ -19,7 +19,7 @@ import scipy.optimize as optimize
 
 # Import my own modules
 from foraging_testbed_models import Bandit
-from foraging_testbed_plots import plot_all_reps, plot_para_scan
+from foraging_testbed_plots import plot_all_reps, plot_para_scan, plot_model_compet
 
 methods = [ 
             # 'serial',
@@ -229,7 +229,10 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
         return results_all_sessions['foraging_efficiency'][0] 
 
 
-def para_scan(forager, para_to_scan, n_reps = global_n_reps, pool = '', **kwargs):
+#%% =============================================================================
+#  1-D or 2-D manual parameter scan
+# =============================================================================
+def para_scan(forager, para_to_scan, n_reps = global_n_reps, pool = '', if_plot = True, **kwargs):
     
     # == Turn para_to_scan into list of Bandits ==
     n_nest = len(para_to_scan)
@@ -248,20 +251,26 @@ def para_scan(forager, para_to_scan, n_reps = global_n_reps, pool = '', **kwargs
         
         for pp_1 in para_ranges[0]:
             for pp_2 in para_ranges[1]:
-                kwargs_all = {**{para_names[0]: pp_1, para_names[1]: pp_2}, **kwargs}
+                
+                if forager == 'Hattori2019':    # Stupid workaround...
+                    kwargs_all = {'step_sizes': [pp_1, pp_2], **kwargs}
+                    
+                else:   
+                    kwargs_all = {**{para_names[0]: pp_1, para_names[1]: pp_2}, **kwargs}
+                    
                 bandits_to_scan.append(Bandit(forager = forager, **kwargs_all))   # Append to the list
             
     results_para_scan = run_sessions_parallel(bandits_to_scan, n_reps = n_reps, pool = pool)
-    plot_para_scan(results_para_scan, para_to_scan, **kwargs)
+    if if_plot: plot_para_scan(results_para_scan, para_to_scan, **kwargs)
             
     return results_para_scan
 
 
-# =============================================================================
-#  Score functions and for optimizing parameters 
+#%% =============================================================================
+#  Automatic parameters optimization (for performance)
 # =============================================================================
 
-def generate_kwargs(forager, opti_value):  # Helper function for parameter intepretation
+def generate_kwargs(forager, opti_names, opti_value):  # Helper function for parameter intepretation
     
     if forager == 'Corrado2005':  # Special workarounds
         kwargs_all = {'forager': 'Corrado2005', 'taus': opti_value[0:2], 'w_taus': [1-opti_value[2], opti_value[2]], 'softmax_temperature': opti_value[3]}
@@ -283,7 +292,7 @@ def score_func(opti_value, *argss):
         
     # Arguments interpretation
     forager, opti_names, n_reps_per_iter, pool = argss
-    kwargs_all = generate_kwargs(forager, opti_value)
+    kwargs_all = generate_kwargs(forager, opti_names, opti_value)
         
     # Run simulation
     bandit = Bandit(**kwargs_all, p_reward_seed_override = 20200303)  # The same reward schedule for fair comparison
@@ -294,34 +303,35 @@ def score_func(opti_value, *argss):
     return score
 
 
-def para_optimize(forager, n_reps_per_iter = 200, pool = ''):
+def para_optimize(forager, n_reps_per_iter = 200, opti_names = '', bounds = '', pool = ''):
     
     start = time.time()
     
     # Define parameters to optimize and their bounds    
-    if forager == 'LossCounting':
-        opti_names = ['loss_count_threshold_mean','loss_count_threshold_std']
-        bounds = optimize.Bounds([0,0],[100,10])
-        
-    elif forager == 'Sugrue2004':
-        opti_names = ['taus','epsilon']
-        bounds = optimize.Bounds([1,0],[100,1])
-
-    elif forager == 'Bari2019':
-        opti_names = ['step_sizes','forget_rate','softmax_temperature']
-        bounds = optimize.Bounds([0.01,0,0.01],[0.5,0.2,1])
-        
-    elif forager == 'Corrado2005':
-        opti_names = ['tau1', 'tau2', 'w2', 'softmax_temperature']
-        bounds = optimize.Bounds([1,10,0,0.1],[10,50,1,1])
-        
-    elif forager == 'Corrado2005_fixW':
-        opti_names = ['tau1', 'tau2', 'softmax_temperature']
-        bounds = optimize.Bounds([1,10,0.1],[10,50,1])
-
-    elif forager == 'Hattori2019':
-        opti_names = ['step_size_unrew', 'step_size_rew', 'forget_rate', 'softmax_temperature']
-        bounds = optimize.Bounds([0.01,0.01, 0, 0.1],[0.5, 0.5, 0.5, 1])
+    if opti_names == '' or bounds == '':  # Could be override
+        if forager == 'LossCounting':
+            opti_names = ['loss_count_threshold_mean','loss_count_threshold_std']
+            bounds = optimize.Bounds([0,0],[100,10])
+            
+        elif forager == 'Sugrue2004':
+            opti_names = ['taus','epsilon']
+            bounds = optimize.Bounds([1,0],[100,1])
+    
+        elif forager == 'Bari2019':
+            opti_names = ['step_sizes','forget_rate','softmax_temperature']
+            bounds = optimize.Bounds([0.01,0,0.01],[0.5,0.2,1])
+            
+        elif forager == 'Corrado2005':
+            opti_names = ['tau1', 'tau2', 'w2', 'softmax_temperature']
+            bounds = optimize.Bounds([1,10,0,0.1],[10,50,1,1])
+            
+        elif forager == 'Corrado2005_fixW':
+            opti_names = ['tau1', 'tau2', 'softmax_temperature']
+            bounds = optimize.Bounds([1,10,0.1],[10,50,1])
+    
+        elif forager == 'Hattori2019':
+            opti_names = ['step_size_unrew', 'step_size_rew', 'forget_rate', 'softmax_temperature']
+            bounds = optimize.Bounds([0.01,0.01, 0, 0.1],[0.5, 0.5, 0.5, 1])
         
         
     # Parameter optimization with DE    
@@ -330,7 +340,7 @@ def para_optimize(forager, n_reps_per_iter = 200, pool = ''):
                                                 mutation=(0.5, 1), recombination = 0.7, popsize = 20)
 
     # Rerun using the optimized parameters
-    kwargs_all = generate_kwargs(forager, opti_para.x)
+    kwargs_all = generate_kwargs(forager, opti_names, opti_para.x)
         
     bandit = Bandit(**kwargs_all)
     run_sessions_parallel(bandit, n_reps = 500, pool = pool)
@@ -341,7 +351,38 @@ def para_optimize(forager, n_reps_per_iter = 200, pool = ''):
     print('--- para_optimize finished in %g s ---' % (time.time()-start))
     
     return opti_para
-   
+
+#%% =============================================================================
+#   Model competition (for performance, NOT model comparison for fitting data) 
+# ===============================================================================
+def model_compet(model_compet_settings, n_reps = 200, pool = ''):
+    
+    model_compet_results = []   # Foraging efficiency mean
+    
+    for this_setting in model_compet_settings:
+        
+        forager = this_setting['forager']
+        para_to_scan = this_setting['para_to_scan']
+        para_to_fix = this_setting['para_to_fix']
+    
+        # Run simulation
+        results_para_scan = para_scan(forager, para_to_scan, **para_to_fix , n_reps = n_reps, pool = pool, if_plot = False)
+        
+        # Fetch data
+        paras_foraging_efficiency = results_para_scan['foraging_efficiency_per_session']
+        fe_mean = np.mean(paras_foraging_efficiency, axis = 1)
+        fe_CI95 = 1.96 * np.std(paras_foraging_efficiency, axis = 1) / np.sqrt(n_reps)
+
+        matching_slope = results_para_scan['linear_fit_log_ratio'][:,3,0]  # "Slope" in Iigaya 2019
+        matching_slope_CI95 = results_para_scan['linear_fit_log_ratio'][:,3,1]
+        
+        # Cache data
+        model_compet_results.append(np.vstack((fe_mean, fe_CI95, matching_slope, matching_slope_CI95)))
+
+    plot_model_compet(model_compet_results, model_compet_settings, n_reps)
+    
+    
+#%%   
 if __name__ == '__main__':  # This line is essential for apply_async to run in Windows
     
     pool = ''
@@ -350,7 +391,7 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
         n_worker = int(mp.cpu_count()/2)  # Optimal number = number of physical cores
         pool = mp.Pool(processes = n_worker)
         
-    # =============================================================================
+    #%% =============================================================================
     #     Play with the model manually
     # =============================================================================
     
@@ -376,31 +417,31 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
  
     # run_sessions_parallel(bandit, n_reps = global_n_reps, pool = pool)
 
-    # =============================================================================
+    #%% =============================================================================
     #     Parameter scan (1-D or 2-D)
     # =============================================================================
     # 1-D
         
-    #%% -- Figure 2C in Sugrue et al., 2004
+    # -- Figure 2C in Sugrue et al., 2004
     # para_to_scan = {'taus': np.power(2, np.linspace(0,8,15)),
     #                 # 'epsilon': np.linspace(0,0.5,6),
     #                 }
     # results_para_scan = para_scan('Sugrue2004', para_to_scan, epsilon = 0.15, n_reps = 100, pool = pool)
     
-    #%% -- Figure 3 d and e of Iigaya et al, 2019
+    # -- Figure 3 d and e of Iigaya et al, 2019
     # w_taus = [[1-w_slow, w_slow] for w_slow in np.linspace(0,1,10)]
     # para_to_scan = {'w_taus': w_taus
     #                 }
     # results_para_scan = para_scan('Iigaya2019', para_to_scan, taus = [2,1000],  epsilon = 0.1, n_reps = 100, pool = pool)
     
-    #%% 2-D
-    #%% -- Sugrue et al., 2004 in 2D
+    #  2-D
+    # -- Sugrue et al., 2004 in 2D
     # para_to_scan = {'taus': np.power(2, np.linspace(0,8,10)),
     #                 'epsilon': np.linspace(0,0.6,10),
     #                 }
     # results_para_scan = para_scan('Sugrue2004', para_to_scan, n_reps = 100, pool = pool)
     
-    #%% -- Figure 11B of Corrado et al 2005
+    # -- Figure 11B of Corrado et al 2005
     # taus = [[2, tau_2] for tau_2 in np.power(2, np.linspace(0,8,10))]
     # para_to_scan = {'softmax_temperature': np.power(10, np.linspace(-1.5,0,10)),
     #                 'taus': taus,
@@ -421,9 +462,52 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # opti_para = para_optimize('Corrado2005_fixW', n_reps_per_iter = 200, pool = pool) # 82.1% [ 3.79352945, 12.93486304,  0.22950269]
     
     # RL-like
-    #  opti_para = para_optimize('Bari2019', n_reps_per_iter = 200, pool = pool)  # 83.7% @ [0.37058271, 0.07003851, 0.27212561]
-    opti_para = para_optimize('Hattori2019', n_reps_per_iter = 200, pool = pool)  # 83.7% @ [0.39740558, 0.22740528, 0.11980517, 0.33762251] 
+    # opti_para = para_optimize('Bari2019', n_reps_per_iter = 200, pool = pool)  # 83.7% @ [0.37058271, 0.07003851, 0.27212561]
+    # opti_para = para_optimize('Hattori2019', n_reps_per_iter = 200, pool = pool)  # 83.7% @ [0.39740558, 0.22740528, 0.11980517, 0.33762251] 
         
+    #%% ===========================================================================
+    #   Model Competition (1-d slice across the global optimum of each model)
+    # =============================================================================
+    
+    model_compet_settings = [
+        
+        {'forager': 'LossCounting', 
+         'para_to_scan': {'loss_count_threshold_mean': np.hstack([0.37879938, 0,np.power(2,np.linspace(0,6,13))])}, 
+         'para_to_fix': {'loss_count_threshold_std': 0.18915971}}, 
+               
+        # {'forager': 'Sugrue2004', 
+        #  'para_to_scan': {'taus': np.hstack([9.88406144, np.power(2, np.linspace(0,8,15))])},
+        #  'para_to_fix':  {'epsilon': 0.313648}},
+        
+        {'forager': 'Sugrue2004', 
+         'para_to_scan': {'epsilon': np.hstack([0.313648, np.linspace(0,1,15)])},
+         'para_to_fix':  {'taus': 9.88406144}},
+         
+        # {'forager': 'Corrado2005', 
+        #  'para_to_scan': {'w_taus': [[1-w_slow, w_slow] for w_slow in np.hstack([0.04822465, np.linspace(0,1,15)])]}, 
+        #  'para_to_fix':  {'taus':  [6.17853872, 30.31342409], 'softmax_temperature':  0.18704151}},
+        
+        {'forager': 'Corrado2005', 
+          'para_to_scan': {'softmax_temperature': np.hstack([0.18704151, np.power(10, np.linspace(-1.5,0,15))])}, 
+          'para_to_fix':  {'taus':  [6.17853872, 30.31342409], 'w_taus': [1-0.04822465, 0.04822465]}},
+         
+        # {'forager': 'Bari2019', 
+        #   'para_to_scan': {'step_sizes': np.hstack([0.37058271, np.power(10, np.linspace(-2,0,15))])}, 
+        #   'para_to_fix':  {'forget_rate': 0.07003851, 'softmax_temperature': 0.27212561}},
+
+        {'forager': 'Bari2019', 
+          'para_to_scan': {'softmax_temperature': np.hstack([0.27212561, np.power(10, np.linspace(-1.5,0,15))])}, 
+          'para_to_fix':  {'forget_rate': 0.07003851, 'step_sizes': 0.37058271}},
+
+         
+        {'forager': 'Hattori2019', 
+         'para_to_scan': {'softmax_temperature': np.hstack([0.33762251, np.power(10, np.linspace(-1.5,0,15))])}, 
+         'para_to_fix':  {'forget_rate':  0.11980517, 'step_sizes': [0.39740558, 0.22740528]}},
+        
+        ]
+
+    model_compet(model_compet_settings, n_reps = 5, pool = pool) 
+    
     
     
     #%% Clear up

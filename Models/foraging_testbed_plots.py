@@ -11,7 +11,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from matplotlib.gridspec import GridSpec
 
-plt.rcParams.update({'font.size': 12})
+plt.rcParams.update({'font.size': 13})
 
 LEFT = 0
 RIGHT = 1
@@ -107,7 +107,7 @@ def plot_one_session(bandit, fig, plottype='2lickport'):
     
 def plot_all_reps(results_all_reps):
     
-    fig = plt.figure(figsize=(12, 8))
+    fig = plt.figure(figsize=(12*0.8, 8*0.8))
         
     fig.text(0.05,0.94,'%s\n%g sessions, %g blocks, %g trials' % (results_all_reps['description'], 
                                                                 results_all_reps['n_reps'], 
@@ -353,14 +353,52 @@ def plot_para_scan(results_para_scan, para_to_scan, **kwargs):
         plt.ylabel('Foraging efficiency')
                
         
+def plot_model_compet(model_compet_results, model_compet_settings, n_reps):
+    
+    gs = GridSpec(1,1, top = 0.85, wspace = 0.3, bottom = 0.12)
+    fig = plt.figure(figsize=(7, 7))
+    ax = fig.add_subplot(gs[0,0])
         
+    for this_result, this_setting in zip(model_compet_results, model_compet_settings):
+    
+        forager = this_setting['forager']
+        para_to_scan = this_setting['para_to_scan']
+        para_name, para_value = list(para_to_scan.items())[0]
         
+        # === Plotting ===
+        # Foraging efficiency vs Matching slope
+        fe_mean, fe_CI95, matching_slope_mean, matching_slope_CI95 = this_result
         
+        # Others
+        order = np.argsort(para_value)
+        h = plt.errorbar(matching_slope_mean[order], fe_mean[order], matching_slope_CI95[order], fe_CI95[order], 
+                         '-', label = '%s (%s)' % (forager, para_name))
         
+        plt.scatter(matching_slope_mean[order], fe_mean[order], s = np.linspace(1,10,len(order))**2, color = h[0].get_color())
+
+        # Optimal value
+        plt.plot(matching_slope_mean[0], fe_mean[0], '*', markersize = 20, color = h[0].get_color())
         
+        plt.xlabel('Matching slope')
+        plt.ylabel('Foraging efficiency')
         
+        ax.legend(fontsize = 10)
         
+        # Two baselines
+        # Run with rep = 1000, separately 
+        # Please change if you change the task structure !!!
+        random_result = [0.772, 0.002]    
+        ideal_result = [0.842, 0.0023]
         
+    
+    # Two baselines
+    plt.plot([0,1],[random_result[0], random_result[0]],'k--')
+    plt.plot([0,1],[ideal_result[0], ideal_result[0]],'k--')
+
+    plt.plot(0,random_result[0],'vk', markersize = 10)    
+    plt.plot(1,ideal_result[0],'^k', markersize = 10)    
+        
+    plt.title('Model competition (n_reps = %g)'% (n_reps))
         
         
         
