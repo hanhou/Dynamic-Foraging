@@ -57,8 +57,9 @@ def run_one_session(bandit, para_scan = False, para_optim = False):
 
     bandit.foraging_efficiency = bandit.actual_reward_rate / bandit.maximum_reward_rate
     
-    # -- 2. Blockwise statistics --
+   
     if not para_optim:
+         # -- 2. Blockwise statistics --
         temp_nans = np.zeros(bandit.n_blocks)
         temp_nans[:] = np.nan   # Better way?
         
@@ -85,6 +86,52 @@ def run_one_session(bandit, para_scan = False, para_optim = False):
                 bandit.blockwise_log_choice_ratio[i_block] = np.log(choice_R / choice_L)
                 bandit.blockwise_log_reward_ratio[i_block] = np.log(rew_R / rew_L)
                 
+        # -- 2.5 Matching for each session --
+        # For model competition, it is unfair that I group all blocks over all sessions and then fit the line once.
+        # Because this would lead to a very small slope_CI95 that may mask the high variability of matching slope due to extreme biases in never-explore regime.
+        # I should compute a macthing slope for each session and then calculate the CI95 using the same way as foraging efficiency. 
+        
+        # --- Linear regression on log_ratios (for each session) ---
+        c_fraction = bandit.blockwise_choice_fraction
+        r_fraction = bandit.blockwise_reward_fraction
+        
+        c_log_ratio = bandit.blockwise_log_choice_ratio
+        r_log_ratio = bandit.blockwise_log_reward_ratio
+        
+        bandit.linear_fit_per_session = np.nan
+            
+        if np.sum(~np.isnan(r_log_ratio)) > 5:  # Use log_ratio
+            x = r_log_ratio[~np.isnan(r_log_ratio)]
+            y = c_log_ratio[~np.isnan(c_log_ratio)]
+            
+            # Linear regression
+            model = sm.OLS(y, sm.add_constant(x)).fit()
+            
+            intercept, a = model.params  # "a, b" in Corrado 2005
+            # b = np.exp(intercept)
+            intercept_CI95, a_CI95  = np.diff(model.conf_int(), axis=1)/2
+            # r_square, p = (model.rsquared, model.pvalues)
+            
+            # From log ratio to fraction
+            # slope = 4*a*b/(1+b)**2   #　"Slope" in Iigaya 2019: linear fitting of fractional choice vs fractional reward. By derivation  
+            # slope_CI95 = a_CI95*4*b/(1+b)**2
+           
+            bandit.linear_fit_per_session = a  # Let's use slope from log ratio here, because I don't want to let the bias contaminate the ratio
+        
+        elif np.sum(~np.isnan(r_fraction)) > 5:   # Otherwise, use fraction (only this way can we get a matching slope for ideal_forager and forager with extreme bias)
+            
+            x = r_fraction[~np.isnan(r_fraction)]
+            y = c_fraction[~np.isnan(c_fraction)]
+            
+            # Linear regression
+            model = sm.OLS(y, sm.add_constant(x)).fit()
+            
+            try:
+                intercept, a = model.params
+                bandit.linear_fit_per_session = a  # Let's use slope from log ratio here, because I don't want to let the bias contaminate the ratio
+            except:
+                pass
+              
         # -- 3. Stay duration --
         if not para_scan:
             temp = np.array([[-999]]) # -999 is to capture the first and the last stay
@@ -151,6 +198,7 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
     
     
     results_all_sessions['foraging_efficiency_per_session'] = np.zeros([n_unique_bandits, n_reps])
+    results_all_sessions['linear_fit_per_session'] = np.zeros([n_unique_bandits, n_reps])
     
     if not para_optim:
         results_all_sessions['linear_fit_log_ratio'] = np.zeros([n_unique_bandits, 4, 2])
@@ -170,6 +218,7 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
         for ss, bb in enumerate(sessions_for_this_bandit):
             # Session-wise
             results_all_sessions['foraging_efficiency_per_session'][unique_idx,ss] = bb.foraging_efficiency
+            results_all_sessions['linear_fit_per_session'][unique_idx,ss] = bb.linear_fit_per_session # Add session-wise matching slope for model competition
             
             if not (para_scan or para_optim):
                 results_all_sessions['stay_duration_hist'] += np.histogram(bb.stay_durations, bins = stay_duration_hist_bins)[0]
@@ -182,12 +231,15 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
                                bb.blockwise_log_reward_ratio])
                 n_blocks_now += bb.n_blocks
             
-        if not para_optim:
+        if not para_optim and not para_scan:   # For para_optim, we don't need this. For para_scan, I decided to use session-wise matching index.
             # --- Linear regression on log_ratios (moved here) ---
             c_log_ratio = blockwise_stats_this_bandit[2,:]
             r_log_ratio = blockwise_stats_this_bandit[3,:]
                 
-            if bandit[0].forager not in ['AlwaysLEFT','IdealGreedy'] and np.sum(~np.isnan(r_log_ratio)) > 10:
+            c_fraction = blockwise_stats_this_bandit[0,:]
+            r_fraction = blockwise_stats_this_bandit[1,:]
+            
+            if bandit[0].forager not in ['AlwaysLEFT','IdealGreedy'] and np.sum(~np.isnan(r_log_ratio)) > 10:  # Use log_ratio
                 x = r_log_ratio[~np.isnan(r_log_ratio)]
                 y = c_log_ratio[~np.isnan(c_log_ratio)]
                 
@@ -204,10 +256,27 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
                 slope_CI95 = a_CI95*4*b/(1+b)**2
                
                 results_all_sessions['linear_fit_log_ratio'][unique_idx,:,:] = [a, a_CI95], [b, np.nan],[r_square, p[1]],[slope, slope_CI95]
-        
+                
+            elif np.sum(~np.isnan(r_fraction)) > 5:   # Otherwise, use fraction (only this way can we get a matching slope for ideal_forager and forager with extreme bias)
+            
+                x = r_fraction[~np.isnan(r_fraction)]
+                y = c_fraction[~np.isnan(c_fraction)]
+                
+                # Linear regression
+                model = sm.OLS(y, sm.add_constant(x)).fit()
+                
+                try:
+                    intercept, a = model.params
+                    intercept_CI95, a_CI95  = np.diff(model.conf_int(), axis=1)/2
+                    results_all_sessions['linear_fit_log_ratio'][unique_idx,:,:] = [np.nan, np.nan], [np.nan, np.nan],[np.nan, np.nan],[a, a_CI95]
+                except:
+                    pass
+
+                
     if not para_scan:    
         results_all_sessions['foraging_efficiency'] = np.array([np.mean(results_all_sessions['foraging_efficiency_per_session']),
                                                       1.96 * np.std(results_all_sessions['foraging_efficiency_per_session'])/np.sqrt(n_reps)])
+        
         results_all_sessions['blockwise_stats'] = blockwise_stats_this_bandit # We need this only when not para_scan
         
     # Basic info
@@ -373,11 +442,18 @@ def model_compet(model_compet_settings, n_reps = 200, pool = ''):
         fe_mean = np.mean(paras_foraging_efficiency, axis = 1)
         fe_CI95 = 1.96 * np.std(paras_foraging_efficiency, axis = 1) / np.sqrt(n_reps)
 
-        matching_slope = results_para_scan['linear_fit_log_ratio'][:,3,0]  # "Slope" in Iigaya 2019
-        matching_slope_CI95 = results_para_scan['linear_fit_log_ratio'][:,3,1]
+        # matching_slope = results_para_scan['linear_fit_log_ratio'][:,3,0]  # "Slope" in Iigaya 2019
+        # matching_slope_CI95 = results_para_scan['linear_fit_log_ratio'][:,3,1]
         
+        # For model competition, it is unfair that I group all blocks over all sessions and then fit the line once.
+        # Because this would lead to a very small slope_CI95 that may mask the high variability of matching slope due to extreme biases in never-explore regime.
+        # I should compute a macthing slope for each session and then calculate the CI95 using the same way as foraging efficiency. 
+        paras_matching_slope = results_para_scan['linear_fit_per_session']
+        ms_mean = np.nanmean(paras_matching_slope, axis = 1)
+        ms_CI95 = 1.96 * np.nanstd(paras_matching_slope, axis = 1) / np.sqrt(n_reps)
+
         # Cache data
-        model_compet_results.append(np.vstack((fe_mean, fe_CI95, matching_slope, matching_slope_CI95)))
+        model_compet_results.append(np.vstack((fe_mean, fe_CI95, ms_mean, ms_CI95)))
 
     plot_model_compet(model_compet_results, model_compet_settings, n_reps)
     
@@ -472,16 +548,16 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     model_compet_settings = [
         
         {'forager': 'LossCounting', 
-         'para_to_scan': {'loss_count_threshold_mean': np.hstack([0.37879938, 0,np.power(2,np.linspace(0,6,13))])}, 
-         'para_to_fix': {'loss_count_threshold_std': 0.18915971}}, 
+          'para_to_scan': {'loss_count_threshold_mean': np.hstack([0.37879938, 0,np.power(2,np.linspace(0,6,13))])}, 
+          'para_to_fix': {'loss_count_threshold_std': 0.18915971}}, 
                
         # {'forager': 'Sugrue2004', 
         #  'para_to_scan': {'taus': np.hstack([9.88406144, np.power(2, np.linspace(0,8,15))])},
         #  'para_to_fix':  {'epsilon': 0.313648}},
         
         {'forager': 'Sugrue2004', 
-         'para_to_scan': {'epsilon': np.hstack([0.313648, np.linspace(0,1,15)])},
-         'para_to_fix':  {'taus': 9.88406144}},
+          'para_to_scan': {'epsilon': np.hstack([0.313648, np.linspace(0,1,20)])},
+          'para_to_fix':  {'taus': 9.88406144}},
          
         # {'forager': 'Corrado2005', 
         #  'para_to_scan': {'w_taus': [[1-w_slow, w_slow] for w_slow in np.hstack([0.04822465, np.linspace(0,1,15)])]}, 
@@ -496,17 +572,17 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
         #   'para_to_fix':  {'forget_rate': 0.07003851, 'softmax_temperature': 0.27212561}},
 
         {'forager': 'Bari2019', 
-          'para_to_scan': {'softmax_temperature': np.hstack([0.27212561, np.power(10, np.linspace(-1.5,0,15))])}, 
+          'para_to_scan': {'softmax_temperature': np.hstack([0.27212561, np.power(10, np.linspace(-1.5,0,20))])}, 
           'para_to_fix':  {'forget_rate': 0.07003851, 'step_sizes': 0.37058271}},
 
          
         {'forager': 'Hattori2019', 
-         'para_to_scan': {'softmax_temperature': np.hstack([0.33762251, np.power(10, np.linspace(-1.5,0,15))])}, 
-         'para_to_fix':  {'forget_rate':  0.11980517, 'step_sizes': [0.39740558, 0.22740528]}},
+          'para_to_scan': {'softmax_temperature': np.hstack([0.33762251, np.power(10, np.linspace(-1.5,0,15))])}, 
+          'para_to_fix':  {'forget_rate':  0.11980517, 'step_sizes': [0.39740558, 0.22740528]}},
         
         ]
 
-    model_compet(model_compet_settings, n_reps = 5, pool = pool) 
+    model_compet(model_compet_settings, n_reps = 500, pool = pool) 
     
     
     

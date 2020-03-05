@@ -97,7 +97,7 @@ class Bandit:
         self.loss_count_threshold_std = loss_count_threshold_std
         self.p_reward_seed_override = p_reward_seed_override
         
-        
+            
         if forager == 'Sugrue2004':
             self.taus = [taus]
             self.w_taus = [w_taus]
@@ -139,8 +139,8 @@ class Bandit:
         if self.forager in ['SuttonBartoRLBook', 'Bari2019', 'Hattori2019']:
             effective_taus = -1/np.log(1-(np.array(self.step_sizes) + np.array(self.forget_rates)))
             
-            self.description = '%s, step_sizes = %s (effective tau = %s), softmax_temp = %g, epsi = %g' % \
-                               (self.forager, np.round(np.array(self.step_sizes),3), np.round(effective_taus,3), self.softmax_temperature, self.epsilon)
+            self.description = '%s, step_sizes = %s (tau_eff = %s), forget = %s, softmax_temp = %g, epsi = %g' % \
+                               (self.forager, np.round(np.array(self.step_sizes),3), np.round(effective_taus,3), self.forget_rates, self.softmax_temperature, self.epsilon)
  
         elif self.forager in ['Sugrue2004', 'Corrado2005', 'Iigaya2019']:
             self.description = '%s, taus = %s, w_taus = %s, softmax_temp = %g, epsi = %g, random_before_total_reward = %g' % \
