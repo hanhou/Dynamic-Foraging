@@ -573,7 +573,7 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     model_compet_settings = [
         
         {'forager': 'LossCounting', 
-          'para_to_scan': {'loss_count_threshold_mean': np.hstack([0.37879938, 0,np.power(2,np.linspace(0,6,13))])}, 
+          'para_to_scan': {'loss_count_threshold_mean': np.hstack([0.37879938,np.power(2,np.linspace(0,6,13))])}, 
           'para_to_fix': {'loss_count_threshold_std': 0.18915971}}, 
                
         # {'forager': 'Sugrue2004', 

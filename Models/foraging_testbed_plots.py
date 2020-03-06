@@ -420,10 +420,15 @@ def plot_model_compet(model_compet_results, model_compet_settings, n_reps):
         h = plt.errorbar(matching_slope_mean[order], fe_mean[order], matching_slope_CI95[order], fe_CI95[order], 
                          '-', label = '%s (%s)' % (forager, para_name))
         
-        plt.scatter(matching_slope_mean[order], fe_mean[order], s = np.linspace(1,10,len(order))**2, color = h[0].get_color())
+        if forager == 'LossCounting':  # Reverse the order such that larger dot represents more exploration
+            sizes = np.linspace(10,1,len(order))**2
+        else:
+            sizes = np.linspace(1,10,len(order))**2
+            
+        plt.scatter(matching_slope_mean[order], fe_mean[order], s = sizes, color = h[0].get_color())
 
         # Optimal value
-        plt.plot(matching_slope_mean[0], fe_mean[0], '*', markersize = 20, color = h[0].get_color())
+        plt.plot(matching_slope_mean[0], fe_mean[0], '*', markersize = 27, color = h[0].get_color())
         
         plt.xlabel('Matching slope')
         plt.ylabel('Foraging efficiency')
