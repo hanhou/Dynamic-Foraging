@@ -123,30 +123,32 @@ def plot_all_reps(results_all_reps):
         plot_one_session(results_all_reps['example_session'], fig)
     
     # == 2. Blockwise matching ==
-    c_frac, r_frac, c_log_ratio, r_log_ratio = results_all_reps['blockwise_stats']
+    c_frac, inc_frac, c_log_ratio, inc_log_ratio, rtn_log_ratio = results_all_reps['blockwise_stats']
     
     gs = GridSpec(2,3, wspace=0.3, hspace=0.5, bottom=0.13)    
             
-    # if not np.all(np.isnan(r_log_ratio)):
+    # if not np.all(np.isnan(inc_log_ratio)):
          
     # 2b. -- Log_ratio
     # ax = fig.add_subplot(235)
     ax = fig.add_subplot(gs[1,1])
     
     # Scatter plot
-    ax.plot(r_log_ratio, c_log_ratio, '.k')
+    ax.plot(inc_log_ratio, c_log_ratio, '.k')
 
     # Get linear fit paras
     # "a,b" in Corrado 2005, "slope" in Iigaya 2019
-    [a, a_CI95], [b, _],[r_square, p],[slope, slope_CI95] = results_all_reps['linear_fit_log_ratio'][0,:,:]
+    [a, a_CI95], [b, _],[r_square, p],[slope, slope_CI95] = results_all_reps['linear_fit_log_income_ratio'][0,:,:]
 
     # Plot line
-    xx = np.linspace(min(r_log_ratio), max(r_log_ratio), 100)
+    xx = np.linspace(min(inc_log_ratio), max(inc_log_ratio), 100)
     yy = np.log(b) + xx * a
     hh = ax.plot(xx,yy,'r')
     ax.legend(hh,['a = %.2g +/- %.2g\nr^2 = %.2g\np = %.2g' % (a, a_CI95, r_square, p)])
+    
+    plt.plot([-4,4],[-4,4],'y--')
  
-    plt.xlabel('Blockwise log reward ratio')
+    plt.xlabel('Blockwise log income ratio')
     plt.ylabel('Blockwise log choice ratio')
     # ax.set_aspect('equal','datalim')
     plt.axis('square')
@@ -154,11 +156,11 @@ def plot_all_reps(results_all_reps):
     # 2a. -- Fraction
     # ax = fig.add_subplot(234)
     ax = fig.add_subplot(gs[1,0])
-    ax.plot(r_frac, c_frac, '.k')
+    ax.plot(inc_frac, c_frac, '.k')
     ax.plot([0,1],[0,1],'y--')
     
     # Non-linear relationship using the linear fit of log_ratio
-    xx = np.linspace(min(r_frac), max(r_frac), 100)
+    xx = np.linspace(min(inc_frac), max(inc_frac), 100)
     yy = (xx ** a ) / (xx ** a + b * (1-xx) ** a)
     ax.plot(xx, yy, 'r')    
     
@@ -167,7 +169,7 @@ def plot_all_reps(results_all_reps):
     ax.plot(xx, yy, 'b--', linewidth=2, label='slope = %.3g' % slope)
     plt.legend()       
     
-    plt.xlabel('Blockwise reward fraction')
+    plt.xlabel('Blockwise INCOME fraction')
     plt.ylabel('Blockwise choice fraction')
     plt.axis('square')
   
@@ -183,6 +185,44 @@ def plot_all_reps(results_all_reps):
         plt.legend()
     
     # fig.show()
+    
+    # 3. -- Matching slope using Income VS Return (after Mar 4 2020 Foraging meeting)
+    
+    fig = plt.figure(figsize=(15*1, 5*1))
+    
+    gs = GridSpec(1,3, wspace=0.3, hspace=0.5, bottom=0.13) 
+    
+    # === Pooled block-wise return_log_ratio across sessions
+    ax = fig.add_subplot(gs[0,1])
+    
+    # Scatter plot
+    ax.plot(rtn_log_ratio, c_log_ratio, '.k')
+
+    # Get linear fit paras
+    # "a,b" in Corrado 2005, "slope" in Iigaya 2019
+    [a, a_CI95], [b, _],[r_square, p],[slope, slope_CI95] = results_all_reps['linear_fit_log_income_ratio'][0,:,:]
+
+    plt.xlabel('Blockwise log RETURN ratio')
+    plt.ylabel('Blockwise log choice ratio')
+    plt.plot([-4,4],[-4,4],'y--')
+    plt.title('POOLED across sessions')
+    # ax.set_aspect('equal','datalim')
+    plt.axis('square')
+    
+    # === Matching slope using Incomd VS Return, session-wise
+    ax = fig.add_subplot(gs[0,2])
+    
+    matching_slopes_income = results_all_reps['linear_fit_income_per_session'][0,:]
+    matching_slopes_return = results_all_reps['linear_fit_return_per_session'][0,:]
+    plt.plot(matching_slopes_income, matching_slopes_return,'r.') 
+    
+    plt.plot([0,1],[0,1],'k--')       
+    
+    plt.xlabel('Matching from INCOME log ratio')
+    plt.ylabel('Matching from RETURN log ratio')
+    plt.title('Block-wise for EACH SESSION (n_rep = %g)'% results_all_reps['n_reps'])
+    plt.axis('square')
+
     
   
 def plot_para_scan(results_para_scan, para_to_scan, **kwargs):
@@ -214,8 +254,8 @@ def plot_para_scan(results_para_scan, para_to_scan, **kwargs):
         fe_mean = np.mean(paras_foraging_efficiency, axis = 1)
         fe_CI95 = 1.96 * np.std(paras_foraging_efficiency, axis = 1) / np.sqrt(n_reps)
 
-        # matching_slope = results_para_scan['linear_fit_log_ratio'][:,3,0]  # "Slope" in Iigaya 2019
-        # matching_slope_CI95 = results_para_scan['linear_fit_log_ratio'][:,3,1]
+        # matching_slope = results_para_scan['linear_fit_log_income_ratio'][:,3,0]  # "Slope" in Iigaya 2019
+        # matching_slope_CI95 = results_para_scan['linear_fit_log_income_ratio'][:,3,1]
         
         # For model competition / scan, it is unfair that I group all blocks over all sessions and then fit the line once.
         # Because this would lead to a very small slope_CI95 that may mask the high variability of matching slope due to extreme biases in never-explore regime.
@@ -290,7 +330,7 @@ def plot_para_scan(results_para_scan, para_to_scan, **kwargs):
         # Reshape the results to 2-D
         paras_foraging_efficiency = results_para_scan['foraging_efficiency_per_session']
         fe_mean = np.mean(paras_foraging_efficiency, axis = 1).reshape(len(para_ranges[0]), len(para_ranges[1]))
-        matching_slope = results_para_scan['linear_fit_log_ratio'][:,3,0].reshape(len(para_ranges[0]), len(para_ranges[1]))
+        matching_slope = results_para_scan['linear_fit_log_income_ratio'][:,3,0].reshape(len(para_ranges[0]), len(para_ranges[1]))
         
         # === Plotting ===
         gs = GridSpec(1,3, top = 0.9, wspace = .6, bottom = 0.15)
