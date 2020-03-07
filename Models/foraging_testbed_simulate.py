@@ -307,6 +307,7 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
     # Basic info
     results_all_sessions['n_reps'] = n_reps
     results_all_sessions['forager'] = bandits_all_sessions[0].forager
+    results_all_sessions['if_baited'] = bandits_all_sessions[0].if_baited
     
     # If not in para_scan, plot summary statistics over repeated sessions for the SAME bandit
     if not (para_scan or para_optim):
@@ -326,7 +327,7 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
 #%% =============================================================================
 #  1-D or 2-D manual parameter scan
 # =============================================================================
-def para_scan(forager, para_to_scan, n_reps = global_n_reps, pool = '', if_plot = True, **kwargs):
+def para_scan(forager, para_to_scan, n_reps = global_n_reps, pool = '', if_plot = True, if_baited = True, **kwargs):
     
     # == Turn para_to_scan into list of Bandits ==
     n_nest = len(para_to_scan)
@@ -337,7 +338,7 @@ def para_scan(forager, para_to_scan, n_reps = global_n_reps, pool = '', if_plot 
         
         for pp in para_range:
             kwargs_all = {**{para_name:pp}, **kwargs}   # All parameters
-            bandits_to_scan.append(Bandit(forager = forager, **kwargs_all))   # Append to the list
+            bandits_to_scan.append(Bandit(forager = forager, if_baited = if_baited, **kwargs_all))   # Append to the list
             
     elif n_nest == 2:
         para_names = list(para_to_scan.keys())
@@ -352,10 +353,10 @@ def para_scan(forager, para_to_scan, n_reps = global_n_reps, pool = '', if_plot 
                 else:   
                     kwargs_all = {**{para_names[0]: pp_1, para_names[1]: pp_2}, **kwargs}
                     
-                bandits_to_scan.append(Bandit(forager = forager, **kwargs_all))   # Append to the list
+                bandits_to_scan.append(Bandit(forager = forager, if_baited = if_baited, **kwargs_all))   # Append to the list
             
     results_para_scan = run_sessions_parallel(bandits_to_scan, n_reps = n_reps, pool = pool)
-    if if_plot: plot_para_scan(results_para_scan, para_to_scan, **kwargs)
+    if if_plot: plot_para_scan(results_para_scan, para_to_scan, if_baited = if_baited, **kwargs)
             
     return results_para_scan
 
@@ -385,19 +386,19 @@ def generate_kwargs(forager, opti_names, opti_value):  # Helper function for par
 def score_func(opti_value, *argss):
         
     # Arguments interpretation
-    forager, opti_names, n_reps_per_iter, pool = argss
+    forager, opti_names, n_reps_per_iter, if_baited, pool = argss
     kwargs_all = generate_kwargs(forager, opti_names, opti_value)
         
     # Run simulation
-    bandit = Bandit(**kwargs_all, p_reward_seed_override = 20200303)  # The same reward schedule for fair comparison
-    score = - run_sessions_parallel(bandit, n_reps = n_reps_per_iter, pool = pool, para_optim = True)
+    bandit = Bandit(**kwargs_all, if_baited = if_baited, p_reward_seed_override = 20200303)  # The same reward schedule for fair comparison
+    score = - run_sessions_parallel(bandit, n_reps = n_reps_per_iter, pool = pool, para_optim = True)  # Negative efficiency as cost function
     
     # print(np.round(opti_value,4), score, '\n')
     
     return score
 
 
-def para_optimize(forager, n_reps_per_iter = 200, opti_names = '', bounds = '', pool = ''):
+def para_optimize(forager, n_reps_per_iter = 200, opti_names = '', bounds = '', pool = '', if_baited = True):
     
     start = time.time()
     
@@ -429,7 +430,7 @@ def para_optimize(forager, n_reps_per_iter = 200, opti_names = '', bounds = '', 
         
         
     # Parameter optimization with DE    
-    opti_para = optimize.differential_evolution(func = score_func, args = (forager, opti_names, n_reps_per_iter, pool), bounds = bounds, 
+    opti_para = optimize.differential_evolution(func = score_func, args = (forager, opti_names, n_reps_per_iter, if_baited, pool), bounds = bounds, 
                                                 workers = 1, disp=True, strategy = 'best1bin',
                                                 mutation=(0.5, 1), recombination = 0.7, popsize = 20)
 
@@ -449,7 +450,7 @@ def para_optimize(forager, n_reps_per_iter = 200, opti_names = '', bounds = '', 
 #%% =============================================================================
 #   Model competition (for performance, NOT model comparison for fitting data) 
 # ===============================================================================
-def model_compet(model_compet_settings, n_reps = 200, pool = ''):
+def model_compet(model_compet_settings, n_reps = 200, pool = '', if_baited = True):
     
     model_compet_results = []   # Foraging efficiency mean
     
@@ -460,7 +461,7 @@ def model_compet(model_compet_settings, n_reps = 200, pool = ''):
         para_to_fix = this_setting['para_to_fix']
     
         # Run simulation
-        results_para_scan = para_scan(forager, para_to_scan, **para_to_fix , n_reps = n_reps, pool = pool, if_plot = False)
+        results_para_scan = para_scan(forager, para_to_scan, **para_to_fix , if_baited = if_baited, n_reps = n_reps, pool = pool, if_plot = False)
         
         # Fetch data
         paras_foraging_efficiency = results_para_scan['foraging_efficiency_per_session']
@@ -480,7 +481,7 @@ def model_compet(model_compet_settings, n_reps = 200, pool = ''):
         # Cache data
         model_compet_results.append(np.vstack((fe_mean, fe_CI95, ms_mean, ms_CI95)))
 
-    plot_model_compet(model_compet_results, model_compet_settings, n_reps)
+    plot_model_compet(model_compet_results, model_compet_settings, n_reps, if_baited = if_baited)
     
     
 #%%   
@@ -607,7 +608,7 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
         
         ]
 
-    model_compet(model_compet_settings, n_reps = 500, pool = pool) 
+    model_compet(model_compet_settings, if_baited = True, n_reps = 500, pool = pool) 
     
     
     

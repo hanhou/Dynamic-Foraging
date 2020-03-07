@@ -114,8 +114,8 @@ def plot_all_reps(results_all_reps):
                                                                 results_all_reps['n_blocks'], 
                                                                 results_all_reps['n_trials']
                                                                 ), fontsize = 15)
-    fig.text(0.05,0.91,'Efficiency +/- 95%% CI: %.3g%% +/- %.2g%%' % (results_all_reps['foraging_efficiency'][0]*100,
-                                                          results_all_reps['foraging_efficiency'][1]*100,
+    fig.text(0.05,0.91,'Efficiency +/- 95%% CI: %.3g%% +/- %.2g%% (if_baited = %s)' % (results_all_reps['foraging_efficiency'][0]*100,
+                                                          results_all_reps['foraging_efficiency'][1]*100, results_all_reps['if_baited']
                                                           ), fontsize = 15)
     
     # == 1. Example Session ==
@@ -225,7 +225,7 @@ def plot_all_reps(results_all_reps):
 
     
   
-def plot_para_scan(results_para_scan, para_to_scan, **kwargs):
+def plot_para_scan(results_para_scan, para_to_scan, if_baited = True, **kwargs):
     
     forager = results_para_scan['forager']
     n_reps = results_para_scan['n_reps']
@@ -282,8 +282,14 @@ def plot_para_scan(results_para_scan, para_to_scan, **kwargs):
         # Two baselines
         # Run with rep = 1000, separately 
         # Please change if you change the task structure !!!
-        random_result = [0.772, 0.002]    
-        ideal_result = [0.842, 0.0023]
+        if if_baited:
+            random_result = [0.772, 0.002]    
+            ideal_result = [0.842, 0.0023]
+        else:
+            random_result = [0.499, 0.19]    
+            ideal_result = [0.767, 0.003]
+        
+        
         xlim = [para_range[0], para_range[-1]]
         
         plt.plot(xlim, [random_result[0]]*2, 'k--')
@@ -399,11 +405,14 @@ def plot_para_scan(results_para_scan, para_to_scan, **kwargs):
         plt.ylabel('Foraging efficiency')
                
         
-def plot_model_compet(model_compet_results, model_compet_settings, n_reps):
+def plot_model_compet(model_compet_results, model_compet_settings, n_reps, if_baited = True):
     
     gs = GridSpec(1,1, top = 0.85, wspace = 0.3, bottom = 0.12)
     fig = plt.figure(figsize=(7, 7))
     ax = fig.add_subplot(gs[0,0])
+    
+    # Let's fix the color coding
+    colors = {'LossCounting':'C0', 'Sugrue2004':'C1', 'Corrado2005':'C2', 'Bari2019':'C3', 'Hattori2019':'C4'}
         
     for this_result, this_setting in zip(model_compet_results, model_compet_settings):
     
@@ -417,18 +426,18 @@ def plot_model_compet(model_compet_results, model_compet_settings, n_reps):
         
         # Others
         order = np.argsort(para_value)
-        h = plt.errorbar(matching_slope_mean[order], fe_mean[order], matching_slope_CI95[order], fe_CI95[order], 
-                         '-', label = '%s (%s)' % (forager, para_name))
+        plt.errorbar(matching_slope_mean[order], fe_mean[order], matching_slope_CI95[order], fe_CI95[order], 
+                         '-', label = '%s (%s)' % (forager, para_name), color = colors[forager])
         
         if forager == 'LossCounting':  # Reverse the order such that larger dot represents more exploration
             sizes = np.linspace(10,1,len(order))**2
         else:
             sizes = np.linspace(1,10,len(order))**2
             
-        plt.scatter(matching_slope_mean[order], fe_mean[order], s = sizes, color = h[0].get_color())
+        plt.scatter(matching_slope_mean[order], fe_mean[order], s = sizes, color = colors[forager])
 
         # Optimal value
-        plt.plot(matching_slope_mean[0], fe_mean[0], '*', markersize = 27, color = h[0].get_color())
+        plt.plot(matching_slope_mean[0], fe_mean[0], '*', markersize = 27, color = colors[forager])
         
         plt.xlabel('Matching slope')
         plt.ylabel('Foraging efficiency')
@@ -437,9 +446,13 @@ def plot_model_compet(model_compet_results, model_compet_settings, n_reps):
         
         # Two baselines
         # Run with rep = 1000, separately 
-        # Please change if you change the task structure !!!
-        random_result = [0.772, 0.002]    
-        ideal_result = [0.842, 0.0023]
+        # Please change if you change the task structure !!! (For example, baited VS unbaitred)
+        if if_baited:
+            random_result = [0.772, 0.002]    
+            ideal_result = [0.842, 0.0023]
+        else:
+            random_result = [0.499, 0.19]    
+            ideal_result = [0.767, 0.003]
         
     
     # Two baselines
@@ -449,7 +462,7 @@ def plot_model_compet(model_compet_results, model_compet_settings, n_reps):
     plt.plot(0,random_result[0],'vk', markersize = 10)    
     plt.plot(1,ideal_result[0],'^k', markersize = 10)    
         
-    plt.title('Model competition (n_reps = %g)'% (n_reps))
+    plt.title('Model competition (if_baited = %s, n_reps = %g)'% (if_baited, n_reps))
         
         
         
