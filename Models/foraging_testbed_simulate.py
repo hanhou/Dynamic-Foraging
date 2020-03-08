@@ -163,7 +163,7 @@ def run_one_session(bandit, para_scan = False, para_optim = False):
     return bandit   # For apply_async, in-place change is impossible since each worker uses "bandit" as 
                     # an independent local object. So I have to return "bandit" explicitly
 
-def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim = False):  
+def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim = False, if_plot = True):  
     # =============================================================================
     # Run simulations with the same bandit (para_scan = 0) or a list of bandits (para_scan = 1), in serial or in parallel, repeating n_reps.
     # =============================================================================
@@ -310,7 +310,7 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
     results_all_sessions['if_baited'] = bandits_all_sessions[0].if_baited
     
     # If not in para_scan, plot summary statistics over repeated sessions for the SAME bandit
-    if not (para_scan or para_optim):
+    if if_plot and not (para_scan or para_optim):
         results_all_sessions['n_trials'] = n_reps * bandit[0].n_trials
         results_all_sessions['n_blocks'] = n_blocks_now
         results_all_sessions['description'] = bandits_all_sessions[0].description
@@ -484,6 +484,51 @@ def model_compet(model_compet_settings, n_reps = 200, pool = '', if_baited = Tru
     plot_model_compet(model_compet_results, model_compet_settings, n_reps, if_baited = if_baited)
     
     
+#%%
+def sandro():
+    
+    softmax_temperatures = np.power(10, np.linspace(-1.5,0,20 ))
+    eff_matching = np.zeros([4,len(softmax_temperatures)])
+    
+    model_compet_results = []
+    
+    n_reps_per_iter = 200
+    n_reps_run = 500
+    
+    for n,stst in enumerate(softmax_temperatures):
+        
+        forager = 'Bari2019'
+        opti_names = ['step_sizes','forget_rate','softmax_temperature']
+        bounds = optimize.Bounds([0.01,0,stst],[0.5,0.2,stst])  # Fix softmax_temperature
+        
+        # Parameter optimization with DE    
+        opti_para = optimize.differential_evolution(func = score_func, args = (forager, opti_names, n_reps_per_iter, True, pool), bounds = bounds, 
+                                                    workers = 1, disp = True, strategy = 'best1bin',
+                                                    mutation=(0.5, 1), recombination = 0.7, popsize = 20, maxiter = 1000)
+        
+        # Rerun using the optimized parameters
+        kwargs_all = generate_kwargs(forager, opti_names, opti_para.x)
+        bandit = Bandit(**kwargs_all)
+        results_all_sessions = run_sessions_parallel(bandit, n_reps = n_reps_run, pool = pool, if_plot = False)
+        
+        # Fetch data
+        paras_foraging_efficiency = results_all_sessions['foraging_efficiency_per_session']
+        fe_mean = np.mean(paras_foraging_efficiency, axis = 1)
+        fe_CI95 = 1.96 * np.std(paras_foraging_efficiency, axis = 1) / np.sqrt(n_reps_run)
+        paras_matching_slope = results_all_sessions['linear_fit_income_per_session']
+        ms_mean = np.nanmean(paras_matching_slope, axis = 1)
+        ms_CI95 = 1.96 * np.nanstd(paras_matching_slope, axis = 1) / np.sqrt(n_reps_run)
+        
+        eff_matching[:,n] = [fe_mean, fe_CI95, ms_mean, ms_CI95]
+        
+  
+    model_compet_results = [eff_matching]
+    model_compet_settings = {'forager': forager, 
+                                'para_to_scan': {'softmax_temperature': softmax_temperatures}, 
+                            },
+
+    plot_model_compet(model_compet_results, model_compet_settings, n_reps_run)
+    
 #%%   
 if __name__ == '__main__':  # This line is essential for apply_async to run in Windows
     
@@ -571,45 +616,48 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     #   Model Competition (1-d slice across the global optimum of each model)
     # =============================================================================
     
-    model_compet_settings = [
+    # model_compet_settings = [
         
-        {'forager': 'LossCounting', 
-          'para_to_scan': {'loss_count_threshold_mean': np.hstack([0.37879938,np.power(2,np.linspace(0,6,13))])}, 
-          'para_to_fix': {'loss_count_threshold_std': 0.18915971}}, 
+    #     {'forager': 'LossCounting', 
+    #       'para_to_scan': {'loss_count_threshold_mean': np.hstack([0.37879938,np.power(2,np.linspace(0,6,13))])}, 
+    #       'para_to_fix': {'loss_count_threshold_std': 0.18915971}}, 
                
-        # {'forager': 'Sugrue2004', 
-        #  'para_to_scan': {'taus': np.hstack([9.88406144, np.power(2, np.linspace(0,8,15))])},
-        #  'para_to_fix':  {'epsilon': 0.313648}},
+    #     # {'forager': 'Sugrue2004', 
+    #     #  'para_to_scan': {'taus': np.hstack([9.88406144, np.power(2, np.linspace(0,8,15))])},
+    #     #  'para_to_fix':  {'epsilon': 0.313648}},
         
-        {'forager': 'Sugrue2004', 
-          'para_to_scan': {'epsilon': np.hstack([0.313648, np.linspace(0,1,20)])},
-          'para_to_fix':  {'taus': 9.88406144}},
+    #     {'forager': 'Sugrue2004', 
+    #       'para_to_scan': {'epsilon': np.hstack([0.313648, np.linspace(0,1,20)])},
+    #       'para_to_fix':  {'taus': 9.88406144}},
          
-        # {'forager': 'Corrado2005', 
-        #  'para_to_scan': {'w_taus': [[1-w_slow, w_slow] for w_slow in np.hstack([0.04822465, np.linspace(0,1,15)])]}, 
-        #  'para_to_fix':  {'taus':  [6.17853872, 30.31342409], 'softmax_temperature':  0.18704151}},
+    #     # {'forager': 'Corrado2005', 
+    #     #  'para_to_scan': {'w_taus': [[1-w_slow, w_slow] for w_slow in np.hstack([0.04822465, np.linspace(0,1,15)])]}, 
+    #     #  'para_to_fix':  {'taus':  [6.17853872, 30.31342409], 'softmax_temperature':  0.18704151}},
         
-        {'forager': 'Corrado2005', 
-          'para_to_scan': {'softmax_temperature': np.hstack([0.18704151, np.power(10, np.linspace(-1.5,0,15))])}, 
-          'para_to_fix':  {'taus':  [6.17853872, 30.31342409], 'w_taus': [1-0.04822465, 0.04822465]}},
+    #     {'forager': 'Corrado2005', 
+    #       'para_to_scan': {'softmax_temperature': np.hstack([0.18704151, np.power(10, np.linspace(-1.5,0,15))])}, 
+    #       'para_to_fix':  {'taus':  [6.17853872, 30.31342409], 'w_taus': [1-0.04822465, 0.04822465]}},
          
-        # {'forager': 'Bari2019', 
-        #   'para_to_scan': {'step_sizes': np.hstack([0.37058271, np.power(10, np.linspace(-2,0,15))])}, 
-        #   'para_to_fix':  {'forget_rate': 0.07003851, 'softmax_temperature': 0.27212561}},
+    #     # {'forager': 'Bari2019', 
+    #     #   'para_to_scan': {'step_sizes': np.hstack([0.37058271, np.power(10, np.linspace(-2,0,15))])}, 
+    #     #   'para_to_fix':  {'forget_rate': 0.07003851, 'softmax_temperature': 0.27212561}},
 
-        {'forager': 'Bari2019', 
-          'para_to_scan': {'softmax_temperature': np.hstack([0.27212561, np.power(10, np.linspace(-1.5,0,20))])}, 
-          'para_to_fix':  {'forget_rate': 0.07003851, 'step_sizes': 0.37058271}},
+    #     {'forager': 'Bari2019', 
+    #       'para_to_scan': {'softmax_temperature': np.hstack([0.27212561, np.power(10, np.linspace(-1.5,0,20))])}, 
+    #       'para_to_fix':  {'forget_rate': 0.07003851, 'step_sizes': 0.37058271}},
 
          
-        {'forager': 'Hattori2019', 
-          'para_to_scan': {'softmax_temperature': np.hstack([0.33762251, np.power(10, np.linspace(-1.5,0,15))])}, 
-          'para_to_fix':  {'forget_rate':  0.11980517, 'step_sizes': [0.39740558, 0.22740528]}},
+    #     {'forager': 'Hattori2019', 
+    #       'para_to_scan': {'softmax_temperature': np.hstack([0.33762251, np.power(10, np.linspace(-1.5,0,15))])}, 
+    #       'para_to_fix':  {'forget_rate':  0.11980517, 'step_sizes': [0.39740558, 0.22740528]}},
         
-        ]
+    #     ]
 
-    model_compet(model_compet_settings, if_baited = True, n_reps = 500, pool = pool) 
+    # model_compet(model_compet_settings, if_baited = True, n_reps = 500, pool = pool) 
     
+    #%% Answer Sandro's question: what if optimizing 
+    sandro()
+
     
     
     #%% Clear up
