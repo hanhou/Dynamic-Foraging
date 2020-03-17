@@ -308,6 +308,8 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
     results_all_sessions['n_reps'] = n_reps
     results_all_sessions['forager'] = bandits_all_sessions[0].forager
     results_all_sessions['if_baited'] = bandits_all_sessions[0].if_baited
+    results_all_sessions['p_reward_sum'] = bandits_all_sessions[0].p_reward_sum
+    results_all_sessions['p_reward_pairs'] = bandits_all_sessions[0].p_reward_pairs
     
     # If not in para_scan, plot summary statistics over repeated sessions for the SAME bandit
     if if_plot and not (para_scan or para_optim):
@@ -327,7 +329,7 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
 #%% =============================================================================
 #  1-D or 2-D manual parameter scan
 # =============================================================================
-def para_scan(forager, para_to_scan, n_reps = global_n_reps, pool = '', if_plot = True, if_baited = True, **kwargs):
+def para_scan(forager, para_to_scan, n_reps = global_n_reps, pool = '', if_plot = True, if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None, **kwargs):
     
     # == Turn para_to_scan into list of Bandits ==
     n_nest = len(para_to_scan)
@@ -338,7 +340,7 @@ def para_scan(forager, para_to_scan, n_reps = global_n_reps, pool = '', if_plot 
         
         for pp in para_range:
             kwargs_all = {**{para_name:pp}, **kwargs}   # All parameters
-            bandits_to_scan.append(Bandit(forager = forager, if_baited = if_baited, **kwargs_all))   # Append to the list
+            bandits_to_scan.append(Bandit(forager = forager, if_baited = if_baited,  p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs, **kwargs_all))   # Append to the list
             
     elif n_nest == 2:
         para_names = list(para_to_scan.keys())
@@ -353,10 +355,10 @@ def para_scan(forager, para_to_scan, n_reps = global_n_reps, pool = '', if_plot 
                 else:   
                     kwargs_all = {**{para_names[0]: pp_1, para_names[1]: pp_2}, **kwargs}
                     
-                bandits_to_scan.append(Bandit(forager = forager, if_baited = if_baited, **kwargs_all))   # Append to the list
+                bandits_to_scan.append(Bandit(forager = forager, if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs, **kwargs_all))   # Append to the list
             
     results_para_scan = run_sessions_parallel(bandits_to_scan, n_reps = n_reps, pool = pool)
-    if if_plot: plot_para_scan(results_para_scan, para_to_scan, if_baited = if_baited, **kwargs)
+    if if_plot: plot_para_scan(results_para_scan, para_to_scan, if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs, **kwargs)
             
     return results_para_scan
 
@@ -386,11 +388,11 @@ def generate_kwargs(forager, opti_names, opti_value):  # Helper function for par
 def score_func(opti_value, *argss):
         
     # Arguments interpretation
-    forager, opti_names, n_reps_per_iter, if_baited, pool = argss
+    forager, opti_names, n_reps_per_iter, if_baited, p_reward_sum, p_reward_pairs, pool = argss
     kwargs_all = generate_kwargs(forager, opti_names, opti_value)
         
     # Run simulation
-    bandit = Bandit(**kwargs_all, if_baited = if_baited, p_reward_seed_override = 20200303)  # The same reward schedule for fair comparison
+    bandit = Bandit(**kwargs_all, if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs, p_reward_seed_override = 20200303)  # The same reward schedule for fair comparison
     score = - run_sessions_parallel(bandit, n_reps = n_reps_per_iter, pool = pool, para_optim = True)  # Negative efficiency as cost function
     
     # print(np.round(opti_value,4), score, '\n')
@@ -398,7 +400,7 @@ def score_func(opti_value, *argss):
     return score
 
 
-def para_optimize(forager, n_reps_per_iter = 200, opti_names = '', bounds = '', pool = '', if_baited = True):
+def para_optimize(forager, n_reps_per_iter = 200, opti_names = '', bounds = '', pool = '', if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None):
     
     start = time.time()
     
@@ -430,14 +432,14 @@ def para_optimize(forager, n_reps_per_iter = 200, opti_names = '', bounds = '', 
         
         
     # Parameter optimization with DE    
-    opti_para = optimize.differential_evolution(func = score_func, args = (forager, opti_names, n_reps_per_iter, if_baited, pool), bounds = bounds, 
+    opti_para = optimize.differential_evolution(func = score_func, args = (forager, opti_names, n_reps_per_iter, if_baited, p_reward_sum, p_reward_pairs, pool), bounds = bounds, 
                                                 workers = 1, disp=True, strategy = 'best1bin',
                                                 mutation=(0.5, 1), recombination = 0.7, popsize = 20)
 
     # Rerun using the optimized parameters
     kwargs_all = generate_kwargs(forager, opti_names, opti_para.x)
         
-    bandit = Bandit(**kwargs_all)
+    bandit = Bandit(if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs, **kwargs_all)
     run_sessions_parallel(bandit, n_reps = 500, pool = pool)
                           
     print(opti_para)
@@ -450,7 +452,7 @@ def para_optimize(forager, n_reps_per_iter = 200, opti_names = '', bounds = '', 
 #%% =============================================================================
 #   Model competition (for performance, NOT model comparison for fitting data) 
 # ===============================================================================
-def model_compet(model_compet_settings, n_reps = 200, pool = '', if_baited = True):
+def model_compet(model_compet_settings, n_reps = 200, pool = '', if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None):
     
     model_compet_results = []   # Foraging efficiency mean
     
@@ -461,7 +463,7 @@ def model_compet(model_compet_settings, n_reps = 200, pool = '', if_baited = Tru
         para_to_fix = this_setting['para_to_fix']
     
         # Run simulation
-        results_para_scan = para_scan(forager, para_to_scan, **para_to_fix , if_baited = if_baited, n_reps = n_reps, pool = pool, if_plot = False)
+        results_para_scan = para_scan(forager, para_to_scan, **para_to_fix , if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs, n_reps = n_reps, pool = pool, if_plot = False)
         
         # Fetch data
         paras_foraging_efficiency = results_para_scan['foraging_efficiency_per_session']
@@ -481,7 +483,7 @@ def model_compet(model_compet_settings, n_reps = 200, pool = '', if_baited = Tru
         # Cache data
         model_compet_results.append(np.vstack((fe_mean, fe_CI95, ms_mean, ms_CI95)))
 
-    plot_model_compet(model_compet_results, model_compet_settings, n_reps, if_baited = if_baited)
+    plot_model_compet(model_compet_results, model_compet_settings, n_reps, if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs)
     
     
 #%%
@@ -611,6 +613,34 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # RL-like
     # opti_para = para_optimize('Bari2019', n_reps_per_iter = 200, pool = pool)  # 83.7% @ [0.37058271, 0.07003851, 0.27212561]
     # opti_para = para_optimize('Hattori2019', n_reps_per_iter = 200, pool = pool)  # 83.7% @ [0.39740558, 0.22740528, 0.11980517, 0.33762251] 
+
+    # =============================================================================
+    #   For higher total reward prob (sum = 0.8)
+    # =============================================================================
+
+    # Special     
+    # opti_para = para_optimize('LossCounting', n_reps_per_iter = 200, p_reward_sum = 0.8, pool = pool)    # 76.6% [0.31005873, 0.08627981]
+        
+    # LNP-like
+    # opti_para = para_optimize('Corrado2005', n_reps_per_iter = 200, p_reward_sum = 0.8, pool = pool) # 75.4% [4.16259724e+00, 3.61409637e+01, 1.71017422e-02, 2.47504000e-01]
+    
+    # RL-like
+    # opti_para = para_optimize('Bari2019', n_reps_per_iter = 200, p_reward_sum = 0.8, pool = pool)  # 77.3% [0.40388374, 0.19951699, 0.22852593]
+        
+    # =============================================================================
+    #   For extreme reward ratio (sum = 0.45, ratio = [0.9, 0])
+    # =============================================================================
+    # Special     
+    # opti_para = para_optimize('LossCounting', n_reps_per_iter = 200, p_reward_pairs = [[0.45, 0]], pool = pool)    # 76.6% [0.31005873, 0.08627981]
+        
+    # LNP-like
+    # opti_para = para_optimize('Corrado2005', n_reps_per_iter = 200, p_reward_pairs = [[0.45, 0]],  pool = pool) # 75.4% [4.16259724e+00, 3.61409637e+01, 1.71017422e-02, 2.47504000e-01]
+    
+    # RL-like
+    # opti_para = para_optimize('Bari2019', n_reps_per_iter = 200, p_reward_pairs = [[0.45, 0]], pool = pool)  # 77.3% [0.40388374, 0.19951699, 0.22852593]
+        
+        
+
         
     #%% ===========================================================================
     #   Model Competition (1-d slice across the global optimum of each model)
@@ -654,9 +684,30 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     #     ]
 
     # model_compet(model_compet_settings, if_baited = True, n_reps = 500, pool = pool) 
+        
+       
+        
+    # =============================================================================
+    #         
+    # =============================================================================
+        
+    model_compet_settings = [
+    {'forager': 'LossCounting', 
+      'para_to_scan': {'loss_count_threshold_mean': np.hstack([46.14626589, 0,np.power(2,np.linspace(0,6,13)), np.inf])}, 
+      'para_to_fix': {'loss_count_threshold_std':  1.01529397}},
+    {'forager': 'Corrado2005', 
+      'para_to_scan': {'softmax_temperature': np.hstack([6.42381607e-02, np.power(10, np.linspace(-4,0,20))])}, #2.55505291e-02  
+      'para_to_fix':  {'taus':  [1.83782228, 27.4467749], 'w_taus': [1-1.96842027e-02, 1.96842027e-02]}},
+    {'forager': 'Bari2019', 
+      'para_to_scan': {'softmax_temperature': np.hstack([0.23357215, np.power(10, np.linspace(-1.5,0,20))])},  #0.11987247
+      'para_to_fix':  {'step_sizes': 0.49102943, 'forget_rate': 0.19255644}},
+    ]
+
+    model_compet(model_compet_settings, n_reps = 300, p_reward_pairs = [[0.45, 0]], pool = pool)     
+        
     
-    #%% Answer Sandro's question: what if optimizing 
-    sandro()
+    #%% Answer Sandro's question: what if optimizing all other parameters for each epsilon/sigma
+    # sandro()
 
     
     

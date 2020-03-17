@@ -84,6 +84,8 @@ class Bandit:
                  loss_count_threshold_std = 1,    # For 'LossCounting' [from Shahidi 2019]
                  
                  p_reward_seed_override = '',  # If true, use the same random seed for generating p_reward!!
+                 p_reward_sum = 0.45,   # Gain of reward. Default = 0.45
+                 p_reward_pairs = None  # Full control of reward prob
                  ):     
 
         self.forager = forager
@@ -96,6 +98,8 @@ class Bandit:
         self.loss_count_threshold_mean = loss_count_threshold_mean
         self.loss_count_threshold_std = loss_count_threshold_std
         self.p_reward_seed_override = p_reward_seed_override
+        self.p_reward_sum = p_reward_sum
+        self.p_reward_pairs = p_reward_pairs
         
             
         if forager == 'Sugrue2004':
@@ -144,7 +148,8 @@ class Bandit:
  
         elif self.forager in ['Sugrue2004', 'Corrado2005', 'Iigaya2019']:
             self.description = '%s, taus = %s, w_taus = %s, softmax_temp = %g, epsi = %g, random_before_total_reward = %g' % \
-                                            (self.forager, self.taus, self.w_taus , self.softmax_temperature, self.epsilon, self.random_before_total_reward)
+                                            (self.forager, np.round(self.taus,3), np.round(self.w_taus,3), np.round(self.softmax_temperature,3), np.round(self.epsilon,3), 
+                                             self.random_before_total_reward)
                                             
             # Compute the history filter. Compatible with any number of taus.
             reversed_t = np.flipud(np.arange(self.n_trials))  # Use the full length of the session just in case of an extremely large tau.
@@ -176,6 +181,11 @@ class Bandit:
         # However, we should make it random during a session (see the last line of this function)
         if self.p_reward_seed_override != '':
             np.random.seed(self.p_reward_seed_override)
+            
+        if self.p_reward_pairs == None:            
+            p_reward_pairs = np.array(p_reward_pairs) / 0.45 * self.p_reward_sum
+        else:  # Full override of p_reward
+            p_reward_pairs = self.p_reward_pairs
                 
         # Adapted from Marton's code
         n_trials_now = 0

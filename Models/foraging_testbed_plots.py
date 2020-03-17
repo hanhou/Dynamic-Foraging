@@ -26,6 +26,25 @@ def moving_average(a, n=3) :
     ret[n:] = ret[n:] - ret[:-n]
     return ret[n - 1:] / n
 
+def get_baseline(if_baited, p_reward_sum, p_reward_pairs):
+    
+    if if_baited and p_reward_sum == 0.45 and p_reward_pairs == None:
+        random_result = [0.772, 0.002]    
+        ideal_result = [0.842, 0.0023]
+    elif not if_baited and p_reward_sum == 0.45 and p_reward_pairs == None:
+        random_result = [0.499, 0.19]    
+        ideal_result = [0.767, 0.003]
+    elif if_baited and p_reward_sum == 0.8 and p_reward_pairs == None:
+        random_result = [0.661, 0.001]    
+        ideal_result = [0.813, 0.002]
+    else:  # p_reward_pairs == [0.45, 0]
+        random_result = [0.694, 0.002]    
+        ideal_result = [0.999, 0.002]
+        
+        
+    return random_result, ideal_result
+        
+
 def plot_one_session(bandit, fig, plottype='2lickport'):
     
     # == Fetch data ==
@@ -109,13 +128,14 @@ def plot_all_reps(results_all_reps):
     
     fig = plt.figure(figsize=(12*1, 8*1))
         
-    fig.text(0.05,0.94,'%s\n%g sessions, %g blocks, %g trials' % (results_all_reps['description'], 
+    fig.text(0.05,0.94,'%s\n%g sessions, %g blocks, %g trials, p_override = %s' % (results_all_reps['description'], 
                                                                 results_all_reps['n_reps'], 
                                                                 results_all_reps['n_blocks'], 
-                                                                results_all_reps['n_trials']
+                                                                results_all_reps['n_trials'], 
+                                                                results_all_reps['p_reward_pairs'],
                                                                 ), fontsize = 15)
-    fig.text(0.05,0.91,'Efficiency +/- 95%% CI: %.3g%% +/- %.2g%% (if_baited = %s)' % (results_all_reps['foraging_efficiency'][0]*100,
-                                                          results_all_reps['foraging_efficiency'][1]*100, results_all_reps['if_baited']
+    fig.text(0.05,0.91,'Efficiency +/- 95%% CI: %.3g%% +/- %.2g%% (if_baited = %s, p_reward_sum = %g)' % (results_all_reps['foraging_efficiency'][0]*100,
+                                                          results_all_reps['foraging_efficiency'][1]*100, results_all_reps['if_baited'], results_all_reps['p_reward_sum']
                                                           ), fontsize = 15)
     
     # == 1. Example Session ==
@@ -225,7 +245,7 @@ def plot_all_reps(results_all_reps):
 
     
   
-def plot_para_scan(results_para_scan, para_to_scan, if_baited = True, **kwargs):
+def plot_para_scan(results_para_scan, para_to_scan, if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None, **kwargs):
     
     forager = results_para_scan['forager']
     n_reps = results_para_scan['n_reps']
@@ -282,13 +302,7 @@ def plot_para_scan(results_para_scan, para_to_scan, if_baited = True, **kwargs):
         # Two baselines
         # Run with rep = 1000, separately 
         # Please change if you change the task structure !!!
-        if if_baited:
-            random_result = [0.772, 0.002]    
-            ideal_result = [0.842, 0.0023]
-        else:
-            random_result = [0.499, 0.19]    
-            ideal_result = [0.767, 0.003]
-        
+        random_result, ideal_result = get_baseline(if_baited, p_reward_sum, p_reward_pairs)
         
         xlim = [para_range[0], para_range[-1]]
         
@@ -405,7 +419,7 @@ def plot_para_scan(results_para_scan, para_to_scan, if_baited = True, **kwargs):
         plt.ylabel('Foraging efficiency')
                
         
-def plot_model_compet(model_compet_results, model_compet_settings, n_reps, if_baited = True):
+def plot_model_compet(model_compet_results, model_compet_settings, n_reps, if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None):
     
     gs = GridSpec(1,1, top = 0.85, wspace = 0.3, bottom = 0.12)
     fig = plt.figure(figsize=(7, 7))
@@ -447,12 +461,7 @@ def plot_model_compet(model_compet_results, model_compet_settings, n_reps, if_ba
         # Two baselines
         # Run with rep = 1000, separately 
         # Please change if you change the task structure !!! (For example, baited VS unbaitred)
-        if if_baited:
-            random_result = [0.772, 0.002]    
-            ideal_result = [0.842, 0.0023]
-        else:
-            random_result = [0.499, 0.19]    
-            ideal_result = [0.767, 0.003]
+        random_result, ideal_result = get_baseline(if_baited, p_reward_sum, p_reward_pairs)
         
     
     # Two baselines
@@ -462,7 +471,7 @@ def plot_model_compet(model_compet_results, model_compet_settings, n_reps, if_ba
     plt.plot(0,random_result[0],'vk', markersize = 10)    
     plt.plot(1,ideal_result[0],'^k', markersize = 10)    
         
-    plt.title('Model competition (if_baited = %s, n_reps = %g)'% (if_baited, n_reps))
+    plt.title('Model competition (if_baited = %s, p_rew_sum = %g, n_reps = %g\np_override = %s)'% (if_baited, p_reward_sum, n_reps, p_reward_pairs))
         
         
         
