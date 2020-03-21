@@ -556,7 +556,7 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # bandit = Bandit('LossCounting', loss_count_threshold_mean = np.inf, loss_count_threshold_std = 0)   # Always One Side
     
     
-    # bandit = Bandit(forager = 'Sugrue2004', taus = 8.34597217, epsilon = 0.24859973, n_trials = global_n_trials) 
+    bandit = Bandit(forager = 'Sugrue2004', taus = 8.34597217, epsilon = 0.24859973, n_trials = global_n_trials) 
     # bandit = Bandit(forager = 'Corrado2005', taus = [3, 15], w_taus = [0.7, 0.3], softmax_temperature = 0.2, epsilon = 0, n_trials = global_n_trials) 
     # bandit = Bandit(forager = 'Iigaya2019', taus = [5,10000], w_taus = [0.7, 0.3], epsilon = 0.1, n_trials = global_n_trials) 
     
@@ -564,7 +564,7 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # bandit = Bandit(forager = 'Bari2019', step_sizes = 0.28768228, forget_rate = 0.01592382, softmax_temperature = 0.37121355,  epsilon = 0, n_trials = global_n_trials)
     # bandit = Bandit(forager = 'Hattori2019', epsilon = 0,  step_sizes = [0.2, 0.1], forget_rate = 0.05, softmax_temperature = 0.4, n_trials = global_n_trials)   
  
-    # run_sessions_parallel(bandit, n_reps = 200, pool = pool)
+    run_sessions_parallel(bandit, n_reps = 200, pool = pool)
 
     #%% =============================================================================
     #     Parameter scan (1-D or 2-D)
@@ -691,19 +691,19 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     #         
     # =============================================================================
         
-    model_compet_settings = [
-    {'forager': 'LossCounting', 
-      'para_to_scan': {'loss_count_threshold_mean': np.hstack([46.14626589, 0,np.power(2,np.linspace(0,6,13)), np.inf])}, 
-      'para_to_fix': {'loss_count_threshold_std':  1.01529397}},
-    {'forager': 'Corrado2005', 
-      'para_to_scan': {'softmax_temperature': np.hstack([6.42381607e-02, np.power(10, np.linspace(-4,0,20))])}, #2.55505291e-02  
-      'para_to_fix':  {'taus':  [1.83782228, 27.4467749], 'w_taus': [1-1.96842027e-02, 1.96842027e-02]}},
-    {'forager': 'Bari2019', 
-      'para_to_scan': {'softmax_temperature': np.hstack([0.23357215, np.power(10, np.linspace(-1.5,0,20))])},  #0.11987247
-      'para_to_fix':  {'step_sizes': 0.49102943, 'forget_rate': 0.19255644}},
-    ]
+    # model_compet_settings = [
+    # {'forager': 'LossCounting', 
+    #   'para_to_scan': {'loss_count_threshold_mean': np.hstack([46.14626589, 0,np.power(2,np.linspace(0,6,13)), np.inf])}, 
+    #   'para_to_fix': {'loss_count_threshold_std':  1.01529397}},
+    # {'forager': 'Corrado2005', 
+    #   'para_to_scan': {'softmax_temperature': np.hstack([6.42381607e-02, np.power(10, np.linspace(-4,0,20))])}, #2.55505291e-02  
+    #   'para_to_fix':  {'taus':  [1.83782228, 27.4467749], 'w_taus': [1-1.96842027e-02, 1.96842027e-02]}},
+    # {'forager': 'Bari2019', 
+    #   'para_to_scan': {'softmax_temperature': np.hstack([0.23357215, np.power(10, np.linspace(-1.5,0,20))])},  #0.11987247
+    #   'para_to_fix':  {'step_sizes': 0.49102943, 'forget_rate': 0.19255644}},
+    # ]
 
-    model_compet(model_compet_settings, n_reps = 300, p_reward_pairs = [[0.45, 0]], pool = pool)     
+    # model_compet(model_compet_settings, n_reps = 300, p_reward_pairs = [[0.45, 0]], pool = pool)     
         
     
     #%% Answer Sandro's question: what if optimizing all other parameters for each epsilon/sigma
