@@ -67,12 +67,13 @@ def fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history
 
 def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, if_callback = False, fit_method = 'CG', n_x0s = 1, pool = ''):
     # now = time.time()
-    n_worker = int(mp.cpu_count()/2)    
     
-    # -- Options --
-    if n_worker > 1: 
+    # -- For DE, use pool to control if_parallel, although we don't use pool for DE.
+    if pool != '':
+        n_worker = int(mp.cpu_count()/2)    
         updating='deferred' 
-    else: 
+    else:
+        n_worker = 1
         updating='immediate'
         
     if if_callback:  # Store the intermediate DE results
@@ -89,7 +90,7 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, i
         fitting_result = optimize.differential_evolution(func = negLL_func, args = (forager, fit_names, choice_history, reward_history),
                                                          bounds = optimize.Bounds(fit_bounds[0], fit_bounds[1]), 
                                                          mutation=(0.5, 1), recombination = 0.7, popsize = 16, 
-                                                         workers = n_worker, disp = n_worker==1, strategy = 'best1bin', 
+                                                         workers = n_worker, disp = False, strategy = 'best1bin', 
                                                          updating=updating, callback = callback,)
         
     elif fit_method in ['L-BFGS-B', 'SLSQP', 'TNC', 'trust-constr']:
@@ -97,20 +98,24 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, i
         # Do parallel initialization
         fitting_parallel_results = []
         
-        results = []
-        for nn in range(n_x0s):
-            # Offer jobs
-            results.append(pool.apply_async(fit_each_init, args = (forager, fit_names, fit_bounds, choice_history, reward_history, fit_method)))
+        if pool != '':  # Go parallel
+            results = []
             
-        for rr in results:
-            # Get data    
-            fitting_parallel_results.append(rr.get())
+            '''
+            Must use two separate for loops, one for assigning and one for harvesting!
+            '''
+            for nn in range(n_x0s):
+                # Assign jobs
+                results.append(pool.apply_async(fit_each_init, args = (forager, fit_names, fit_bounds, choice_history, reward_history, fit_method)))
+                
+            for rr in results:
+                # Get data    
+                fitting_parallel_results.append(rr.get())
+        else:
+            # Serial
+            result = fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history, fit_method)
+            fitting_parallel_results.append(result)
             
-        # Serial
-        # result = fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history)
-        # fitting_parallel_results.append(result)
-            
-
         # Find the global optimal
         cost = np.zeros(n_x0s)
         for nn,rr in enumerate(fitting_parallel_results):
