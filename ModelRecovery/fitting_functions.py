@@ -7,6 +7,7 @@ Created on Thu Mar 19 16:30:26 2020
 import numpy as np
 import scipy.optimize as optimize
 import multiprocessing as mp
+from tqdm import tqdm  # For progress bar. HH
 import time
 
 from models import BanditModels
@@ -47,20 +48,29 @@ def negLL_func(fit_value, *argss):
     
     return negLL
 
-def callback_DE(x,convergence):
+def callback_DE(x, **kargs):
     global fit_history
     fit_history.append(x)
     
     return
 
-def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, if_callback = False):
+def fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history):
+    x0 = []
+    for lb,ub in zip(fit_bounds[0], fit_bounds[1]):
+        x0.append(np.random.uniform(lb,ub))
+        
+    fitting_result = optimize.minimize(negLL_func, x0, args = (forager, fit_names, choice_history, reward_history), method = None,
+                                       bounds = optimize.Bounds(fit_bounds[0], fit_bounds[1]), 
+                                       )
+    return fitting_result
+
+
+def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, if_callback = False, fit_method = 'CG', n_x0s = 1):
     # now = time.time()
     # n_worker = 1
-    n_worker = int(mp.cpu_count())/2   
+    n_worker = int(mp.cpu_count()/2)
     
     # -- Options --
-    method = 'DE'
-    
     if n_worker > 1: 
         updating='deferred' 
     else: 
@@ -72,18 +82,49 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, i
     else:
         callback = None
                 
-    # -- Parameter optimization with DE --
+    # -- Parameter optimization --
     fit_history = []
     
-    if method == 'DE':
+    if fit_method == 'DE':
+        # Use DE's own parallel method
         fitting_result = optimize.differential_evolution(func = negLL_func, args = (forager, fit_names, choice_history, reward_history),
                                                          bounds = optimize.Bounds(fit_bounds[0], fit_bounds[1]), 
                                                          mutation=(0.5, 1), recombination = 0.7, popsize = 16, 
                                                          workers = n_worker, disp = n_worker==1, strategy = 'best1bin', 
                                                          updating=updating, callback = callback,)
-     
-    
+    elif fit_method == 'L-BFGS-B':
+        
+        # --- Use async to run multiple initializations ---
+        pool = mp.Pool(processes = n_worker)
+        
+        # Do parallel initialization
+        fitting_parallel_results = []
+        
+        results = []
+        for nn in range(n_x0s):
+            # Offer jobs
+            results.append(pool.apply_async(fit_each_init, args = (forager, fit_names, fit_bounds, choice_history, reward_history)))
+            
+        for rr in results:
+            # Get data    
+            fitting_parallel_results.append(rr.get())
+            
+        # Serial
+        # result = fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history)
+        # fitting_parallel_results.append(result)
+            
+        pool.close()   # Just a good practice
+        pool.join()
 
+        # Find the global optimal
+        cost = np.zeros(n_x0s)
+        for nn,rr in enumerate(fitting_parallel_results):
+            cost[nn] = rr.fun
+        
+        best_ind = np.argmin(cost)
+        fitting_result = fitting_parallel_results[best_ind]
+        
+            
     # print(fitting_result, 'time = %g' % (time.time() - now))
     return fitting_result, fit_history
 

@@ -15,12 +15,15 @@ from matplotlib.pyplot import cm
 plt.rcParams.update({'font.size': 13})
 
 
-def plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bounds, n_trials):
+def plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bounds, n_trials, fit_method, n_x0s):
     n_paras, n_models = np.shape(fitted_paras)
     
     fig = plt.figure(figsize=((n_paras+1)*5, 5*1))
     
-    fig.text(0.05,0.94,'Parameter Recovery: %s' % (forager), fontsize = 15)
+    if fit_method != 'DE':
+        fit_method = fit_method + ' (n_x0s = %g)'%n_x0s
+        
+    fig.text(0.05,0.94,'Parameter Recovery: %s, Method: %s' % (forager, fit_method), fontsize = 15)
 
     gs = GridSpec(1,n_paras+1, wspace=0.3, hspace=0.5, bottom=0.13) 
     
@@ -58,7 +61,9 @@ def plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bound
     plt.show()
 
 
-def plot_LL_surface(LLs,true_para,fit_history,para_names,p1,p2):
+def plot_LL_surface(LLs,true_para,fit_history,para_names,p1,p2, fit_method, n_x0s):
+    if fit_method != 'DE':
+        fit_method = fit_method + ' (n_x0s = %g)'%n_x0s
 
     # ==== Plot LL surface ===
     fig = plt.figure(figsize=(10, 8))
@@ -86,6 +91,6 @@ def plot_LL_surface(LLs,true_para,fit_history,para_names,p1,p2):
     ax.set_aspect(1.0/ax.get_data_ratio()) 
     plt.xlabel(para_names[0])
     plt.ylabel(para_names[1])
-    plt.title('Log Likelihood p(data|parameter)')
+    plt.title('Log Likelihood p(data|parameter), method: %s'%fit_method)
     plt.show()
     
