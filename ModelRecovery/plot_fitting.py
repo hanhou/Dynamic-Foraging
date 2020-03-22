@@ -12,7 +12,7 @@ from matplotlib.gridspec import GridSpec
 from matplotlib.pyplot import cm
 
 # matplotlib.use('qt5agg')
-plt.rcParams.update({'font.size': 13})
+plt.rcParams.update({'font.size': 15})
 
 
 def plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bounds, n_trials, fit_method, n_x0s):
@@ -92,7 +92,7 @@ def plot_LL_surface(LLs,fitted_para, true_para,fit_history,para_names,p1,p2, fit
             plt.scatter(hh[:,0], hh[:,1], s = sizes, c = 'k' if nn == 0 else None)
             plt.plot(hh[:,0], hh[:,1], '-' if nn == 0 else ':', color = 'k' if nn == 0 else None)
             
-    # ==== Fitted para (final one) ====
+    # ==== Final fitted result ====
     plt.plot(fitted_para[0], fitted_para[1],'ok', markersize=13)
 
     ax.set_aspect(1.0/ax.get_data_ratio()) 

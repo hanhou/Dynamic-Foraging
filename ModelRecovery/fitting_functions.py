@@ -86,6 +86,7 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, i
                                                          workers = 1 if pool == '' else int(mp.cpu_count()/2),   # For DE, use pool to control if_parallel, although we don't use pool for DE
                                                          updating = 'immediate' if pool == '' else 'deferred',
                                                          callback = callback_history if if_history else None,)
+        fit_history.append(fitting_result.x)
         
         return fitting_result, [fit_history] if if_history else fitting_result
         
@@ -116,7 +117,9 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, i
                                        callback = callback_history if if_history else None)
                 
                 fitting_parallel_results.append(result)
-                if if_history: fit_histories.append(fit_history)
+                if if_history: 
+                    fit_history.append(result.x)  # Add the final result
+                    fit_histories.append(fit_history)
             
         # Find the global optimal
         cost = np.zeros(n_x0s)
