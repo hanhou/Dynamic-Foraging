@@ -8,7 +8,6 @@ import numpy as np
 import scipy.optimize as optimize
 import multiprocessing as mp
 from tqdm import tqdm  # For progress bar. HH
-import time
 
 from models import BanditModels
 global fit_history
@@ -48,50 +47,47 @@ def negLL_func(fit_value, *argss):
     
     return negLL
 
-def callback_DE(x, **kargs):
+def callback_history(x, **kargs):
+    '''
+    Store the intermediate DE results. I have to use global variable as a workaround. Any better ideas?
+    '''
     global fit_history
     fit_history.append(x)
     
     return
 
-def fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history, fit_method):
+def fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history, fit_method, callback):
     x0 = []
     for lb,ub in zip(fit_bounds[0], fit_bounds[1]):
         x0.append(np.random.uniform(lb,ub))
         
+    # Append the initial point
+    callback_history(x0)
+        
     fitting_result = optimize.minimize(negLL_func, x0, args = (forager, fit_names, choice_history, reward_history), method = fit_method,
-                                       bounds = optimize.Bounds(fit_bounds[0], fit_bounds[1]), 
-                                       )
+                                       bounds = optimize.Bounds(fit_bounds[0], fit_bounds[1]), callback = callback, )
     return fitting_result
 
 
-def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, if_callback = False, fit_method = 'CG', n_x0s = 1, pool = ''):
-    # now = time.time()
+def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, if_history = False, fit_method = 'CG', n_x0s = 1, pool = ''):
     
-    # -- For DE, use pool to control if_parallel, although we don't use pool for DE.
-    if pool != '':
-        n_worker = int(mp.cpu_count()/2)    
-        updating='deferred' 
-    else:
-        n_worker = 1
-        updating='immediate'
-        
-    if if_callback:  # Store the intermediate DE results
+    if if_history: 
         global fit_history
-        callback = callback_DE
-    else:
-        callback = None
-                
-    # -- Parameter optimization --
-    fit_history = []
+        fit_history = []
+        fit_histories = []  # All histories for different initializations
     
     if fit_method == 'DE':
+        
         # Use DE's own parallel method
         fitting_result = optimize.differential_evolution(func = negLL_func, args = (forager, fit_names, choice_history, reward_history),
                                                          bounds = optimize.Bounds(fit_bounds[0], fit_bounds[1]), 
-                                                         mutation=(0.5, 1), recombination = 0.7, popsize = 16, 
-                                                         workers = n_worker, disp = False, strategy = 'best1bin', 
-                                                         updating=updating, callback = callback,)
+                                                         mutation=(0.5, 1), recombination = 0.7, popsize = 16, strategy = 'best1bin', 
+                                                         disp = False, 
+                                                         workers = 1 if pool == '' else int(mp.cpu_count()/2),   # For DE, use pool to control if_parallel, although we don't use pool for DE
+                                                         updating = 'immediate' if pool == '' else 'deferred',
+                                                         callback = callback_history if if_history else None,)
+        
+        return fitting_result, [fit_history] if if_history else fitting_result
         
     elif fit_method in ['L-BFGS-B', 'SLSQP', 'TNC', 'trust-constr']:
         
@@ -99,22 +95,28 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, i
         fitting_parallel_results = []
         
         if pool != '':  # Go parallel
-            results = []
+            pool_results = []
             
-            '''
-            Must use two separate for loops, one for assigning and one for harvesting!
-            '''
+            # Must use two separate for loops, one for assigning and one for harvesting!
             for nn in range(n_x0s):
                 # Assign jobs
-                results.append(pool.apply_async(fit_each_init, args = (forager, fit_names, fit_bounds, choice_history, reward_history, fit_method)))
-                
-            for rr in results:
+                pool_results.append(pool.apply_async(fit_each_init, args = (forager, fit_names, fit_bounds, choice_history, reward_history, fit_method, 
+                                                                            None)))   # We can have multiple histories only in serial mode
+            for rr in pool_results:
                 # Get data    
                 fitting_parallel_results.append(rr.get())
         else:
             # Serial
-            result = fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history, fit_method)
-            fitting_parallel_results.append(result)
+            
+            for nn in range(n_x0s):
+                # We can have multiple histories only in serial mode
+                if if_history: fit_history = []  # Clear this history
+                
+                result = fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history, fit_method, 
+                                       callback = callback_history if if_history else None)
+                
+                fitting_parallel_results.append(result)
+                if if_history: fit_histories.append(fit_history)
             
         # Find the global optimal
         cost = np.zeros(n_x0s)
@@ -122,11 +124,13 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, i
             cost[nn] = rr.fun
         
         best_ind = np.argmin(cost)
-        fitting_result = fitting_parallel_results[best_ind]
         
+        fitting_result = fitting_parallel_results[best_ind]
+        if fit_histories != []:
+            fit_histories.insert(0,fit_histories.pop(best_ind))  # Move the best one to the first
+        
+        return fitting_result, fit_histories if if_history else fitting_result
             
-    # print(fitting_result, 'time = %g' % (time.time() - now))
-    return fitting_result, fit_history
 
 
 

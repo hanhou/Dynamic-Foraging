@@ -39,7 +39,7 @@ def fit_para_recovery(forager, para_names, para_bounds, n_models = 10, true_para
         choice_history, reward_history = generate_fake_data(forager, para_names, true_paras[:,n], **kargs)
             
         # Predictive fitting
-        fitting_result, _ = fit_bandit(forager, para_names, para_bounds, choice_history, reward_history, fit_method = fit_method, n_x0s = n_x0s, pool = pool)
+        fitting_result = fit_bandit(forager, para_names, para_bounds, choice_history, reward_history, fit_method = fit_method, n_x0s = n_x0s, pool = pool)
         fitted_paras[:,n] = fitting_result.x
     
         # print(true_paras_this, fitting_result.x)
@@ -94,7 +94,7 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para, n_grid = [10
     '''
     n_try_paras = np.prod(n_grid)
     n_worker = int(mp.cpu_count())
-    pool = mp.Pool(processes = n_worker)
+    pool_surface = mp.Pool(processes = n_worker)
     
     p1 = np.linspace(para_bounds[0][0], para_bounds[1][0], n_grid[0])
     p2 = np.linspace(para_bounds[0][1], para_bounds[1][1], n_grid[1])
@@ -110,31 +110,38 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para, n_grid = [10
     pp2, pp1 = np.meshgrid(p2,p1)  # Note the order
         
     LLs = np.zeros(n_try_paras)
-       
-    for nn,(x,y) in tqdm(enumerate(zip(np.nditer(pp1),np.nditer(pp2))), total = n_try_paras, desc='compute_LL_surface'):
-        result = pool.apply_async(negLL_func, args = ([x, y], forager, para_names, choice_history, reward_history))
-        LLs[nn] = - result.get()
+    
+    # Must use two separate for loops, one for assigning and one for harvesting!   
+    pool_results = []
+    for x,y in zip(np.nditer(pp1),np.nditer(pp2)):
+        pool_results.append(pool_surface.apply_async(negLL_func, args = ([x, y], forager, para_names, choice_history, reward_history)))
+        
+    for nn,rr in tqdm(enumerate(pool_results), total = n_try_paras, desc='compute_LL_surface'):
+        LLs[nn] = - rr.get()
         
     LLs = LLs.reshape(n_grid).T
+    
+    pool_surface.close()
+    pool_surface.join()
 
-    pool.close()   # Just a good practice
-    pool.join()
-        
     # Do fitting
-    print('Fitting...')
+    print('Fitting using %s, n_x0s = %g, pool = %s...'%(fit_method, n_x0s, pool!=''))
     fitting_result, fit_history = fit_bandit(forager, para_names, para_bounds, choice_history, reward_history, 
                                              fit_method = fit_method, n_x0s = n_x0s, pool = pool,
-                                             if_callback = True)
+                                             if_history = True)
     
     # Plot LL surface and fitting history
-    plot_LL_surface(LLs,true_para,fit_history,para_names,p1,p2, fit_method, n_x0s)
+    plot_LL_surface(LLs,fitting_result.x, true_para,fit_history,para_names,p1,p2, fit_method, n_x0s)
     
-    return LLs,true_para,fit_history,para_names,p1,p2
+    return
 
 #%%
 if __name__ == '__main__':
     
-    # Fitting methods: 'DE', 'L-BFGS-B'
+    # Fitting methods: 
+    # - Global optimizer (`DE`): use its own parallel method
+    # - Local optimizer (`L-BFGS-B`, `SLSQP`, `TNC`, `trust-constr`): random initialization in parallel
+    # - Speed: L-BFGS-B = SLSQP  >> TNC >>> trust-constr
     
     # --- Use async to run multiple initializations ---
    
@@ -148,18 +155,23 @@ if __name__ == '__main__':
     para_bounds = [[0,0],[50,10]]
     
     # Para recovery
-    true_paras = generate_true_paras([[0,0],[30,5]], n_models = [5,5], method = 'linspace')
+    # true_paras = generate_true_paras([[0,0],[30,5]], n_models = [5,5], method = 'linspace')
     
-    true_paras, fitted_para = fit_para_recovery(forager = forager, 
-                  para_names = para_names, para_bounds = para_bounds, 
-                  true_paras = true_paras, n_trials = n_trials, 
-                  fit_method = 'L-BFGS-B', n_x0s = 1, pool = pool);    
+    # true_paras, fitted_para = fit_para_recovery(forager = forager, 
+    #               para_names = para_names, para_bounds = para_bounds, 
+    #               true_paras = true_paras, n_trials = n_trials, 
+    #               fit_method = 'L-BFGS-B', n_x0s = 1, pool = pool);    
     
     # LL_surface
-    # compute_LL_surface(forager, para_names, para_bounds, n_grid = [5,5], true_para = [10,3], n_trials = n_trials, 
-    #                     fit_method = 'L-BFGS-B', n_x0s = 1, pool = pool)
+    # compute_LL_surface(forager, para_names, para_bounds, n_grid = [20,20], true_para = [10,3], n_trials = n_trials, 
+    #                     fit_method = 'DE', pool = pool)
     
+    compute_LL_surface(forager, para_names, para_bounds, n_grid = [20,20], true_para = [10,3], n_trials = n_trials, 
+                        fit_method = 'L-BFGS-B', n_x0s = 8, pool = '')  # Show multiple histories from multiple initializations
     
+    # compute_LL_surface(forager, para_names, para_bounds, n_grid = [20,20], true_para = [10,3], n_trials = n_trials, 
+    #                     fit_method = 'L-BFGS-B', n_x0s = 8, pool = pool)
+
     pool.close()   # Just a good practice
     pool.join()
 

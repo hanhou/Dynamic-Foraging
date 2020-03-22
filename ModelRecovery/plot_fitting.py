@@ -61,7 +61,7 @@ def plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bound
     plt.show()
 
 
-def plot_LL_surface(LLs,true_para,fit_history,para_names,p1,p2, fit_method, n_x0s):
+def plot_LL_surface(LLs,fitted_para, true_para,fit_history,para_names,p1,p2, fit_method, n_x0s):
     if fit_method != 'DE':
         fit_method = fit_method + ' (n_x0s = %g)'%n_x0s
 
@@ -77,17 +77,24 @@ def plot_LL_surface(LLs,true_para,fit_history,para_names,p1,p2, fit_method, n_x0
     plt.imshow(LLs, cmap='plasma', extent=extent, interpolation='none', origin='lower')
     plt.colorbar()
     
-    plt.contour(-np.log(-LLs), colors='grey', levels = 10, extent=extent)
+    plt.contour(-np.log(-LLs), colors='grey', levels = 10, extent=extent, linewidths=0.7)
     
     # ==== True value ==== 
     plt.plot(true_para[0], true_para[1],'ok', markersize=17, markeredgewidth=3, fillstyle='none')
     
-    # ==== Fitting history ==== 
-    fit_history = np.array(fit_history)
-    sizes = 100 * np.linspace(0.1,1,np.shape(fit_history)[0])
-    plt.scatter(fit_history[:,0], fit_history[:,1], s = sizes, c = 'k')
-    plt.plot(fit_history[:,0], fit_history[:,1], 'k:')
-    
+    # ==== Fitting history (may have many) ==== 
+    if fit_history != []:
+        
+        # Compatible with one history (global optimizers) or multiple histories (local optimizers)
+        for nn, hh in reversed(list(enumerate(fit_history))):  
+            hh = np.array(hh)
+            sizes = 100 * np.linspace(0.1,1,np.shape(hh)[0])
+            plt.scatter(hh[:,0], hh[:,1], s = sizes, c = 'k' if nn == 0 else None)
+            plt.plot(hh[:,0], hh[:,1], '-' if nn == 0 else ':', color = 'k' if nn == 0 else None)
+            
+    # ==== Fitted para (final one) ====
+    plt.plot(fitted_para[0], fitted_para[1],'ok', markersize=13)
+
     ax.set_aspect(1.0/ax.get_data_ratio()) 
     plt.xlabel(para_names[0])
     plt.ylabel(para_names[1])
