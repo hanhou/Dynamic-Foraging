@@ -10,6 +10,7 @@ import multiprocessing as mp
 import time
 
 from models import BanditModels
+global fit_history
 
 def generate_kwargs(forager, opti_names, opti_value):  # Helper function for parameter intepretation
     
@@ -46,21 +47,48 @@ def negLL_func(fit_value, *argss):
     
     return negLL
 
+def callback_DE(x,convergence):
+    global fit_history
+    fit_history.append(x)
+    
+    return
 
-def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history):
+def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, if_callback = False):
     # now = time.time()
     # n_worker = 1
-    n_worker = int(mp.cpu_count())   
+    n_worker = int(mp.cpu_count())/2   
+    
+    # -- Options --
+    method = 'DE'
+    
     if n_worker > 1: 
         updating='deferred' 
     else: 
         updating='immediate'
+        
+    if if_callback:  # Store the intermediate DE results
+        global fit_history
+        callback = callback_DE
+    else:
+        callback = None
                 
-    # Parameter optimization with DE    
-    fitting_result = optimize.differential_evolution(func = negLL_func, args = (forager, fit_names, choice_history, reward_history),
-                                                     bounds = optimize.Bounds(fit_bounds[0], fit_bounds[1]), 
-                                                     mutation=(0.5, 1), recombination = 0.7, popsize = 16,
-                                                     workers = n_worker, disp = n_worker==1, strategy = 'best1bin', updating=updating)
+    # -- Parameter optimization with DE --
+    fit_history = []
+    
+    if method == 'DE':
+        fitting_result = optimize.differential_evolution(func = negLL_func, args = (forager, fit_names, choice_history, reward_history),
+                                                         bounds = optimize.Bounds(fit_bounds[0], fit_bounds[1]), 
+                                                         mutation=(0.5, 1), recombination = 0.7, popsize = 16, 
+                                                         workers = n_worker, disp = n_worker==1, strategy = 'best1bin', 
+                                                         updating=updating, callback = callback,)
+     
+    
 
     # print(fitting_result, 'time = %g' % (time.time() - now))
-    return fitting_result
+    return fitting_result, fit_history
+
+
+
+
+
+
