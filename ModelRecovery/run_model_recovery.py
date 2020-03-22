@@ -14,7 +14,7 @@ from models import BanditModels
 from fitting_functions import fit_bandit, negLL_func
 from plot_fitting import plot_para_recovery, plot_LL_surface
    
-def fit_para_recovery(forager, para_names, para_bounds, n_models = 10, true_paras = None, n_trials = 1000, fit_method = 'DE', n_x0s = 1, **kargs):
+def fit_para_recovery(forager, para_names, para_bounds, n_models = 10, true_paras = None, n_trials = 1000, fit_method = 'DE', n_x0s = 1, pool = '', **kargs):
     n_paras = len(para_names)
     
     if true_paras is None:
@@ -39,7 +39,7 @@ def fit_para_recovery(forager, para_names, para_bounds, n_models = 10, true_para
         choice_history, reward_history = generate_fake_data(forager, para_names, true_paras[:,n], **kargs)
             
         # Predictive fitting
-        fitting_result, _ = fit_bandit(forager, para_names, para_bounds, choice_history, reward_history, fit_method = fit_method, n_x0s = n_x0s)
+        fitting_result, _ = fit_bandit(forager, para_names, para_bounds, choice_history, reward_history, fit_method = fit_method, n_x0s = n_x0s, pool = pool)
         fitted_paras[:,n] = fitting_result.x
     
         # print(true_paras_this, fitting_result.x)
@@ -87,7 +87,7 @@ def generate_fake_data(forager, para_names, true_para, **kargs):
     return choice_history, reward_history
 
 
-def compute_LL_surface(forager, para_names, para_bounds, true_para, n_grid = [100,100], fit_method = 'DE', n_x0s = 1, **kargs):
+def compute_LL_surface(forager, para_names, para_bounds, true_para, n_grid = [100,100], fit_method = 'DE', n_x0s = 1, pool = '', **kargs):
     '''
     Log-likelihood landscape (Fig.3a, Wilson 2019)
 
@@ -122,7 +122,9 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para, n_grid = [10
         
     # Do fitting
     print('Fitting...')
-    fitting_result, fit_history = fit_bandit(forager, para_names, para_bounds, choice_history, reward_history, fit_method = fit_method, n_x0s = n_x0s, if_callback = True)
+    fitting_result, fit_history = fit_bandit(forager, para_names, para_bounds, choice_history, reward_history, 
+                                             fit_method = fit_method, n_x0s = n_x0s, pool = pool,
+                                             if_callback = True)
     
     # Plot LL surface and fitting history
     plot_LL_surface(LLs,true_para,fit_history,para_names,p1,p2, fit_method, n_x0s)
@@ -133,6 +135,11 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para, n_grid = [10
 if __name__ == '__main__':
     
     # Fitting methods: 'DE', 'L-BFGS-B'
+    
+    # --- Use async to run multiple initializations ---
+   
+    n_worker = int(mp.cpu_count()/2)
+    pool = mp.Pool(processes = n_worker)
     
     n_trials = 1000
     
@@ -145,12 +152,16 @@ if __name__ == '__main__':
     
     true_paras, fitted_para = fit_para_recovery(forager = forager, 
                   para_names = para_names, para_bounds = para_bounds, 
-                  true_paras = true_paras, n_trials = n_trials, fit_method = 'L-BFGS-B', n_x0s = 1);    
+                  true_paras = true_paras, n_trials = n_trials, 
+                  fit_method = 'L-BFGS-B', n_x0s = 1, pool = pool);    
     
     # LL_surface
-    # compute_LL_surface(forager, para_names, para_bounds, n_grid = [5,5], true_para = [10,3], n_trials = n_trials, fit_method = 'L-BFGS-B', n_x0s = 1)
+    # compute_LL_surface(forager, para_names, para_bounds, n_grid = [5,5], true_para = [10,3], n_trials = n_trials, 
+    #                     fit_method = 'L-BFGS-B', n_x0s = 1, pool = pool)
     
     
+    pool.close()   # Just a good practice
+    pool.join()
 
     
     
