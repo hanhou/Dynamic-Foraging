@@ -42,9 +42,13 @@ def plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bound
         
     # 2. 2-D plot
     ax = fig.add_subplot(gs[0,pp+1])    
+    legend_plotted = False
     for n in range(n_models):
-        plt.plot(true_paras[0,n], true_paras[1,n],'ok', markersize=12, fillstyle='none', c = colors[n])
-        plt.plot(fitted_paras[0,n], fitted_paras[1,n],'ok', markersize=8, c = colors[n])
+        
+        plt.plot(true_paras[0,n], true_paras[1,n],'ok', markersize=12, fillstyle='none', c = colors[n], label = 'True' if not legend_plotted else '')
+        plt.plot(fitted_paras[0,n], fitted_paras[1,n],'ok', markersize=8, c = colors[n], label = 'Fitted' if not legend_plotted else '')
+        legend_plotted = True
+        
         plt.plot([true_paras[0,n], fitted_paras[0,n]], [true_paras[1,n], fitted_paras[1,n]],'-', linewidth=1, c = colors[n])
         
         # Draw the fitting bounds
@@ -58,6 +62,7 @@ def plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bound
         ax.set_aspect(1.0/ax.get_data_ratio())  # This is the correct way of setting square display
         plt.title('n_trials = %g'%n_trials)
     
+    plt.legend(bbox_to_anchor=(1.1, 1.05))
     plt.show()
 
 

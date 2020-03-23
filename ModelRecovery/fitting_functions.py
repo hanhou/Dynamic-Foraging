@@ -62,7 +62,7 @@ def fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history
         x0.append(np.random.uniform(lb,ub))
         
     # Append the initial point
-    callback_history(x0)
+    if callback != None: callback_history(x0)
         
     fitting_result = optimize.minimize(negLL_func, x0, args = (forager, fit_names, choice_history, reward_history), method = fit_method,
                                        bounds = optimize.Bounds(fit_bounds[0], fit_bounds[1]), callback = callback, )
@@ -83,12 +83,13 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, i
                                                          bounds = optimize.Bounds(fit_bounds[0], fit_bounds[1]), 
                                                          mutation=(0.5, 1), recombination = 0.7, popsize = 16, strategy = 'best1bin', 
                                                          disp = False, 
-                                                         workers = 1 if pool == '' else int(mp.cpu_count()/2),   # For DE, use pool to control if_parallel, although we don't use pool for DE
+                                                         workers = 1 if pool == '' else int(mp.cpu_count()),   # For DE, use pool to control if_parallel, although we don't use pool for DE
                                                          updating = 'immediate' if pool == '' else 'deferred',
                                                          callback = callback_history if if_history else None,)
-        fit_history.append(fitting_result.x)
+        if if_history:
+            fit_history.append(fitting_result.x)
         
-        return fitting_result, [fit_history] if if_history else fitting_result
+        return (fitting_result, [fit_history]) if if_history else fitting_result
         
     elif fit_method in ['L-BFGS-B', 'SLSQP', 'TNC', 'trust-constr']:
         
@@ -129,10 +130,10 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, i
         best_ind = np.argmin(cost)
         
         fitting_result = fitting_parallel_results[best_ind]
-        if fit_histories != []:
+        if if_history and fit_histories != []:
             fit_histories.insert(0,fit_histories.pop(best_ind))  # Move the best one to the first
         
-        return fitting_result, fit_histories if if_history else fitting_result
+        return (fitting_result, fit_histories) if if_history else fitting_result
             
 
 

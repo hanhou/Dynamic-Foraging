@@ -160,14 +160,27 @@ if __name__ == '__main__':
     # true_paras, fitted_para = fit_para_recovery(forager = forager, 
     #               para_names = para_names, para_bounds = para_bounds, 
     #               true_paras = true_paras, n_trials = n_trials, 
-    #               fit_method = 'L-BFGS-B', n_x0s = 1, pool = pool);    
+    #               fit_method = 'DE', n_x0s = 1, pool = pool);    
+    
+    n_trials = 1000
+
+    forager = 'LossCounting'
+    para_names = ['loss_count_threshold_mean','loss_count_threshold_std']
+    para_bounds = [[0,0],[50,10]]
+    
+    # Para recovery
+    true_paras = generate_true_paras([[0,0],[30,5]], n_models = [5,5], method = 'linspace')
+    fit_para_recovery(forager = forager, 
+                      para_names = para_names, para_bounds = para_bounds, 
+                      true_paras = true_paras, n_trials = n_trials, 
+                      fit_method = 'L-BFGS-B', n_x0s = 1, pool = '');    
     
     # LL_surface
     # compute_LL_surface(forager, para_names, para_bounds, n_grid = [20,20], true_para = [10,3], n_trials = n_trials, 
     #                     fit_method = 'DE', pool = pool)
     
-    compute_LL_surface(forager, para_names, para_bounds, n_grid = [20,20], true_para = [10,3], n_trials = n_trials, 
-                        fit_method = 'L-BFGS-B', n_x0s = 8, pool = '')  # Show multiple histories from multiple initializations
+    # compute_LL_surface(forager, para_names, para_bounds, n_grid = [20,20], true_para = [10,3], n_trials = n_trials, 
+    #                     fit_method = 'L-BFGS-B', n_x0s = 8, pool = '')  # Show multiple histories from multiple initializations
     
     # compute_LL_surface(forager, para_names, para_bounds, n_grid = [20,20], true_para = [10,3], n_trials = n_trials, 
     #                     fit_method = 'L-BFGS-B', n_x0s = 8, pool = pool)
