@@ -12,8 +12,10 @@ from tqdm import tqdm  # For progress bar. HH
 from models import BanditModels
 global fit_history
 
-def generate_kwargs(forager, opti_names, opti_value):  # Helper function for parameter intepretation
-    
+def generate_kwargs(forager, opti_names, opti_value):  
+    '''
+    Helper function for parameter intepretation
+    '''
     if forager == 'Corrado2005':  # Special workarounds
         kwargs_all = {'forager': 'Corrado2005', 'taus': opti_value[0:2], 'w_taus': [1-opti_value[2], opti_value[2]], 'softmax_temperature': opti_value[3]}
     
@@ -29,12 +31,14 @@ def generate_kwargs(forager, opti_names, opti_value):  # Helper function for par
 
 
 def negLL_func(fit_value, *argss):
-    
+    '''
+    Compute negative likelihood (Core func)
+    '''
     # Arguments interpretation
     forager, fit_names, choice_history, reward_history = argss
     kwargs_all = generate_kwargs(forager, fit_names, fit_value)
 
-    # Run simulation    
+    # Run **PREDICTIVE** simulation    
     bandit = BanditModels(**kwargs_all, fit_choice_history = choice_history, fit_reward_history = reward_history)  # Into the fitting mode
     bandit.simulate()
     
@@ -57,6 +61,9 @@ def callback_history(x, **kargs):
     return
 
 def fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history, fit_method, callback):
+    '''
+    For local optimizers, fit using ONE certain initial condition    
+    '''
     x0 = []
     for lb,ub in zip(fit_bounds[0], fit_bounds[1]):
         x0.append(np.random.uniform(lb,ub))
@@ -70,7 +77,9 @@ def fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history
 
 
 def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, if_history = False, fit_method = 'CG', n_x0s = 1, pool = ''):
-    
+    '''
+    Main fitting func and compute BIC etc.
+    '''
     if if_history: 
         global fit_history
         fit_history = []

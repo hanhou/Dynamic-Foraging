@@ -151,10 +151,8 @@ class BanditModels:
         elif self.forager in ['LossCounting']:
             # Initialize
             self.loss_count = np.zeros([1, self.n_trials]) 
-            try:
+            if not self.if_fit_mode:
                 self.loss_threshold_this = np.random.normal(self.loss_count_threshold_mean, self.loss_count_threshold_std)
-            except:
-                pass
 
     def generate_p_reward(self, block_size_base = global_block_size_mean, 
                                 block_size_sd = global_block_size_sd,
