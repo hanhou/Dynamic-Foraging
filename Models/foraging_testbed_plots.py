@@ -419,7 +419,7 @@ def plot_para_scan(results_para_scan, para_to_scan, if_baited = True, p_reward_s
         plt.ylabel('Foraging efficiency')
                
         
-def plot_model_compet(model_compet_results, model_compet_settings, n_reps, if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None):
+def plot_model_compet(model_compet_results, model_compet_settings, n_reps, random_result, ideal_result, if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None):
     
     gs = GridSpec(1,1, top = 0.85, wspace = 0.3, bottom = 0.12)
     fig = plt.figure(figsize=(7, 7))
@@ -456,23 +456,32 @@ def plot_model_compet(model_compet_results, model_compet_settings, n_reps, if_ba
         plt.xlabel('Matching slope')
         plt.ylabel('Foraging efficiency')
         
-        ax.legend(fontsize = 10)
-        
-        # Two baselines
+        # Two baselines (already changed to compute automatically)
         # Run with rep = 1000, separately 
         # Please change if you change the task structure !!! (For example, baited VS unbaitred)
-        random_result, ideal_result = get_baseline(if_baited, p_reward_sum, p_reward_pairs)
+        # random_result, ideal_result = get_baseline(if_baited, p_reward_sum, p_reward_pairs)
         
     
     # Two baselines
-    plt.plot([0,1],[random_result[0], random_result[0]],'k--')
-    plt.plot([0,1],[ideal_result[0], ideal_result[0]],'k--')
+    
+    plt.plot([0,1], [random_result[0]]*2, 'k--')
+    plt.fill_between([0,1], - np.diff(random_result), np.sum(random_result), alpha = 0.2, color ='black')
+    plt.text(0, random_result[0], 'random')
+    
+    plt.plot([0,1], [ideal_result[0]]*2, 'k--')
+    plt.fill_between([0,1], - np.diff(ideal_result), np.sum(ideal_result), alpha = 0.2, color ='black')
+    plt.text(0.8, ideal_result[0], 'ideal')
 
     plt.plot(0,random_result[0],'vk', markersize = 10)    
     plt.plot(1,ideal_result[0],'^k', markersize = 10)    
-        
+
+    # ax.set_yticks([0,0.5,1])
+    plt.xlim([-0.02,1.02])
+    # plt.ylim([0,1.2])
+    ax.legend(fontsize = 10, loc = "lower right")
+    
     plt.title('Model competition (if_baited = %s, p_rew_sum = %g, n_reps = %g\np_override = %s)'% (if_baited, p_reward_sum, n_reps, p_reward_pairs))
-        
+    
         
         
         

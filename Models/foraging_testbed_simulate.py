@@ -47,15 +47,19 @@ def run_one_session(bandit, para_scan = False, para_optim = False):
     # Compute results for this session
     # =============================================================================
     # -- 1. Foraging efficiency = Sum of actual rewards / Maximum number of rewards that could have been collected --
-    bandit.actual_reward_rate = np.sum(bandit.reward_history) / bandit.n_trials
+    bandit.actual_rewards = np.sum(bandit.reward_history)
     
     '''Don't know which one is the fairest''' #???
-    # bandit.maximum_reward_rate = np.mean(np.max(bandit.p_reward, axis = 0)) # Method 1: Average of max(p_reward) 
-    bandit.maximum_reward_rate = np.mean(np.sum(bandit.p_reward, axis = 0)) # Method 2: Average of sum(p_reward).   [Corrado et al 2005: efficienty = 50% for choosing only one color]
-    # bandit.maximum_reward_rate = np.sum(np.any(bandit.reward_available, axis = 0)) / bandit.n_trials  # Method 3: Maximum reward given the fixed reward_available (one choice per trial constraint) [Sugrue 2004???]
-    # bandit.maximum_reward_rate = np.sum(np.sum(bandit.reward_available, axis = 0)) / bandit.n_trials  # Method 4: Sum of all ever-baited rewards (not fair)  
+    # Method 1: Average of max(p_reward) 
+    # bandit.maximum_rewards = np.sum(np.max(bandit.p_reward, axis = 0)) 
+    # Method 2: Average of sum(p_reward).   [Corrado et al 2005: efficienty = 50% for choosing only one color]
+    bandit.maximum_rewards = np.sum(np.sum(bandit.p_reward, axis = 0)) 
+    # Method 3: Maximum reward given the actual reward_available (one choice per trial constraint)
+    # bandit.maximum_rewards = np.sum(np.any(bandit.reward_available, axis = 0))  # Equivalent to sum(max())
+    # Method 4: Sum of all ever-baited rewards (not fair)  
+    # bandit.maximum_rewards = np.sum(np.sum(bandit.reward_available, axis = 0))
 
-    bandit.foraging_efficiency = bandit.actual_reward_rate / bandit.maximum_reward_rate
+    bandit.foraging_efficiency = bandit.actual_rewards / bandit.maximum_rewards
     
    
     if not para_optim:
@@ -482,8 +486,17 @@ def model_compet(model_compet_settings, n_reps = 200, pool = '', if_baited = Tru
 
         # Cache data
         model_compet_results.append(np.vstack((fe_mean, fe_CI95, ms_mean, ms_CI95)))
-
-    plot_model_compet(model_compet_results, model_compet_settings, n_reps, if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs)
+        
+    # Run two additional models: random and ideal_greedy
+    bandit = Bandit('Random', if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs)
+    results = run_sessions_parallel(bandit, n_reps = n_reps, if_plot = False, pool = pool)
+    random_result = results['foraging_efficiency']
+    
+    bandit = Bandit('IdealGreedy', if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs)
+    results = run_sessions_parallel(bandit, n_reps = n_reps, if_plot = False, pool = pool)
+    ideal_result = results['foraging_efficiency']
+    
+    plot_model_compet(model_compet_results, model_compet_settings, n_reps, random_result, ideal_result, if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs)
     
     
 #%%
@@ -529,7 +542,7 @@ def sandro():
                                 'para_to_scan': {'softmax_temperature': softmax_temperatures}, 
                             },
 
-    plot_model_compet(model_compet_results, model_compet_settings, n_reps_run)
+    plot_model_compet(model_compet_results, model_compet_settings, n_reps_run, random_result, ideal_result)
     
 #%%   
 if __name__ == '__main__':  # This line is essential for apply_async to run in Windows
