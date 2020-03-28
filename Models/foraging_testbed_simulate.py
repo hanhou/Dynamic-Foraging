@@ -22,8 +22,8 @@ from foraging_testbed_models import Bandit
 from foraging_testbed_plots import plot_all_reps, plot_para_scan, plot_model_compet
 
 methods = [ 
-            # 'serial',
-            'apply_async'     # Use multiprocessing.apply_async() for parallel computing (8~10x speed-up in my 8/16 I9-9900k)
+            'serial',
+            # 'apply_async'     # Use multiprocessing.apply_async() for parallel computing (8~10x speed-up in my 8/16 I9-9900k)
           ]
 
 LEFT = 0
@@ -224,7 +224,9 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
     
     if not (para_scan or para_optim):
         results_all_sessions['stay_duration_hist'] = np.zeros(len(stay_duration_hist_bins)-1)
-    
+        
+        if bandit[0].forager == 'IdealOptimal':
+            results_all_sessions['matching_slope_IdealOptimal_theoretical_per_session'] = np.zeros(n_reps)
     
     results_all_sessions['foraging_efficiency_per_session'] = np.zeros([n_unique_bandits, n_reps])
     results_all_sessions['linear_fit_income_per_session'] = np.zeros([n_unique_bandits, n_reps])
@@ -249,11 +251,14 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
             # Session-wise
             results_all_sessions['foraging_efficiency_per_session'][unique_idx,ss] = bb.foraging_efficiency
             results_all_sessions['linear_fit_income_per_session'][unique_idx,ss] = bb.linear_fit_income_per_session # Add session-wise matching slope for model competition
-            results_all_sessions['linear_fit_return_per_session'][unique_idx,ss] = bb.linear_fit_return_per_session # Mathcin slope from log_return_ratio
+            results_all_sessions['linear_fit_return_per_session'][unique_idx,ss] = bb.linear_fit_return_per_session # Matching slope from log_return_ratio
             
             if not (para_scan or para_optim):
                 results_all_sessions['stay_duration_hist'] += np.histogram(bb.stay_durations, bins = stay_duration_hist_bins)[0]
                 
+                if bandit[0].forager == 'IdealOptimal':
+                    results_all_sessions['matching_slope_IdealOptimal_theoretical_per_session'][ss] = bb.matching_slope_IdealOptimal_theoretical
+
             if not para_optim:
                 blockwise_stats_this_bandit[:, n_blocks_now : n_blocks_now + bb.n_blocks] =  \
                     np.vstack([bb.blockwise_choice_fraction, 
@@ -303,14 +308,16 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
                     results_all_sessions['linear_fit_log_income_ratio'][unique_idx,:,:] = [np.nan, np.nan], [np.nan, np.nan],[np.nan, np.nan],[a, a_CI95]
                 except:
                     pass
-
-                
+            
     if not para_scan:    
         results_all_sessions['foraging_efficiency'] = np.array([np.mean(results_all_sessions['foraging_efficiency_per_session']),
                                                       1.96 * np.std(results_all_sessions['foraging_efficiency_per_session'])/np.sqrt(n_reps)])
         
         results_all_sessions['blockwise_stats'] = blockwise_stats_this_bandit # We need this only when not para_scan
         
+        if bandit[0].forager == 'IdealOptimal':        
+            results_all_sessions['matching_slope_IdealOptimal_theoretical'] = np.mean(results_all_sessions['matching_slope_IdealOptimal_theoretical_per_session'])
+
     # Basic info
     results_all_sessions['n_reps'] = n_reps
     results_all_sessions['forager'] = bandits_all_sessions[0].forager
@@ -494,6 +501,7 @@ def model_compet(model_compet_settings, n_reps = 200, pool = '', if_baited = Tru
     baseline_models = ['IdealOptimal','pMatching','IdealGreedy','Random']
     baseline_eff = []
     baseline_ms = []
+    ms_IO_analytical = 0   # Analytical matching slope of IdealOptimal
     
     for bm in baseline_models:
         bandit = Bandit(forager = bm, if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs)
@@ -505,9 +513,12 @@ def model_compet(model_compet_settings, n_reps = 200, pool = '', if_baited = Tru
 
         baseline_eff.append(results['foraging_efficiency'])
         baseline_ms.append([ms_mean, ms_CI95])
+        
+        if bm == 'IdealOptimal':
+            ms_IO_analytical += results['matching_slope_IdealOptimal_theoretical']
     
     plot_model_compet(model_compet_results, model_compet_settings, n_reps, 
-                      [baseline_models, baseline_eff, baseline_ms], 
+                      [baseline_models, baseline_eff, baseline_ms, ms_IO_analytical], 
                       if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs)
     
     
@@ -738,19 +749,18 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # =============================================================================
             
     model_compet_settings = [
-        {'forager': 'LossCounting', 
-          'para_to_scan': {'loss_count_threshold_mean': np.hstack([0, 0,np.power(2,np.linspace(0,6,13)), np.inf])},  # 46.14626589
-          'para_to_fix': {'loss_count_threshold_std':  1.01529397}},
+        # {'forager': 'LossCounting', 
+        #   'para_to_scan': {'loss_count_threshold_mean': np.hstack([0, 0,np.power(2,np.linspace(0,6,13)), np.inf])},  # 46.14626589
+        #   'para_to_fix': {'loss_count_threshold_std':  1.01529397}},
         {'forager': 'Corrado2005', 
-          'para_to_scan': {'softmax_temperature': np.hstack([6.42381607e-02, np.power(10, np.linspace(-4,0,20))])},
+          'para_to_scan': {'softmax_temperature': np.hstack([6.42381607e-02, np.power(10, np.linspace(-4,0,15))])},
           'para_to_fix':  {'taus':  [1.83782228, 27.4467749], 'w_taus': [1-1.96842027e-02, 1.96842027e-02]}},
         {'forager': 'Bari2019', 
-          'para_to_scan': {'softmax_temperature': np.hstack([0.11987247, np.power(10, np.linspace(-1.5,0,20))])},  
+          'para_to_scan': {'softmax_temperature': np.hstack([0.11987247, np.power(10, np.linspace(-1.5,0,15))])},  
           'para_to_fix':  {'step_sizes': 0.49102943, 'forget_rate': 0.19255644}},
         ]
 
-    model_compet(model_compet_settings, n_reps = 10, p_reward_pairs = [[0.45, 0]], pool = pool) 
-    # model_compet(model_compet_settings, n_reps = 200, pool = pool)     
+    model_compet(model_compet_settings, n_reps = 20, pool = pool)     
         
     
     #%% Answer Sandro's question: what if optimizing all other parameters for each epsilon/sigma

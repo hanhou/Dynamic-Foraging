@@ -61,7 +61,15 @@ RIGHT = 1
 global_block_size_mean = 80
 global_block_size_sd = 20
 
-softmax = lambda x, softmax_temperature: np.exp(x/softmax_temperature)/np.sum(np.exp(x/softmax_temperature))  # Accept np.arrays
+def softmax(x,softmax_temperature):
+    max_temp = np.max(x/softmax_temperature)
+    
+    if max_temp > 500:  # To prevent explosion of EXP
+        greedy = np.zeros(len(x))
+        greedy[np.random.choice(np.where(x == np.max(x))[0])] = 1
+        return greedy
+    else:   # Normal softmax
+        return np.exp(x/softmax_temperature)/np.sum(np.exp(x/softmax_temperature))  # Accept np.arrays
 
 
 class Bandit:
@@ -193,6 +201,7 @@ class Bandit:
         p_reward = np.zeros([2,self.n_trials])
         
         self.rewards_IdealOptimal = 0
+        self.log_ratios_IdealOptimal = []
         
         # Fill in trials until the required length
         while n_trials_now < self.n_trials:
@@ -223,12 +232,14 @@ class Bandit:
             # Fill in trials for this block
             p_reward[:, n_trials_now : n_trials_now + n_trials_this_block] = p_reward_this_block.T
             
-            # Calculate theoretical upper bound (ideal-p^-optimal) and the (fixed) choice history of it
-            m_star, p_star = self.get_IdealOptimal_reward_rate(np.max(p_reward_this_block), np.min(p_reward_this_block))
+            # Calculate theoretical upper bound (ideal-p^-optimal) and the (fixed) choice history/matching point of it
+            m_star, p_star, log_ratios = self.get_IdealOptimal_anlytical(p_reward_this_block[0])
             self.rewards_IdealOptimal += p_star * n_trials_this_block
             
+            
+            self.log_ratios_IdealOptimal.append(log_ratios)
+            
             if self.forager in ['IdealOptimal']:
-                
                 # For ideal optimal, given p_0(t) and p_1(t), the optimal choice history is fixed, i.e., {m_star, 1} (p_min > 0)
                 if m_star == np.inf:  # Greedy
                     c_max_this = np.argwhere(p_reward_this_block[0] == np.max(p_reward_this_block))[0]
@@ -248,27 +259,45 @@ class Bandit:
         self.block_size  = np.array(block_size)
         self.p_reward_fraction = p_reward[RIGHT,:] / (np.sum(p_reward, axis = 0))   # For future use
         self.p_reward_ratio = p_reward[RIGHT,:] / p_reward[LEFT,:]   # For future use
+        
+        # Theoretical matching index of IdealOptimal
+        X = np.array(self.log_ratios_IdealOptimal)[:,0]
+        Y = np.array(self.log_ratios_IdealOptimal)[:,1]
+        self.matching_slope_IdealOptimal_theoretical = ((X*Y).mean() - X.mean()*Y.mean()) / ((X**2).mean() - (X.mean())**2)
 
         # We should make it random afterwards
         np.random.seed()
         
-    def get_IdealOptimal_reward_rate(self, p_max, p_min):
+    def get_IdealOptimal_anlytical(self, p_reward):
         '''
         Theoretical upper bound of total rewards collected by the ideal-p^-optimal forager (for 2-arm task)  03/28/2020
         '''
+        p_max = np.max(p_reward)
+        p_min = np.min(p_reward)
+        
         if p_min > 0:
             m_star = np.floor(np.log(1-p_max)/np.log(1-p_min))
             p_star = p_max + (1-(1-p_min)**(m_star + 1)-p_max**2)/(m_star+1)  # Still stands even m_star = *
-            return int(m_star), p_star
+    
+            # We can even compute the matching index analytically
+            log_c_ratio = np.log(m_star)
+            log_r_ratio = np.log(p_max) + np.log(1+m_star-p_max) - np.log(1-(1-p_min)**(m_star+1))
+            
+            # If p0 > p1, log ratio should be negative according to the definition
+            if p_reward[0] > p_reward[1]:
+                log_ratios = [-log_r_ratio, -log_c_ratio]
+            else:
+                log_ratios = [log_r_ratio, log_c_ratio]
+            
+            return int(m_star), p_star, log_ratios
         else:
-            return np.inf, p_max
+            return np.inf, p_max, [np.nan, np.nan]
         
     def choose_ps(self, ps):
         '''
         "Poisson"-choice process
         '''
         ps = ps/np.sum(ps)
-        
         return np.max(np.argwhere(np.hstack([-1e-16, np.cumsum(ps)]) < np.random.rand()))
 
     def act(self):

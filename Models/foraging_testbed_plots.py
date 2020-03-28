@@ -460,7 +460,7 @@ def plot_model_compet(model_compet_results, model_compet_settings, n_reps, basel
     
     # Theoretical upper bound
     plt.plot([0,1],[1,1],'k--')
-    plt.text(0, 1, '100% = <r*>', color = 'k')
+    plt.text(0, 1, '100% = theoretical <r*>', color = 'k')
  
     # Baseline foragers
     markers = ['*','s','^','X']
@@ -473,7 +473,10 @@ def plot_model_compet(model_compet_results, model_compet_settings, n_reps, basel
         plt.plot(bm_ms[0], bm_eff[0], bm_marker, color = 'grey', markersize=bm_size, label = '%s' % bm_name, zorder=-32)
         plt.errorbar(bm_ms[0], bm_eff[0], xerr = bm_ms[1], yerr = bm_eff[1], color = 'k')
         
-
+    # Add a theoretical matching index for IdealOptimal
+    ms_IO_analytical = baselines[3]
+    plt.plot([ms_IO_analytical]*2, plt.ylim(),'k--')
+    plt.text(ms_IO_analytical, 0, 'theoretical matching index of IdealOptimal', rotation = 90)
        
     # ax.set_yticks([0,0.5,1])
     plt.xlim([-0.02,1.02])
