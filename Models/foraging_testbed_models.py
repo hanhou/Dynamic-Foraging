@@ -13,7 +13,9 @@
 #           - 3.1: loss_count_threshold = inf --> Always One Side
 #           - 3.2: loss_count_threshold = 1 --> win-stay-lose-switch
 #           - 3.3: loss_count_threshold = 0 --> Always switch
-#       3). 'IdealGreedy': knows p_reward and always chooses the largest one
+#       3). 'IdealGreedy': knows p_reward + always chooses the largest one
+#       4). 'IdealOptimal': knows p_reward AND p_hat + always chooses the largest one p_hat ==> {m,1}
+#       5). 'pMatching': to show that pMatching is necessary but not sufficient
 #
 #   2. NLP-like foragers
 #       1). 'Sugrue2004':        income  ->   exp filter   ->  fractional                   -> epsilon-Poisson (epsilon = 0 in their paper; I found it essential)
@@ -166,12 +168,10 @@ class Bandit:
             # Initialize
             self.loss_count = np.zeros([1, self.n_trials]) 
             self.loss_threshold_this = np.random.normal(self.loss_count_threshold_mean, self.loss_count_threshold_std)
-            
+
         else:
             self.description = self.forager
-
-        
-
+            
     def generate_p_reward(self, block_size_base = global_block_size_mean, 
                                 block_size_sd = global_block_size_sd,
                                 p_reward_pairs = [[.4,.05],[.3857,.0643],[.3375,.1125],[.225,.225]],  # (Bari-Cohen 2019)  
@@ -191,6 +191,8 @@ class Bandit:
         n_trials_now = 0
         block_size = []  
         p_reward = np.zeros([2,self.n_trials])
+        
+        self.rewards_IdealOptimal = 0
         
         # Fill in trials until the required length
         while n_trials_now < self.n_trials:
@@ -212,7 +214,7 @@ class Bandit:
                 else:
                     pair_idx = np.random.choice(range(len(p_reward_pairs)))
                     
-                p_reward_this_block = np.array([p_reward_pairs[pair_idx]])   # Note the outer brackets
+                p_reward_this_block = np.array([p_reward_pairs[pair_idx]])   # Note the outer brackets, otherwise cannot be broadcast below
 
                 # To ensure flipping of p_reward during transition (Marton)
                 if len(block_size) % 2:     
@@ -220,7 +222,26 @@ class Bandit:
                 
             # Fill in trials for this block
             p_reward[:, n_trials_now : n_trials_now + n_trials_this_block] = p_reward_this_block.T
-            n_trials_now += n_trials_this_block
+            
+            # Calculate theoretical upper bound (ideal-p^-optimal) and the (fixed) choice history of it
+            m_star, p_star = self.get_IdealOptimal_reward_rate(np.max(p_reward_this_block), np.min(p_reward_this_block))
+            self.rewards_IdealOptimal += p_star * n_trials_this_block
+            
+            if self.forager in ['IdealOptimal']:
+                
+                # For ideal optimal, given p_0(t) and p_1(t), the optimal choice history is fixed, i.e., {m_star, 1} (p_min > 0)
+                if m_star == np.inf:  # Greedy
+                    c_max_this = np.argwhere(p_reward_this_block[0] == np.max(p_reward_this_block))[0]
+                    self.choice_history[0, n_trials_now : n_trials_now + n_trials_this_block] = c_max_this
+                else:
+                    S = int(np.ceil(n_trials_this_block/(m_star+1)))
+                    c_max_this = np.argwhere(p_reward_this_block[0] == np.max(p_reward_this_block))[0]  # To handle the case of p0 = p1
+                    c_min_this = np.argwhere(p_reward_this_block[0] == np.min(p_reward_this_block))[-1]
+                    c_star_this_block = ([c_max_this] * m_star + [c_min_this]) * S    # Choice pattern of {m_star, 1}
+                    c_star_this_block = c_star_this_block[:n_trials_this_block]     # Truncate to the correct length
+                    self.choice_history[0, n_trials_now : n_trials_now + n_trials_this_block] = c_star_this_block  # Save the optimal sequence
+  
+            n_trials_now += n_trials_this_block # Next block
         
         self.n_blocks = len(block_size)
         self.p_reward = p_reward
@@ -230,6 +251,25 @@ class Bandit:
 
         # We should make it random afterwards
         np.random.seed()
+        
+    def get_IdealOptimal_reward_rate(self, p_max, p_min):
+        '''
+        Theoretical upper bound of total rewards collected by the ideal-p^-optimal forager (for 2-arm task)  03/28/2020
+        '''
+        if p_min > 0:
+            m_star = np.floor(np.log(1-p_max)/np.log(1-p_min))
+            p_star = p_max + (1-(1-p_min)**(m_star + 1)-p_max**2)/(m_star+1)  # Still stands even m_star = *
+            return int(m_star), p_star
+        else:
+            return np.inf, p_max
+        
+    def choose_ps(self, ps):
+        '''
+        "Poisson"-choice process
+        '''
+        ps = ps/np.sum(ps)
+        
+        return np.max(np.argwhere(np.hstack([-1e-16, np.cumsum(ps)]) < np.random.rand()))
 
     def act(self):
         # =============================================================================
@@ -243,6 +283,8 @@ class Bandit:
         #           - 3.2: loss_count_threshold = 1 --> win-stay-lose-switch
         #           - 3.3: loss_count_threshold = 0 --> Always switch
         #       3). 'IdealGreedy': knows p_reward and always chooses the largest one
+        #       4). 'IdealOptimal': knows p_reward AND p_hat + always chooses the largest one p_hat ==> {m,1}
+        #       5). 'pMatching': to show that pMatching is necessary but not sufficient
         #
         #   2. NLP-like foragers
         #       1). 'Sugrue2004':        income  ->   exp filter   ->  fractional                   -> epsilon-Poisson (epsilon = 0 in their paper; I found it essential)
@@ -259,6 +301,12 @@ class Bandit:
             
         elif self.forager == 'AlwaysLEFT':
             choice = LEFT
+            
+        elif self.forager == 'IdealOptimal':   # Ideal-p^-optimal
+            choice = self.choice_history[0, self.time]  # Already saved in the optimal sequence
+            
+        elif self.forager == 'pMatching':  # Probability matching of base probabilities p
+            choice = self.choose_ps(self.p_reward[:,self.time])
             
         elif self.forager == 'LossCounting':
             if self.time == 0:
@@ -283,7 +331,7 @@ class Bandit:
                 
         else:
             if np.random.rand() < self.epsilon or np.sum(self.reward_history) < self.random_before_total_reward: 
-                # Forced exploration with the prob. of epsilon (to avoid AlwaysLEFT/RIGHT in Sugrue2004...) or before some rewards are collected #???
+                # Forced exploration with the prob. of epsilon (to avoid AlwaysLEFT/RIGHT in Sugrue2004...)
                 choice = np.random.choice(self.k)
                 
             else:   # Forager-dependent
@@ -291,10 +339,7 @@ class Bandit:
                     choice = np.random.choice(np.where(self.q_estimation[:, self.time] == self.q_estimation[:, self.time].max())[0])
                     
                 elif self.forager in ['Sugrue2004', 'Corrado2005', 'Iigaya2019', 'Bari2019', 'Hattori2019' ]:   # Poisson
-                    if np.random.rand() < self.q_estimation[LEFT, self.time]:
-                        choice = LEFT
-                    else:
-                        choice = RIGHT
+                    choice = self.choose_ps(self.q_estimation[:,self.time])    
                 
         self.choice_history[0, self.time] = int(choice)
         

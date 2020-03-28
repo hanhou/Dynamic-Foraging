@@ -16,7 +16,7 @@ plt.rcParams.update({'font.size': 13})
 LEFT = 0
 RIGHT = 1
 
-smooth_factor = 5
+smooth_factor = 1
 
 # matplotlib.use('Agg')  # Agg -> non-GUI backend. HH
 # matplotlib.use('qt5agg')  # We can see the figure by qt5. HH
@@ -70,16 +70,18 @@ def plot_one_session(bandit, fig, plottype='2lickport'):
     ax.plot(np.nonzero(unrewarded_trials)[0], 0.5 + (choice_history[0,unrewarded_trials] - 0.5) * 1.4, 
             '|',color='gray', markersize=10, markeredgewidth=1)
     
-    # Baited probability and smoothed choice history
-    ax.plot(np.arange(0, n_trials), bandit.p_reward_fraction, color='DarkOrange', label = 'bait prob.')
-    ax.plot(moving_average(choice_history, smooth_factor) , color='black', label = 'smoothed choice')
+    # Base probability
+    ax.plot(np.arange(0, n_trials), bandit.p_reward_fraction, color='DarkOrange', label = 'base rew. prob.')
     
     # Choice probability
     if bandit.forager in ['LossCounting']:
         ax.plot(bandit.loss_count[0,:] / 10, color='Blue', label = 'loss count')
         
-    elif bandit.forager not in ['Random', 'AlwaysLEFT', 'IdealGreedy', 'SuttonBartoRLBook']:
+    elif bandit.forager not in ['Random', 'IdealOpotimal', 'pMatching', 'AlwaysLEFT', 'IdealGreedy', 'SuttonBartoRLBook']:
         ax.plot(moving_average(bandit.q_estimation[RIGHT,:], 1), color='Green', label = 'choice prob.')
+        
+    # Smoothed choice history
+    ax.plot(moving_average(choice_history, smooth_factor) , color='black', label = 'choice (smooth = %g)' % smooth_factor)
         
     ax.legend(fontsize = 10)
      
@@ -243,7 +245,6 @@ def plot_all_reps(results_all_reps):
     plt.title('Block-wise for EACH SESSION (n_rep = %g)'% results_all_reps['n_reps'])
     plt.axis('square')
 
-    
   
 def plot_para_scan(results_para_scan, para_to_scan, if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None, **kwargs):
     
@@ -419,10 +420,10 @@ def plot_para_scan(results_para_scan, para_to_scan, if_baited = True, p_reward_s
         plt.ylabel('Foraging efficiency')
                
         
-def plot_model_compet(model_compet_results, model_compet_settings, n_reps, random_result, ideal_result, if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None):
+def plot_model_compet(model_compet_results, model_compet_settings, n_reps, baselines, if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None):
     
     gs = GridSpec(1,1, top = 0.85, wspace = 0.3, bottom = 0.12)
-    fig = plt.figure(figsize=(7, 7))
+    fig = plt.figure(figsize=(9, 7))
     ax = fig.add_subplot(gs[0,0])
     
     # Let's fix the color coding
@@ -440,8 +441,8 @@ def plot_model_compet(model_compet_results, model_compet_settings, n_reps, rando
         
         # Others
         order = np.argsort(para_value)
-        plt.errorbar(matching_slope_mean[order], fe_mean[order], matching_slope_CI95[order], fe_CI95[order], 
-                         '-', label = '%s (%s)' % (forager, para_name), color = colors[forager])
+        plt.errorbar(matching_slope_mean[order], fe_mean[order], xerr = matching_slope_CI95[order], yerr = fe_CI95[order], 
+                         label = '%s (%s)' % (forager, para_name), color = colors[forager])
         
         if forager == 'LossCounting':  # Reverse the order such that larger dot represents more exploration
             sizes = np.linspace(10,1,len(order))**2
@@ -455,32 +456,31 @@ def plot_model_compet(model_compet_results, model_compet_settings, n_reps, rando
         
         plt.xlabel('Matching slope')
         plt.ylabel('Foraging efficiency')
-        
-        # Two baselines (already changed to compute automatically)
-        # Run with rep = 1000, separately 
-        # Please change if you change the task structure !!! (For example, baited VS unbaitred)
-        # random_result, ideal_result = get_baseline(if_baited, p_reward_sum, p_reward_pairs)
-        
-    
-    # Two baselines
-    
-    plt.plot([0,1], [random_result[0]]*2, 'k--')
-    plt.fill_between([0,1], - np.diff(random_result), np.sum(random_result), alpha = 0.2, color ='black')
-    plt.text(0, random_result[0], 'random')
-    
-    plt.plot([0,1], [ideal_result[0]]*2, 'k--')
-    plt.fill_between([0,1], - np.diff(ideal_result), np.sum(ideal_result), alpha = 0.2, color ='black')
-    plt.text(0.8, ideal_result[0], 'ideal')
 
-    plt.plot(0,random_result[0],'vk', markersize = 10)    
-    plt.plot(1,ideal_result[0],'^k', markersize = 10)    
+    
+    # Theoretical upper bound
+    plt.plot([0,1],[1,1],'k--')
+    plt.text(0, 1, '100% = <r*>', color = 'k')
+ 
+    # Baseline foragers
+    markers = ['*','s','^','X']
+    sizes = [20,10,13,13]
 
+    for bm_name, bm_eff, bm_ms, bm_marker, bm_size in zip(baselines[0],baselines[1],baselines[2],markers,sizes):
+        if bm_name in ['Random','IdealOptimal']:
+            plt.fill_between([0,1], bm_eff[0] - bm_eff[1], bm_eff[0] + bm_eff[1], color = 'k', alpha = 0.2)
+
+        plt.plot(bm_ms[0], bm_eff[0], bm_marker, color = 'grey', markersize=bm_size, label = '%s' % bm_name, zorder=-32)
+        plt.errorbar(bm_ms[0], bm_eff[0], xerr = bm_ms[1], yerr = bm_eff[1], color = 'k')
+        
+
+       
     # ax.set_yticks([0,0.5,1])
     plt.xlim([-0.02,1.02])
     # plt.ylim([0,1.2])
     ax.legend(fontsize = 10, loc = "lower right")
     
-    plt.title('Model competition (if_baited = %s, p_rew_sum = %g, n_reps = %g\np_override = %s)'% (if_baited, p_reward_sum, n_reps, p_reward_pairs))
+    plt.title('Model competition (if_baited = %s, p_rew_sum = %g\nn_reps = %g, p_override = %s)'% (if_baited, p_reward_sum, n_reps, p_reward_pairs))
     
         
         
