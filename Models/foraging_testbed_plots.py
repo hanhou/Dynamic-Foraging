@@ -16,7 +16,7 @@ plt.rcParams.update({'font.size': 13})
 LEFT = 0
 RIGHT = 1
 
-smooth_factor = 1
+smooth_factor = 5
 
 # matplotlib.use('Agg')  # Agg -> non-GUI backend. HH
 # matplotlib.use('qt5agg')  # We can see the figure by qt5. HH
@@ -474,9 +474,9 @@ def plot_model_compet(model_compet_results, model_compet_settings, n_reps, basel
         plt.errorbar(bm_ms[0], bm_eff[0], xerr = bm_ms[1], yerr = bm_eff[1], color = 'k')
         
     # Add a theoretical matching index for IdealOptimal
-    ms_IO_analytical = baselines[3]
-    plt.plot([ms_IO_analytical]*2, plt.ylim(),'k--')
-    plt.text(ms_IO_analytical, 0, 'theoretical matching index of IdealOptimal', rotation = 90)
+    # ms_IO_analytical = baselines[3]
+    # plt.plot([ms_IO_analytical]*2, plt.ylim(),'k--')
+    # plt.text(ms_IO_analytical, 0, 'theoretical matching index of IdealOptimal', rotation = 90)
        
     # ax.set_yticks([0,0.5,1])
     plt.xlim([-0.02,1.02])

@@ -64,7 +64,7 @@ global_block_size_sd = 20
 def softmax(x,softmax_temperature):
     max_temp = np.max(x/softmax_temperature)
     
-    if max_temp > 500:  # To prevent explosion of EXP
+    if np.exp(max_temp) == np.inf:  # To prevent explosion of EXP
         greedy = np.zeros(len(x))
         greedy[np.random.choice(np.where(x == np.max(x))[0])] = 1
         return greedy
@@ -233,11 +233,12 @@ class Bandit:
             p_reward[:, n_trials_now : n_trials_now + n_trials_this_block] = p_reward_this_block.T
             
             # Calculate theoretical upper bound (ideal-p^-optimal) and the (fixed) choice history/matching point of it
-            m_star, p_star, log_ratios = self.get_IdealOptimal_anlytical(p_reward_this_block[0])
+            # m_star, p_star, log_ratios = self.get_IdealOptimal_anlytical(p_reward_this_block[0])
+            m_star, p_star = self.get_IdealOptimal_anlytical(p_reward_this_block[0])
             self.rewards_IdealOptimal += p_star * n_trials_this_block
             
             
-            self.log_ratios_IdealOptimal.append(log_ratios)
+            #  self.log_ratios_IdealOptimal.append(log_ratios)
             
             if self.forager in ['IdealOptimal']:
                 # For ideal optimal, given p_0(t) and p_1(t), the optimal choice history is fixed, i.e., {m_star, 1} (p_min > 0)
@@ -250,7 +251,9 @@ class Bandit:
                     c_min_this = np.argwhere(p_reward_this_block[0] == np.min(p_reward_this_block))[-1]
                     c_star_this_block = ([c_max_this] * m_star + [c_min_this]) * S    # Choice pattern of {m_star, 1}
                     c_star_this_block = c_star_this_block[:n_trials_this_block]     # Truncate to the correct length
+                    
                     self.choice_history[0, n_trials_now : n_trials_now + n_trials_this_block] = c_star_this_block  # Save the optimal sequence
+                            
   
             n_trials_now += n_trials_this_block # Next block
         
@@ -261,9 +264,9 @@ class Bandit:
         self.p_reward_ratio = p_reward[RIGHT,:] / p_reward[LEFT,:]   # For future use
         
         # Theoretical matching index of IdealOptimal
-        X = np.array(self.log_ratios_IdealOptimal)[:,0]
-        Y = np.array(self.log_ratios_IdealOptimal)[:,1]
-        self.matching_slope_IdealOptimal_theoretical = ((X*Y).mean() - X.mean()*Y.mean()) / ((X**2).mean() - (X.mean())**2)
+        # X = np.array(self.log_ratios_IdealOptimal)[:,0]
+        # Y = np.array(self.log_ratios_IdealOptimal)[:,1]
+        # self.matching_slope_IdealOptimal_theoretical = ((X*Y).mean() - X.mean()*Y.mean()) / ((X**2).mean() - (X.mean())**2)
 
         # We should make it random afterwards
         np.random.seed()
@@ -279,19 +282,19 @@ class Bandit:
             m_star = np.floor(np.log(1-p_max)/np.log(1-p_min))
             p_star = p_max + (1-(1-p_min)**(m_star + 1)-p_max**2)/(m_star+1)  # Still stands even m_star = *
     
-            # We can even compute the matching index analytically
-            log_c_ratio = np.log(m_star)
-            log_r_ratio = np.log(p_max) + np.log(1+m_star-p_max) - np.log(1-(1-p_min)**(m_star+1))
+            # # We can even compute the matching index analytically
+            # log_c_ratio = np.log(m_star)
+            # log_r_ratio = np.log(((m_star+1)*p_max - p_max**2)/(1-(1-p_min)**(m_star+1)))
             
-            # If p0 > p1, log ratio should be negative according to the definition
-            if p_reward[0] > p_reward[1]:
-                log_ratios = [-log_r_ratio, -log_c_ratio]
-            else:
-                log_ratios = [log_r_ratio, log_c_ratio]
+            # # If p0 > p1, log ratio should be negative according to the definition
+            # if p_reward[0] > p_reward[1]:
+            #     log_ratios = [-log_r_ratio, -log_c_ratio]
+            # else:
+            #     log_ratios = [log_r_ratio, log_c_ratio]
             
-            return int(m_star), p_star, log_ratios
+            return int(m_star), p_star # , log_ratios
         else:
-            return np.inf, p_max, [np.nan, np.nan]
+            return np.inf, p_max # , [np.nan, np.nan]
         
     def choose_ps(self, ps):
         '''
@@ -483,7 +486,6 @@ class Bandit:
             
             # 2. Poisson choice probability = Softmaxed local income (Note: Equivalent to "difference + sigmoid" in [Corrado etal 2005], for 2lp case)
             self.q_estimation[:, self.time] = softmax(local_income, self.softmax_temperature)
-                 
             
         return reward
   
