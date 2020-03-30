@@ -13,9 +13,10 @@
 #           - 3.1: loss_count_threshold = inf --> Always One Side
 #           - 3.2: loss_count_threshold = 1 --> win-stay-lose-switch
 #           - 3.3: loss_count_threshold = 0 --> Always switch
-#       3). 'IdealGreedy': knows p_reward + always chooses the largest one
-#       4). 'IdealOptimal': knows p_reward AND p_hat + always chooses the largest one p_hat ==> {m,1}
-#       5). 'pMatching': to show that pMatching is necessary but not sufficient
+#       3). 'IdealpGreedy': knows p_reward + always chooses the largest one
+#       4). 'IdealpHatGreedy': knows p_reward AND p_hat + always chooses the largest one p_hat ==> {m,1}, analytical
+#       5). 'IdealpHatOptimal': knows p_reward AND p_hat + always chooses the REAL optimal ==> {m,n}, no analytical solution
+#       6). 'pMatching': to show that pMatching is necessary but not sufficient
 #
 #   2. NLP-like foragers
 #       1). 'Sugrue2004':        income  ->   exp filter   ->  fractional                   -> epsilon-Poisson (epsilon = 0 in their paper; I found it essential)
@@ -200,8 +201,8 @@ class Bandit:
         block_size = []  
         p_reward = np.zeros([2,self.n_trials])
         
-        self.rewards_IdealOptimal = 0
-        self.log_ratios_IdealOptimal = []
+        self.rewards_IdealpHatOptimal = 0
+        self.rewards_IdealpHatGreedy = 0
         
         # Fill in trials until the required length
         while n_trials_now < self.n_trials:
@@ -233,26 +234,27 @@ class Bandit:
             p_reward[:, n_trials_now : n_trials_now + n_trials_this_block] = p_reward_this_block.T
             
             # Calculate theoretical upper bound (ideal-p^-optimal) and the (fixed) choice history/matching point of it
-            # m_star, p_star, log_ratios = self.get_IdealOptimal_anlytical(p_reward_this_block[0])
-            m_star, p_star = self.get_IdealOptimal_anlytical(p_reward_this_block[0])
-            self.rewards_IdealOptimal += p_star * n_trials_this_block
+            # Ideal-p^-Optimal
+            mn_star_pHatOptimal, p_star_pHatOptimal = self.get_IdealpHatOptimal_strategy(p_reward_this_block[0])
+            self.rewards_IdealpHatOptimal += p_star_pHatOptimal * n_trials_this_block
+            
+            # Ideal-p^-Greedy
+            mn_star_pHatGreedy, p_star_pHatGreedy = self.get_IdealpHatGreedy_strategy(p_reward_this_block[0])
+            self.rewards_IdealpHatGreedy += p_star_pHatGreedy * n_trials_this_block
             
             
-            #  self.log_ratios_IdealOptimal.append(log_ratios)
-            
-            if self.forager in ['IdealOptimal']:
+            if self.forager in ['IdealpHatOptimal','IdealpHatGreedy']:
+                # Get actual mn_star
+                mn_star = mn_star_pHatOptimal if self.forager == 'IdealpHatOptimal' else mn_star_pHatGreedy
+                
                 # For ideal optimal, given p_0(t) and p_1(t), the optimal choice history is fixed, i.e., {m_star, 1} (p_min > 0)
-                if m_star == np.inf:  # Greedy
-                    c_max_this = np.argwhere(p_reward_this_block[0] == np.max(p_reward_this_block))[0]
-                    self.choice_history[0, n_trials_now : n_trials_now + n_trials_this_block] = c_max_this
-                else:
-                    S = int(np.ceil(n_trials_this_block/(m_star+1)))
-                    c_max_this = np.argwhere(p_reward_this_block[0] == np.max(p_reward_this_block))[0]  # To handle the case of p0 = p1
-                    c_min_this = np.argwhere(p_reward_this_block[0] == np.min(p_reward_this_block))[-1]
-                    c_star_this_block = ([c_max_this] * m_star + [c_min_this]) * S    # Choice pattern of {m_star, 1}
-                    c_star_this_block = c_star_this_block[:n_trials_this_block]     # Truncate to the correct length
-                    
-                    self.choice_history[0, n_trials_now : n_trials_now + n_trials_this_block] = c_star_this_block  # Save the optimal sequence
+                S = int(np.ceil(n_trials_this_block/(mn_star[0] + mn_star[1])))
+                c_max_this = np.argwhere(p_reward_this_block[0] == np.max(p_reward_this_block))[0]  # To handle the case of p0 = p1
+                c_min_this = np.argwhere(p_reward_this_block[0] == np.min(p_reward_this_block))[-1]
+                c_star_this_block = ([c_max_this] * mn_star[0] + [c_min_this] * mn_star[1]) * S    # Choice pattern of {m_star, 1}
+                c_star_this_block = c_star_this_block[:n_trials_this_block]     # Truncate to the correct length
+                
+                self.choice_history[0, n_trials_now : n_trials_now + n_trials_this_block] = c_star_this_block  # Save the optimal sequence
                             
   
             n_trials_now += n_trials_this_block # Next block
@@ -263,17 +265,36 @@ class Bandit:
         self.p_reward_fraction = p_reward[RIGHT,:] / (np.sum(p_reward, axis = 0))   # For future use
         self.p_reward_ratio = p_reward[RIGHT,:] / p_reward[LEFT,:]   # For future use
         
-        # Theoretical matching index of IdealOptimal
-        # X = np.array(self.log_ratios_IdealOptimal)[:,0]
-        # Y = np.array(self.log_ratios_IdealOptimal)[:,1]
-        # self.matching_slope_IdealOptimal_theoretical = ((X*Y).mean() - X.mean()*Y.mean()) / ((X**2).mean() - (X.mean())**2)
-
         # We should make it random afterwards
         np.random.seed()
         
-    def get_IdealOptimal_anlytical(self, p_reward):
+    def get_IdealpHatOptimal_strategy(self, p_reward):
         '''
-        Theoretical upper bound of total rewards collected by the ideal-p^-optimal forager (for 2-arm task)  03/28/2020
+        Theoretical upper bound of total rewards collected by the ideal-p^-optimal forager (for 2-arm task)  03/29/2020
+        Unfortunately, there's no analytical solution to this, has to do a brutal search. Although n_star is likely to always be 1.
+        '''
+        m_max = 100  # Max search range
+        n_max = 10   # We don't need much n_max, actually n should be 1.
+        
+        p1 = np.max(p_reward)
+        p0 = np.min(p_reward)
+        
+        p_star = 0  # Cache of the current best p_star
+        
+        for m in range(1, m_max + 1):
+            for n in range(1, n_max + 1):
+                p_this = (2+(m-1)*p1+(n-1)*p0-(1-p1)**(n+1)-(1-p0)**(m+1))/(m+n)
+                if p_this > p_star:
+                    m_star = m
+                    n_star = n
+                    p_star = p_this
+       
+        return [m_star, n_star], p_star
+        
+
+    def get_IdealpHatGreedy_strategy(self, p_reward):
+        '''
+        Ideal-p^-greedy, only care about the current p^, which is good enough (for 2-arm task)  03/28/2020
         '''
         p_max = np.max(p_reward)
         p_min = np.min(p_reward)
@@ -282,19 +303,9 @@ class Bandit:
             m_star = np.floor(np.log(1-p_max)/np.log(1-p_min))
             p_star = p_max + (1-(1-p_min)**(m_star + 1)-p_max**2)/(m_star+1)  # Still stands even m_star = *
     
-            # # We can even compute the matching index analytically
-            # log_c_ratio = np.log(m_star)
-            # log_r_ratio = np.log(((m_star+1)*p_max - p_max**2)/(1-(1-p_min)**(m_star+1)))
-            
-            # # If p0 > p1, log ratio should be negative according to the definition
-            # if p_reward[0] > p_reward[1]:
-            #     log_ratios = [-log_r_ratio, -log_c_ratio]
-            # else:
-            #     log_ratios = [log_r_ratio, log_c_ratio]
-            
-            return int(m_star), p_star # , log_ratios
+            return [int(m_star),1], p_star
         else:
-            return np.inf, p_max # , [np.nan, np.nan]
+            return [self.n_trials,1], p_max   # Safe to be always on p_max side for this block
         
     def choose_ps(self, ps):
         '''
@@ -314,9 +325,10 @@ class Bandit:
         #           - 3.1: loss_count_threshold = inf --> Always One Side
         #           - 3.2: loss_count_threshold = 1 --> win-stay-lose-switch
         #           - 3.3: loss_count_threshold = 0 --> Always switch
-        #       3). 'IdealGreedy': knows p_reward and always chooses the largest one
-        #       4). 'IdealOptimal': knows p_reward AND p_hat + always chooses the largest one p_hat ==> {m,1}
-        #       5). 'pMatching': to show that pMatching is necessary but not sufficient
+        #       3). 'IdealpGreedy': knows p_reward + always chooses the largest one
+        #       4). 'IdealpHatGreedy': knows p_reward AND p_hat + always chooses the largest one p_hat ==> {m,1}, analytical
+        #       5). 'IdealpHatOptimal': knows p_reward AND p_hat + always chooses the REAL optimal ==> {m,n}, no analytical solution
+        #       6). 'pMatching': to show that pMatching is necessary but not sufficient
         #
         #   2. NLP-like foragers
         #       1). 'Sugrue2004':        income  ->   exp filter   ->  fractional                   -> epsilon-Poisson (epsilon = 0 in their paper; I found it essential)
@@ -334,7 +346,7 @@ class Bandit:
         elif self.forager == 'AlwaysLEFT':
             choice = LEFT
             
-        elif self.forager == 'IdealOptimal':   # Ideal-p^-optimal
+        elif self.forager in ['IdealpHatOptimal','IdealpHatGreedy']:   # Ideal-p^-optimal
             choice = self.choice_history[0, self.time]  # Already saved in the optimal sequence
             
         elif self.forager == 'pMatching':  # Probability matching of base probabilities p
@@ -358,7 +370,7 @@ class Bandit:
                     # Stay
                     choice = last_choice
             
-        elif self.forager == 'IdealGreedy':
+        elif self.forager == 'IdealpGreedy':
             choice = np.random.choice(np.where(self.p_reward[:,self.time] == self.p_reward[:,self.time].max())[0])
                 
         else:
@@ -408,7 +420,10 @@ class Bandit:
         #           - 3.1: loss_count_threshold = inf --> Always One Side
         #           - 3.2: loss_count_threshold = 1 --> win-stay-lose-switch
         #           - 3.3: loss_count_threshold = 0 --> Always switch
-        #       3). 'IdealGreedy': knows p_reward and always chooses the largest one
+        #       3). 'IdealpGreedy': knows p_reward + always chooses the largest one
+        #       4). 'IdealpHatGreedy': knows p_reward AND p_hat + always chooses the largest one p_hat ==> {m,1}, analytical
+        #       5). 'IdealpHatOptimal': knows p_reward AND p_hat + always chooses the REAL optimal ==> {m,n}, no analytical solution
+        #       6). 'pMatching': to show that pMatching is necessary but not sufficient
         #
         #   2. NLP-like foragers
         #       1). 'Sugrue2004':        income  ->   exp filter   ->  fractional                   -> epsilon-Poisson (epsilon = 0 in their paper; I found it essential)

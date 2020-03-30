@@ -16,8 +16,6 @@ plt.rcParams.update({'font.size': 13})
 LEFT = 0
 RIGHT = 1
 
-smooth_factor = 5
-
 # matplotlib.use('Agg')  # Agg -> non-GUI backend. HH
 # matplotlib.use('qt5agg')  # We can see the figure by qt5. HH
 
@@ -46,6 +44,11 @@ def get_baseline(if_baited, p_reward_sum, p_reward_pairs):
         
 
 def plot_one_session(bandit, fig, plottype='2lickport'):
+    
+    if bandit.forager in ['IdealpHatOptimal', 'IdealpHatGreedy']:
+        smooth_factor = 1
+    else:
+        smooth_factor = 5
     
     # == Fetch data ==
     n_trials = bandit.n_trials
@@ -77,7 +80,7 @@ def plot_one_session(bandit, fig, plottype='2lickport'):
     if bandit.forager in ['LossCounting']:
         ax.plot(bandit.loss_count[0,:] / 10, color='Blue', label = 'loss count')
         
-    elif bandit.forager not in ['Random', 'IdealOpotimal', 'pMatching', 'AlwaysLEFT', 'IdealGreedy', 'SuttonBartoRLBook']:
+    elif bandit.forager not in ['Random', 'IdealpHatOptimal', 'IdealpHatGreedy', 'pMatching', 'AlwaysLEFT', 'IdealpGreedy', 'SuttonBartoRLBook']:
         ax.plot(moving_average(bandit.q_estimation[RIGHT,:], 1), color='Green', label = 'choice prob.')
         
     # Smoothed choice history
@@ -460,17 +463,18 @@ def plot_model_compet(model_compet_results, model_compet_settings, n_reps, basel
     
     # Theoretical upper bound
     plt.plot([0,1],[1,1],'k--')
-    plt.text(0, 1, '100% = theoretical <r*>', color = 'k')
+    plt.text(0, 1, '100% = IdealpHatOptimal (theor.)', color = 'k')
  
     # Baseline foragers
-    markers = ['*','s','^','X']
-    sizes = [20,10,13,13]
+    # baseline_models = ['IdealpHatOptimal','IdealpHatGreedy','pMatching','IdealpGreedy','Random']
+    markers = ['*','*','s','^','X']
+    sizes = [20,15,10,13,13]
 
     for bm_name, bm_eff, bm_ms, bm_marker, bm_size in zip(baselines[0],baselines[1],baselines[2],markers,sizes):
-        if bm_name in ['Random','IdealOptimal']:
+        if bm_name in ['Random','IdealpHatOptimal']:
             plt.fill_between([0,1], bm_eff[0] - bm_eff[1], bm_eff[0] + bm_eff[1], color = 'k', alpha = 0.2)
 
-        plt.plot(bm_ms[0], bm_eff[0], bm_marker, color = 'grey', markersize=bm_size, label = '%s' % bm_name, zorder=-32)
+        plt.plot(bm_ms[0], bm_eff[0], bm_marker, color = 'grey', markeredgecolor = 'k', markersize=bm_size, label = '%s' % bm_name, zorder=-32)
         plt.errorbar(bm_ms[0], bm_eff[0], xerr = bm_ms[1], yerr = bm_eff[1], color = 'k')
         
     # Add a theoretical matching index for IdealOptimal
@@ -479,7 +483,7 @@ def plot_model_compet(model_compet_results, model_compet_settings, n_reps, basel
     # plt.text(ms_IO_analytical, 0, 'theoretical matching index of IdealOptimal', rotation = 90)
        
     # ax.set_yticks([0,0.5,1])
-    plt.xlim([-0.02,1.02])
+    # plt.xlim([-0.02,1.02])
     # plt.ylim([0,1.2])
     ax.legend(fontsize = 10, loc = "lower right")
     

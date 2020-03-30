@@ -23,7 +23,7 @@ from foraging_testbed_plots import plot_all_reps, plot_para_scan, plot_model_com
 
 methods = [ 
             # 'serial',
-            'apply_async'     # Use multiprocessing.apply_async() for parallel computing (8~10x speed-up in my 8/16 I9-9900k)
+            'apply_async'     # Use multiproce ssing.apply_async() for parallel computing (8~10x speed-up in my 8/16 I9-9900k)
           ]
 
 LEFT = 0
@@ -60,7 +60,8 @@ def run_one_session(bandit, para_scan = False, para_optim = False):
     # bandit.maximum_rewards = np.sum(np.sum(bandit.reward_available, axis = 0))
     
     ''' Use ideal-p^-optimal'''
-    bandit.maximum_rewards = bandit.rewards_IdealOptimal
+    # bandit.maximum_rewards = bandit.rewards_IdealpHatGreedy
+    bandit.maximum_rewards = bandit.rewards_IdealpHatOptimal
 
     bandit.foraging_efficiency = bandit.actual_rewards / bandit.maximum_rewards
     
@@ -276,7 +277,7 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
             c_fraction = blockwise_stats_this_bandit[0,:]
             inc_fraction = blockwise_stats_this_bandit[1,:]
             
-            if bandit[0].forager not in ['AlwaysLEFT','IdealGreedy'] and np.sum(~np.isnan(inc_log_ratio)) > 10:  # Use log_ratio
+            if bandit[0].forager not in ['AlwaysLEFT','IdealpGreedy'] and np.sum(~np.isnan(inc_log_ratio)) > 10:  # Use log_ratio
                 x = inc_log_ratio[~np.isnan(inc_log_ratio)]
                 y = c_log_ratio[~np.isnan(c_log_ratio)]
                 
@@ -498,7 +499,7 @@ def model_compet(model_compet_settings, n_reps = 200, pool = '', if_baited = Tru
         model_compet_results.append(np.vstack((fe_mean, fe_CI95, ms_mean, ms_CI95)))
         
     # Run baseline models: random, ideal_greedy, and ideal-p^-optimal
-    baseline_models = ['IdealOptimal','pMatching','IdealGreedy','Random']
+    baseline_models = ['IdealpHatOptimal','IdealpHatGreedy','pMatching','IdealpGreedy','Random']
     baseline_eff = []
     baseline_ms = []
     
@@ -565,7 +566,7 @@ def sandro():
                             },
 
     # Run baseline models: random, ideal_greedy, and ideal-p^-optimal
-    baseline_models = ['IdealOptimal','pMatching','IdealGreedy','Random']
+    baseline_models = ['IdealpHatOptimal','IdealpHatGreedy','pMatching','IdealpGreedy','Random']
     baseline_eff = []
     baseline_ms = []
     
@@ -598,11 +599,11 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     #     Play with the model manually
     # =============================================================================
     
-    # 'Random', 'AlwaysLEFT', 'IdealGreedy'; 'SuttonBartoRLBook', 'Sugrue2004', 'Corrado2005', 'Iigaya2019', 'Bari2019', 'Hattori2019'
+    # 'Random', 'AlwaysLEFT', 'IdealpGreedy'; 'SuttonBartoRLBook', 'Sugrue2004', 'Corrado2005', 'Iigaya2019', 'Bari2019', 'Hattori2019'
     
     # bandit = Bandit('Random', n_trials = global_n_trials)   
     # bandit = Bandit('AlwaysLEFT', n_trials = global_n_trials)
-    # bandit = Bandit('IdealGreedy', n_trials = global_n_trials)
+    # bandit = Bandit('IdealpGreedy', n_trials = global_n_trials)
     
     # bandit = Bandit('LossCounting', loss_count_threshold_mean = 3, loss_count_threshold_std = 0)   # Loss counting
     # bandit = Bandit('LossCounting', loss_count_threshold_mean = 1, loss_count_threshold_std = 0)   # Win-stay-loss-shift
@@ -748,18 +749,18 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # =============================================================================
                 
     model_compet_settings = [
-       {'forager': 'LossCounting', 
-         'para_to_scan': {'loss_count_threshold_mean': np.hstack([0.31005873, 0,np.power(2,np.linspace(0,6,10)), np.inf])}, 
-         'para_to_fix': {'loss_count_threshold_std':  0.08627981}}, 
-       {'forager': 'Corrado2005', 
-         'para_to_scan': {'softmax_temperature': np.hstack([0.24750, np.power(10, np.linspace(-4,0,10))])}, 
-         'para_to_fix':  {'taus':  [4.16259724e+00, 3.61409637e+01], 'w_taus': [1-1.71017422e-02, 1.71017422e-02]}},
-       {'forager': 'Bari2019', 
-         'para_to_scan': {'softmax_temperature': np.hstack([0.22852593, np.power(10, np.linspace(-1.5,0,10))])}, 
-         'para_to_fix':  {'step_sizes': 0.40388374, 'forget_rate': 0.19951699}},
+       # {'forager': 'LossCounting', 
+       #   'para_to_scan': {'loss_count_threshold_mean': np.hstack([0.31005873, 0,np.power(2,np.linspace(0,6,10)), np.inf])}, 
+       #   'para_to_fix': {'loss_count_threshold_std':  0.08627981}}, 
+       # {'forager': 'Corrado2005', 
+       #   'para_to_scan': {'softmax_temperature': np.hstack([0.24750, np.power(10, np.linspace(-4,0,10))])}, 
+       #   'para_to_fix':  {'taus':  [4.16259724e+00, 3.61409637e+01], 'w_taus': [1-1.71017422e-02, 1.71017422e-02]}},
+       # {'forager': 'Bari2019', 
+       #   'para_to_scan': {'softmax_temperature': np.hstack([0.22852593, np.power(10, np.linspace(-1.5,0,10))])}, 
+       #   'para_to_fix':  {'step_sizes': 0.40388374, 'forget_rate': 0.19951699}},
       ]
 
-    model_compet(model_compet_settings, n_reps = 200, if_baited = True, p_reward_sum = 0.8, pool = pool) 
+    model_compet(model_compet_settings, n_reps = 200, if_baited = True, pool = pool) 
 
     # bandit = Bandit(forager = 'Corrado2005', taus = [3, 15], w_taus = [0.7, 0.3], softmax_temperature = 0.001, epsilon = 0, n_trials = global_n_trials) 
     # run_sessions_parallel(bandit, n_reps = 100, pool = pool)
