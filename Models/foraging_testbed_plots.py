@@ -430,7 +430,7 @@ def plot_model_compet(model_compet_results, model_compet_settings, n_reps, basel
     ax = fig.add_subplot(gs[0,0])
     
     # Let's fix the color coding
-    colors = {'LossCounting':'C0', 'Sugrue2004':'C1', 'Corrado2005':'C2', 'Bari2019':'C3', 'Hattori2019':'C4'}
+    colors = {'LossCounting':'C0', 'Sugrue2004':'C1', 'Corrado2005':'C2', 'Bari2019':'C3', 'Hattori2019':'C4', 'AmB1':'grey'}
         
     for this_result, this_setting in zip(model_compet_results, model_compet_settings):
     
@@ -447,7 +447,7 @@ def plot_model_compet(model_compet_results, model_compet_settings, n_reps, basel
         plt.errorbar(matching_slope_mean[order], fe_mean[order], xerr = matching_slope_CI95[order], yerr = fe_CI95[order], 
                          label = '%s (%s)' % (forager, para_name), color = colors[forager])
         
-        if forager == 'LossCounting':  # Reverse the order such that larger dot represents more exploration
+        if forager in ['LossCounting','AmB1']:  # Reverse the order such that larger dot represents more exploration
             sizes = np.linspace(10,1,len(order))**2
         else:
             sizes = np.linspace(1,10,len(order))**2
@@ -455,7 +455,8 @@ def plot_model_compet(model_compet_results, model_compet_settings, n_reps, basel
         plt.scatter(matching_slope_mean[order], fe_mean[order], s = sizes, color = colors[forager])
 
         # Optimal value
-        plt.plot(matching_slope_mean[0], fe_mean[0], '*', markersize = 27, color = colors[forager])
+        if forager not in ['AmB1']:
+            plt.plot(matching_slope_mean[0], fe_mean[0], '*', markersize = 27, color = colors[forager])
         
         plt.xlabel('Matching slope')
         plt.ylabel('Foraging efficiency')

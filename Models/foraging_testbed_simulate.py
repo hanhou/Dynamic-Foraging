@@ -621,6 +621,7 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
  
     # bandit = Bandit(forager = 'IdealOptimal')
     # bandit = Bandit(forager = 'pMatching')
+    # bandit = Bandit(forager = 'AmB1', m_AmB1=5)
     # run_sessions_parallel(bandit, n_reps = 200, pool = pool)
 
     #%% =============================================================================
@@ -749,18 +750,21 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # =============================================================================
                 
     model_compet_settings = [
-       # {'forager': 'LossCounting', 
-       #   'para_to_scan': {'loss_count_threshold_mean': np.hstack([0.31005873, 0,np.power(2,np.linspace(0,6,10)), np.inf])}, 
-       #   'para_to_fix': {'loss_count_threshold_std':  0.08627981}}, 
-       # {'forager': 'Corrado2005', 
-       #   'para_to_scan': {'softmax_temperature': np.hstack([0.24750, np.power(10, np.linspace(-4,0,10))])}, 
-       #   'para_to_fix':  {'taus':  [4.16259724e+00, 3.61409637e+01], 'w_taus': [1-1.71017422e-02, 1.71017422e-02]}},
-       # {'forager': 'Bari2019', 
-       #   'para_to_scan': {'softmax_temperature': np.hstack([0.22852593, np.power(10, np.linspace(-1.5,0,10))])}, 
-       #   'para_to_fix':  {'step_sizes': 0.40388374, 'forget_rate': 0.19951699}},
-      ]
+        {'forager': 'LossCounting', 
+          'para_to_scan': {'loss_count_threshold_mean': np.hstack([0.31005873, 0,np.power(2,np.linspace(0,6,10)), np.inf])}, 
+          'para_to_fix': {'loss_count_threshold_std':  0.08627981}}, 
+        # {'forager': 'Corrado2005', 
+        #   'para_to_scan': {'softmax_temperature': np.hstack([0.24750, np.power(10, np.linspace(-4,0,10))])}, 
+        #   'para_to_fix':  {'taus':  [4.16259724e+00, 3.61409637e+01], 'w_taus': [1-1.71017422e-02, 1.71017422e-02]}},
+        # {'forager': 'Bari2019', 
+        #   'para_to_scan': {'softmax_temperature': np.hstack([0.22852593, np.power(10, np.linspace(-1.5,0,10))])}, 
+        #   'para_to_fix':  {'step_sizes': 0.40388374, 'forget_rate': 0.19951699}},
+        {'forager': 'AmB1',
+          'para_to_scan': {'m_AmB1': np.r_[1:20]},
+          'para_to_fix':{}},
+       ]
 
-    model_compet(model_compet_settings, n_reps = 200, if_baited = True, pool = pool) 
+    model_compet(model_compet_settings, n_reps = 10, if_baited = True, pool = pool) 
 
     # bandit = Bandit(forager = 'Corrado2005', taus = [3, 15], w_taus = [0.7, 0.3], softmax_temperature = 0.001, epsilon = 0, n_trials = global_n_trials) 
     # run_sessions_parallel(bandit, n_reps = 100, pool = pool)

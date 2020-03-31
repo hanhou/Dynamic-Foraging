@@ -16,7 +16,8 @@
 #       3). 'IdealpGreedy': knows p_reward + always chooses the largest one
 #       4). 'IdealpHatGreedy': knows p_reward AND p_hat + always chooses the largest one p_hat ==> {m,1}, analytical
 #       5). 'IdealpHatOptimal': knows p_reward AND p_hat + always chooses the REAL optimal ==> {m,n}, no analytical solution
-#       6). 'pMatching': to show that pMatching is necessary but not sufficient
+#       6). 'AmB1': repeat the pattern AMB1, e.g., if m = 4, AAAABAAAAB, across all session
+#       7). 'pMatching': to show that pMatching is necessary but not sufficient
 #
 #   2. NLP-like foragers
 #       1). 'Sugrue2004':        income  ->   exp filter   ->  fractional                   -> epsilon-Poisson (epsilon = 0 in their paper; I found it essential)
@@ -96,7 +97,9 @@ class Bandit:
                  
                  p_reward_seed_override = '',  # If true, use the same random seed for generating p_reward!!
                  p_reward_sum = 0.45,   # Gain of reward. Default = 0.45
-                 p_reward_pairs = None  # Full control of reward prob
+                 p_reward_pairs = None,  # Full control of reward prob
+                 
+                 m_AmB1 = 1,  # For choice pattern {AmB1}
                  ):     
 
         self.forager = forager
@@ -111,7 +114,7 @@ class Bandit:
         self.p_reward_seed_override = p_reward_seed_override
         self.p_reward_sum = p_reward_sum
         self.p_reward_pairs = p_reward_pairs
-        
+        self.m_AmB1 = m_AmB1
             
         if forager == 'Sugrue2004':
             self.taus = [taus]
@@ -233,31 +236,11 @@ class Bandit:
             # Fill in trials for this block
             p_reward[:, n_trials_now : n_trials_now + n_trials_this_block] = p_reward_this_block.T
             
-            # Calculate theoretical upper bound (ideal-p^-optimal) and the (fixed) choice history/matching point of it
-            # Ideal-p^-Optimal
-            mn_star_pHatOptimal, p_star_pHatOptimal = self.get_IdealpHatOptimal_strategy(p_reward_this_block[0])
-            self.rewards_IdealpHatOptimal += p_star_pHatOptimal * n_trials_this_block
-            
-            # Ideal-p^-Greedy
-            mn_star_pHatGreedy, p_star_pHatGreedy = self.get_IdealpHatGreedy_strategy(p_reward_this_block[0])
-            self.rewards_IdealpHatGreedy += p_star_pHatGreedy * n_trials_this_block
-            
-            
-            if self.forager in ['IdealpHatOptimal','IdealpHatGreedy']:
-                # Get actual mn_star
-                mn_star = mn_star_pHatOptimal if self.forager == 'IdealpHatOptimal' else mn_star_pHatGreedy
-                
-                # For ideal optimal, given p_0(t) and p_1(t), the optimal choice history is fixed, i.e., {m_star, 1} (p_min > 0)
-                S = int(np.ceil(n_trials_this_block/(mn_star[0] + mn_star[1])))
-                c_max_this = np.argwhere(p_reward_this_block[0] == np.max(p_reward_this_block))[0]  # To handle the case of p0 = p1
-                c_min_this = np.argwhere(p_reward_this_block[0] == np.min(p_reward_this_block))[-1]
-                c_star_this_block = ([c_max_this] * mn_star[0] + [c_min_this] * mn_star[1]) * S    # Choice pattern of {m_star, 1}
-                c_star_this_block = c_star_this_block[:n_trials_this_block]     # Truncate to the correct length
-                
-                self.choice_history[0, n_trials_now : n_trials_now + n_trials_this_block] = c_star_this_block  # Save the optimal sequence
+            # Fill choice history for some special foragers with choice patterns {AmBn} (including IdealpHatOptimal, IdealpHatGreedy, and AmB1)
+            self.get_AmBn_choice_history(p_reward_this_block, n_trials_this_block, n_trials_now)
                             
-  
-            n_trials_now += n_trials_this_block # Next block
+            # Next block
+            n_trials_now += n_trials_this_block 
         
         self.n_blocks = len(block_size)
         self.p_reward = p_reward
@@ -267,6 +250,36 @@ class Bandit:
         
         # We should make it random afterwards
         np.random.seed()
+        
+        
+    def get_AmBn_choice_history(self, p_reward_this_block, n_trials_this_block, n_trials_now):
+        
+        # Calculate theoretical upper bound (ideal-p^-optimal) and the (fixed) choice history/matching point of it
+        # Ideal-p^-Optimal
+        mn_star_pHatOptimal, p_star_pHatOptimal = self.get_IdealpHatOptimal_strategy(p_reward_this_block[0])
+        self.rewards_IdealpHatOptimal += p_star_pHatOptimal * n_trials_this_block
+        
+        # Ideal-p^-Greedy
+        mn_star_pHatGreedy, p_star_pHatGreedy = self.get_IdealpHatGreedy_strategy(p_reward_this_block[0])
+        self.rewards_IdealpHatGreedy += p_star_pHatGreedy * n_trials_this_block
+        
+        if self.forager in ['IdealpHatOptimal','IdealpHatGreedy','AmB1']:
+            # Get actual {m,n}
+            if self.forager == 'IdealpHatOptimal':
+                mn_star = mn_star_pHatOptimal
+            elif self.forager == 'IdealpHatGreedy':
+                mn_star = mn_star_pHatGreedy
+            elif self.forager == 'AmB1':
+                mn_star = [self.m_AmB1, 1]
+            
+            # For ideal optimal, given p_0(t) and p_1(t), the optimal choice history is fixed, i.e., {m_star, 1} (p_min > 0)
+            S = int(np.ceil(n_trials_this_block/(mn_star[0] + mn_star[1])))
+            c_max_this = np.argwhere(p_reward_this_block[0] == np.max(p_reward_this_block))[0]  # To handle the case of p0 = p1
+            c_min_this = np.argwhere(p_reward_this_block[0] == np.min(p_reward_this_block))[-1]
+            c_star_this_block = ([c_max_this] * mn_star[0] + [c_min_this] * mn_star[1]) * S    # Choice pattern of {m_star, 1}
+            c_star_this_block = c_star_this_block[:n_trials_this_block]     # Truncate to the correct length
+            
+            self.choice_history[0, n_trials_now : n_trials_now + n_trials_this_block] = c_star_this_block  # Save the optimal sequence
         
     def get_IdealpHatOptimal_strategy(self, p_reward):
         '''
@@ -346,7 +359,7 @@ class Bandit:
         elif self.forager == 'AlwaysLEFT':
             choice = LEFT
             
-        elif self.forager in ['IdealpHatOptimal','IdealpHatGreedy']:   # Ideal-p^-optimal
+        elif self.forager in ['IdealpHatOptimal','IdealpHatGreedy','AmB1']:   # Foragers that have the pattern {AmBn}
             choice = self.choice_history[0, self.time]  # Already saved in the optimal sequence
             
         elif self.forager == 'pMatching':  # Probability matching of base probabilities p
