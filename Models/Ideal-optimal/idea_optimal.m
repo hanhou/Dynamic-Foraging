@@ -100,28 +100,18 @@ for i = 1:length(n_star_larger_than_one)
                                                             m_star(n_star_larger_than_one(i)), n_star(n_star_larger_than_one(i)));
 end
 
-%% Test Lagrange
-% p0 = 0.1;
-% p1 = 0.7;
-% m_star_greedy = floor(log(1-p1)./log(1-p0))
-% [m_star_, n_star, ~] = m_star_optimal(p0,p1)
-% mm = 1:50;
-% nn = 50-mm;
-% plot(mm, p1-log(1-p0)*(1-p0).^(mm+1),'o-'); hold on
-% plot(mm, p0-log(1-p1)*(1-p1).^(nn+1),'o-');
 
+%% m* and m*greedy
+% Run after the last session
 
-%%
 m_star_greedy = floor(log(1-pp1)./log(1-pp0)); % Ideal-pHat-greedy
 p_star_greedy = (2+(m_star_greedy-1).*pp1-(1-pp1).^(1+1)-(1-pp0).^(m_star_greedy+1))./(m_star_greedy+1);
 % (1-(1-pp0).^(m_star_greedy+1)-pp1.^2)./(m_star_greedy+1) + pp1;
 %((m_star_greedy-1).*pp1 + 1-(1-pp0).^(m_star_greedy+1) + 1-(1-pp1).^2)./(m_star_greedy + 1);
   %(1-(1-pp0).^(m_star_greedy+1)-pp1.^2)./(m_star_greedy+1) + pp1;
 
-
-
-figure(1); clf; set(gcf,'uni','norm','pos',[0.118       0.297       0.748       0.433]);
-subplot(1,3,1)
+figure(1); clf; set(gcf,'uni','norm','pos',[0.33       0.081       0.506       0.734]);
+subplot(2,2,1)
 [c,h] = contourf (pp0, pp1, m_star,[0, 1, 2, 3, 2.^(2:6), 100], 'linecolor','k');
 clabel(c,h,'fontsize',15)
         
@@ -133,9 +123,24 @@ axis square
 SetFigure(15)
 plot_bari()
 set(findall(gcf,'type','axes'),'ytick',get(gca,'xtick'))
-title('m*_{IdealpHatOptimal}')
+title('m*_{optimal}')
 
-subplot(1,3,2)
+subplot(2,2,2)
+[c,h] = contourf (pp0, pp1, m_star_greedy,[0, 1, 2, 3, 2.^(2:6), 100], 'linecolor','k');
+clabel(c,h,'fontsize',15)
+        
+colormap('cool')
+colorbar
+xlabel('p_0')
+ylabel('p_1')
+axis square
+SetFigure(15)
+plot_bari()
+set(findall(gcf,'type','axes'),'ytick',get(gca,'xtick'))
+title('m*_{greedy}')
+
+
+subplot(2,2,3)
 pcolor_with_contour(pp0, pp1, abs(m_star-m_star_greedy), gca, [0:5:20,100]); caxis([0,20])
 % [c,h] = contourf(pp0, pp1, m_star-m_approx,[0:20,100], 'linecolor','k');
 % clabel(c,h,'fontsize',15)
@@ -148,9 +153,9 @@ axis square
 SetFigure(15)
 plot_bari()
 set(findall(gcf,'type','axes'),'ytick',get(gca,'xtick'))
-title('m*_{IdealpHatOptimal} - m*_{IdealpHatGreedy}')
+title('m*_{optimal} - m*_{greedy}')
 
-subplot(1,3,3)
+subplot(2,2,4)
 pcolor_with_contour(pp0, pp1, p_star_greedy./p_star, gca,[min(min(p_star_greedy./p_star)),1]); caxis([min(min(p_star_greedy./p_star)),1])
 % [c,h] = contourf(pp0, pp1, m_star-m_approx,[0:20,100], 'linecolor','k');
 % clabel(c,h,'fontsize',15)
@@ -163,7 +168,7 @@ axis square
 SetFigure(15)
 plot_bari()
 set(findall(gcf,'type','axes'),'ytick',get(gca,'xtick'))
-title('<p*_{IdealpHatGreedy}>/<p*_{IdealpHatOptimal}> ')
+title('<r_{greedy}>/<r_{optimal}> ')
 
 
 
@@ -210,19 +215,19 @@ set(findall(gcf,'type','axes'),'ytick',get(gca,'xtick'))
 
 
 %% Matching slope and prob_matching_index
-%{
-% m = floor(log(1-pp1)./log(1-pp0));
-[m_star, n_star, p_star]  = m_star_optimal(pp0,pp1);
+% %{
+m_star = floor(log(1-pp1)./log(1-pp0));
+% [m_star, n_star, p_star]  = m_star_optimal(pp0,pp1);
 
 
-log_c_ratio = log(m_star);
-log_r_ratio = log(((m_star+1).*pp1 - pp1.^2)./(1-(1-pp0).^(m_star+1)));
+log_c_ratio = (m_star);
+log_r_ratio = (((m_star+1).*pp1 - pp1.^2)./(1-(1-pp0).^(m_star+1)));
 
 frac_c_ratio = m_star./(m_star+1); 
 frac_r_ratio = ((m_star+1).*pp1 - pp1.^2)./(1-(1-pp0).^(m_star+1)+(m_star+1).*pp1 - pp1.^2);
 
-% matching_slope = log_c_ratio./log_r_ratio;
-matching_slope = frac_c_ratio./frac_r_ratio;
+matching_slope = log_c_ratio./log_r_ratio;
+% matching_slope = frac_c_ratio./frac_r_ratio;
 % matching_slope(log_c_ratio == 0) = 1;
 
 figure(3); clf;
