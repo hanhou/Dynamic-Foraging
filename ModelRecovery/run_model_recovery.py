@@ -36,7 +36,7 @@ def fit_para_recovery(forager, para_names, para_bounds, n_models = 10, true_para
             true_paras[:,n] = true_paras_this
             
         # Generate fake data
-        choice_history, reward_history = generate_fake_data(forager, para_names, true_paras[:,n], **kargs)
+        choice_history, reward_history = generate_fake_data(forager, para_names, true_paras[:,n], **{'n_trials': n_trials,**kargs})
             
         # Predictive fitting
         fitting_result = fit_bandit(forager, para_names, para_bounds, choice_history, reward_history, fit_method = fit_method, n_x0s = n_x0s, pool = pool)
@@ -143,39 +143,39 @@ if __name__ == '__main__':
     # - Local optimizer (`L-BFGS-B`, `SLSQP`, `TNC`, `trust-constr`): random initialization in parallel
     # - Speed: L-BFGS-B = SLSQP  >> TNC >>> trust-constr
     
-    # --- Use async to run multiple initializations ---
+    #%% --- Use async to run multiple initializations ---
    
     n_worker = int(mp.cpu_count()/2)
     pool = mp.Pool(processes = n_worker)
     
-    n_trials = 1000
+    n_trials = 100
     
-    forager = 'LossCounting'
-    para_names = ['loss_count_threshold_mean','loss_count_threshold_std']
-    para_bounds = [[0,0],[50,10]]
-    
-    # Para recovery
-    # true_paras = generate_true_paras([[0,0],[30,5]], n_models = [5,5], method = 'linspace')
-    
-    # true_paras, fitted_para = fit_para_recovery(forager = forager, 
-    #               para_names = para_names, para_bounds = para_bounds, 
-    #               true_paras = true_paras, n_trials = n_trials, 
-    #               fit_method = 'DE', n_x0s = 1, pool = pool);    
-    
-    n_trials = 1000
-
     forager = 'LossCounting'
     para_names = ['loss_count_threshold_mean','loss_count_threshold_std']
     para_bounds = [[0,0],[50,10]]
     
     # Para recovery
     true_paras = generate_true_paras([[0,0],[30,5]], n_models = [5,5], method = 'linspace')
-    fit_para_recovery(forager = forager, 
-                      para_names = para_names, para_bounds = para_bounds, 
-                      true_paras = true_paras, n_trials = n_trials, 
-                      fit_method = 'L-BFGS-B', n_x0s = 1, pool = '');    
     
-    # LL_surface
+    true_paras, fitted_para = fit_para_recovery(forager = forager, 
+                  para_names = para_names, para_bounds = para_bounds, 
+                  true_paras = true_paras, n_trials = n_trials, 
+                  fit_method = 'DE', n_x0s = 1, pool = pool);    
+    
+    # n_trials = 1000
+
+    # forager = 'LossCounting'
+    # para_names = ['loss_count_threshold_mean','loss_count_threshold_std']
+    # para_bounds = [[0,0],[50,10]]
+    
+    # # Para recovery
+    # true_paras = generate_true_paras([[0,0],[30,5]], n_models = [5,5], method = 'linspace')
+    # fit_para_recovery(forager = forager, 
+    #                   para_names = para_names, para_bounds = para_bounds, 
+    #                   true_paras = true_paras, n_trials = n_trials, 
+    #                   fit_method = 'L-BFGS-B', n_x0s = 1, pool = '');    
+    
+    #%% LL_surface
     # compute_LL_surface(forager, para_names, para_bounds, n_grid = [20,20], true_para = [10,3], n_trials = n_trials, 
     #                     fit_method = 'DE', pool = pool)
     
