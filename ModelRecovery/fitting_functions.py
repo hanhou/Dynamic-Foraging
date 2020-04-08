@@ -7,7 +7,7 @@ Created on Thu Mar 19 16:30:26 2020
 import numpy as np
 import scipy.optimize as optimize
 import multiprocessing as mp
-from tqdm import tqdm  # For progress bar. HH
+# from tqdm import tqdm  # For progress bar. HH
 
 from models import BanditModels
 global fit_history
@@ -18,6 +18,14 @@ def negLL_func(fit_value, *argss):
     '''
     # Arguments interpretation
     forager, fit_names, choice_history, reward_history = argss
+    
+    # Put constraint hack here!!
+    if 'tau2' in fit_names:
+        tau1_ind = fit_names.index('tau1')
+        tau2_ind = fit_names.index('tau2')
+        
+        if fit_value[tau1_ind] > fit_value[tau2_ind]:
+            return np.inf
     
     kwargs_all = {'forager': forager}
     for (nn, vv) in zip(fit_names, fit_value):
@@ -45,6 +53,7 @@ def callback_history(x, **kargs):
     
     return
 
+
 def fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history, fit_method, callback):
     '''
     For local optimizers, fit using ONE certain initial condition    
@@ -69,13 +78,13 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, i
         global fit_history
         fit_history = []
         fit_histories = []  # All histories for different initializations
-    
+        
     if fit_method == 'DE':
         
         # Use DE's own parallel method
         fitting_result = optimize.differential_evolution(func = negLL_func, args = (forager, fit_names, choice_history, reward_history),
                                                          bounds = optimize.Bounds(fit_bounds[0], fit_bounds[1]), 
-                                                         mutation=(0.5, 1), recombination = 0.7, popsize = 16, strategy = 'best1bin', 
+                                                         mutation=(0.5, 1), recombination = 0.7, popsize = 32, strategy = 'best1bin', 
                                                          disp = False, 
                                                          workers = 1 if pool == '' else int(mp.cpu_count()),   # For DE, use pool to control if_parallel, although we don't use pool for DE
                                                          updating = 'immediate' if pool == '' else 'deferred',
@@ -108,7 +117,7 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, i
                 # We can have multiple histories only in serial mode
                 if if_history: fit_history = []  # Clear this history
                 
-                result = fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history, fit_method, 
+                result = fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history, fit_method,
                                        callback = callback_history if if_history else None)
                 
                 fitting_parallel_results.append(result)

@@ -12,38 +12,54 @@ from matplotlib.gridspec import GridSpec
 from matplotlib.pyplot import cm
 
 # matplotlib.use('qt5agg')
-plt.rcParams.update({'font.size': 15})
+plt.rcParams.update({'font.size': 14})
 
 
-def plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bounds, para_scales, n_trials, fit_method, n_x0s):
+def plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bounds, para_scales, para_color_code, para_2ds, n_trials, fit_method, n_x0s):
     n_paras, n_models = np.shape(fitted_paras)
+    n_para_2ds = len(para_2ds)
     if para_scales is None: 
         para_scales = ['linear'] * n_paras
         
-    fig = plt.figure(figsize=((n_paras+1)*5, 5*1))
+    # Color coded: 1 or the noise level (epsilon or softmax_temperature) 
+    if para_color_code is None:
+        if 'epsilon' in para_names:
+            para_color_code = para_names.index('epsilon')
+        elif 'softmax_temperature' in para_names:
+            para_color_code = para_names.index('softmax_temperature')
+        else:
+            para_color_code = 1
+            
+    nn = 4  # Column number
+    mm = np.ceil((n_paras + n_para_2ds)/nn).astype(int)
+     #np.ceil((n_paras + n_para_2ds)/mm).astype(int)
+        
+    fig = plt.figure(figsize=(nn*4, mm*5))
+    
     
     if fit_method != 'DE':
         fit_method = fit_method + ' (n_x0s = %g)'%n_x0s
         
-    fig.text(0.05,0.94,'Parameter Recovery: %s, Method: %s' % (forager, fit_method), fontsize = 15)
+    fig.text(0.05,0.90,'Parameter Recovery: %s, Method: %s, N_trials = %g, N_runs = %g\nColor code: %s' % (forager, fit_method, n_trials, n_models, para_names[para_color_code]), fontsize = 15)
 
-    gs = GridSpec(1,n_paras+1, wspace=0.3, hspace=0.5, bottom=0.13) 
+    gs = GridSpec(mm, nn, wspace=0.4, hspace=0.3, bottom=0.15, top=0.80, left=0.05, right=0.97) 
     
-    xmin = np.min(true_paras[1,:])
-    xmax = np.max(true_paras[1,:])
-    if para_scales[1] == 'log':
-        xmin = np.min(true_paras[1,:])
-        xmax = np.max(true_paras[1,:])
-        colors = cm.copper((np.log(true_paras[1,:])-np.log(xmin)+1e-6)/(np.log(xmax)-np.log(xmin)+1e-6)) # Use second as color (backward compatibility)
+    xmin = np.min(true_paras[para_color_code,:])
+    xmax = np.max(true_paras[para_color_code,:])
+    if para_scales[para_color_code] == 'log':
+        xmin = np.min(true_paras[para_color_code,:])
+        xmax = np.max(true_paras[para_color_code,:])
+        colors = cm.copper((np.log(true_paras[para_color_code,:])-np.log(xmin)+1e-6)/(np.log(xmax)-np.log(xmin)+1e-6)) # Use second as color (backward compatibility)
     else:
-        colors = cm.copper((true_paras[1,:]-xmin+1e-6)/(xmax-xmin+1e-6)) # Use second as color (backward compatibility)
+        colors = cm.copper((true_paras[para_color_code,:]-xmin+1e-6)/(xmax-xmin+1e-6)) # Use second as color (backward compatibility)
       
     
     # 1. 1-D plot
     for pp in range(n_paras):
-        ax = fig.add_subplot(gs[0,pp])
-        plt.scatter(true_paras[pp,:], fitted_paras[pp,:], marker = 'o', facecolors='none', s = 100, c = colors, alpha=0.9)
+        ax = fig.add_subplot(gs[np.floor(pp/nn).astype(int), np.mod(pp,nn).astype(int)])
         plt.plot([para_bounds[0][pp], para_bounds[1][pp]], [para_bounds[0][pp], para_bounds[1][pp]],'k--',linewidth=1)
+
+        plt.scatter(true_paras[pp,:], fitted_paras[pp,:], marker = 'o', facecolors='none', s = 100, c = colors, alpha=0.7)
         
         ax.set_xscale(para_scales[pp])
         ax.set_yscale(para_scales[pp])
@@ -54,31 +70,37 @@ def plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bound
         plt.axis('square')
         
     # 2. 2-D plot
-    ax = fig.add_subplot(gs[0,pp+1])    
-    legend_plotted = False
-    for n in range(n_models):
-        
-        plt.plot(true_paras[0,n], true_paras[1,n],'ok', markersize=12, fillstyle='none', c = colors[n], label = 'True' if not legend_plotted else '')
-        plt.plot(fitted_paras[0,n], fitted_paras[1,n],'ok', markersize=8, c = colors[n], label = 'Fitted' if not legend_plotted else '')
-        legend_plotted = True
-        
-        plt.plot([true_paras[0,n], fitted_paras[0,n]], [true_paras[1,n], fitted_paras[1,n]],'-', linewidth=1, c = colors[n])
-        
-        # Draw the fitting bounds
-        x1, y1 = para_bounds[0]
-        x2, y2 = para_bounds[1]
-        
-        plt.plot([x1,x2,x2,x1,x1],[y1,y1,y2,y2,y1],'k--',linewidth=1)
-        
-        plt.xlabel(para_names[0])
-        plt.ylabel(para_names[1])
-        ax.set_aspect(1.0/ax.get_data_ratio())  # This is the correct way of setting square display
-        plt.title('n_trials = %g'%n_trials)
-        
-        ax.set_xscale(para_scales[0])
-        ax.set_yscale(para_scales[1])
-
     
+    for pp, para_2d in enumerate(para_2ds):
+        
+        ax = fig.add_subplot(gs[np.floor((pp+n_paras)/nn).astype(int), np.mod(pp+n_paras,nn).astype(int)])    
+        legend_plotted = False
+        
+        for n in range(n_models):
+            
+            plt.plot(true_paras[para_2d[0],n], true_paras[para_2d[1],n],'ok', markersize=11, fillstyle='none', c = colors[n], label = 'True' if not legend_plotted else '',alpha=.7)
+            plt.plot(fitted_paras[para_2d[0],n], fitted_paras[para_2d[1],n],'ok', markersize=7, c = colors[n], label = 'Fitted' if not legend_plotted else '',alpha=.7)
+            legend_plotted = True
+            
+            plt.plot([true_paras[para_2d[0],n], fitted_paras[para_2d[0],n]], [true_paras[para_2d[1],n], fitted_paras[para_2d[1],n]],'-', linewidth=1, c = colors[n])
+            
+            # Draw the fitting bounds
+            x1 = para_bounds[0][para_2d[0]]
+            y1 = para_bounds[0][para_2d[1]]
+            x2 = para_bounds[1][para_2d[0]]
+            y2 = para_bounds[1][para_2d[1]]
+            
+            plt.plot([x1,x2,x2,x1,x1],[y1,y1,y2,y2,y1],'k--',linewidth=1)
+            
+            plt.xlabel(para_names[para_2d[0]])
+            plt.ylabel(para_names[para_2d[1]])
+            
+            if para_scales[para_2d[0]] == 'linear' and para_scales[para_2d[1]] == 'linear':
+                ax.set_aspect(1.0/ax.get_data_ratio())  # This is the correct way of setting square display
+            
+            ax.set_xscale(para_scales[para_2d[0]])
+            ax.set_yscale(para_scales[para_2d[1]])
+
     plt.legend(bbox_to_anchor=(1.1, 1.05))
     plt.show()
 
@@ -130,8 +152,9 @@ def plot_LL_surface(LLs,fitted_para, true_para, fit_history, para_names, para_sc
     plt.plot(fitted_para[0], fitted_para[1],'Xk', markersize=17)
 
     ax.set_aspect(1.0/ax.get_data_ratio()) 
-    plt.xlabel(('log10' if para_scales[0] == 'log' else ' ') + para_names[0])
-    plt.ylabel(('log10' if para_scales[1] == 'log' else ' ') + para_names[1])
+    
+    plt.xlabel(('log10 ' if para_scales[0] == 'log' else '') + para_names[0])
+    plt.ylabel(('log10 ' if para_scales[1] == 'log' else '') + para_names[1])
     plt.title('Log Likelihood p(data|parameter), method: %s'%fit_method)
     
     plt.show()

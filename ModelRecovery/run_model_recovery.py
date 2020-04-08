@@ -7,7 +7,7 @@ Created on Thu Mar 19 17:15:59 2020
 
 import numpy as np
 import multiprocessing as mp
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 from tqdm import tqdm  # For progress bar. HH
 
 from models import BanditModels
@@ -15,7 +15,7 @@ from fitting_functions import fit_bandit, negLL_func
 from plot_fitting import plot_para_recovery, plot_LL_surface
    
 def fit_para_recovery(forager, para_names, para_bounds, true_paras = None, n_models = 10, n_trials = 1000, 
-                      para_scales = None, fit_method = 'DE', n_x0s = 1, pool = '', **kargs):
+                      para_scales = None, para_color_code = None, para_2ds = [[0,1]], fit_method = 'DE', n_x0s = 1, pool = '', **kargs):
     
     n_paras = len(para_names)
     
@@ -47,7 +47,7 @@ def fit_para_recovery(forager, para_names, para_bounds, true_paras = None, n_mod
         # print(true_paras_this, fitting_result.x)
         
     # === Plot results ===
-    plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bounds, para_scales, n_trials, fit_method, n_x0s)
+    plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bounds, para_scales, para_color_code, para_2ds, n_trials, fit_method, n_x0s)
     
     return true_paras, fitted_paras
 
@@ -173,6 +173,7 @@ if __name__ == '__main__':
     #               true_paras = true_paras, n_trials = n_trials, 
     #               fit_method = 'DE', pool = pool);    
     
+    # -------------------------------------------------------------------------------------------
     # n_trials = 1000
 
     # forager = 'LossCounting'
@@ -186,22 +187,42 @@ if __name__ == '__main__':
     #                   true_paras = true_paras, n_trials = n_trials, 
     #                   fit_method = 'L-BFGS-B', n_x0s = 1, pool = '');    
     
-    n_trials = 1000
+    # -------------------------------------------------------------------------------------------
+    # n_trials = 1000
     
-    forager = 'LNP_softmax'
-    para_names = ['tau1','softmax_temperature']
-    para_scales = ['linear','log']
-    para_bounds = [[1e-3,1e-2],[100,15]]
+    # forager = 'LNP_softmax'
+    # para_names = ['tau1','softmax_temperature']
+    # para_scales = ['linear','log']
+    # para_bounds = [[1e-3,1e-2],[100,15]]
     
-    n_models = 30
-    true_paras = np.vstack((10**np.random.uniform(0, np.log10(30), size = n_models),
-                            1/np.random.exponential(10, size = n_models))) # Inspired by Wilson 2019. I found beta ~ Exp(10) would be better
+    # n_models = 20
+    # true_paras = np.vstack((10**np.random.uniform(0, np.log10(30), size = n_models),
+    #                         1/np.random.exponential(10, size = n_models))) # Inspired by Wilson 2019. I found beta ~ Exp(10) would be better
     
     # true_paras, fitted_para = fit_para_recovery(forager, 
     #               para_names, para_bounds, true_paras, n_trials = n_trials, 
     #               para_scales = para_scales,
     #               fit_method = 'DE', pool = pool);    
 
+    # -------------------------------------------------------------------------------------------
+    n_trials = 100
+    
+    forager = 'LNP_softmax'
+    para_names = ['tau1','tau2','w_tau1','softmax_temperature']
+    para_scales = ['linear','linear','linear','log']
+    para_bounds = [[1e-3, 1e-3, 0, 1e-2],
+                    [20  , 40,   1,  15]]
+    
+    n_models = 1
+    true_paras = np.vstack((10**np.random.uniform(np.log10(1), np.log10(10), size = n_models),
+                            10**np.random.uniform(np.log10(10), np.log10(30), size = n_models),
+                            np.random.uniform(0, 1, size = n_models),
+                            1/np.random.exponential(10, size = n_models))) # Inspired by Wilson 2019. I found beta ~ Exp(10) would be better
+    
+    true_paras, fitted_para = fit_para_recovery(forager, 
+                  para_names, para_bounds, true_paras, n_trials = n_trials, 
+                  para_scales = para_scales, para_color_code = 2, para_2ds = [[0,1],[0,2],[0,3]],
+                  fit_method = 'DE', pool = pool);    
     
     #%% LL_surface
     # compute_LL_surface(forager, para_names, para_bounds, n_grid = [20,20], true_para = [10,3], n_trials = n_trials, 
@@ -214,8 +235,13 @@ if __name__ == '__main__':
     #                     fit_method = 'L-BFGS-B', n_x0s = 8, pool = pool)
     
     
-    compute_LL_surface(forager, para_names, para_bounds, para_scales = para_scales, n_grid = [20,20], true_para = [20, .9], n_trials = n_trials, 
-                        fit_method = 'DE', n_x0s = 8, pool = pool)
+    # n_trials = 1000
+    # forager = 'LNP_softmax'
+    # para_names = ['tau1','softmax_temperature']
+    # para_scales = ['linear','log']
+    # para_bounds = [[1e-3,1e-2],[100,15]]
+    # compute_LL_surface(forager, para_names, para_bounds, para_scales = para_scales, n_grid = [20,20], true_para = [20, .9], n_trials = n_trials, 
+    #                     fit_method = 'DE', n_x0s = 8, pool = pool)
     
 
     pool.close()   # Just a good practice

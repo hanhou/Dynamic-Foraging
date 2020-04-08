@@ -66,7 +66,6 @@ class BanditModels:
                  tau1 = None,  
                  tau2 = None,   
                  w_tau1 = None,      
-                 w_tau2 = None,
                  
                  # For 'RW1972_epsi','RW1972_softmax','Bari2019', 'Hattori2019'
                  learn_rate_rew = None,     
@@ -118,7 +117,7 @@ class BanditModels:
                 self.w_taus = [1]
             else:                           # 'Corrado2005'
                 self.taus = [tau1, tau2]
-                self.w_taus = [w_tau1, w_tau2]
+                self.w_taus = [w_tau1, 1 - w_tau1]
                 
         elif 'RW1972' in forager:
             assert all(x is not None for x in (learn_rate_rew))
