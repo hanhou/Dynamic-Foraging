@@ -12,32 +12,17 @@ from tqdm import tqdm  # For progress bar. HH
 from models import BanditModels
 global fit_history
 
-def generate_kwargs(forager, opti_names, opti_value):  
-    '''
-    Helper function for parameter intepretation
-    '''
-    if forager == 'Corrado2005':  # Special workarounds
-        kwargs_all = {'forager': 'Corrado2005', 'taus': opti_value[0:2], 'w_taus': [1-opti_value[2], opti_value[2]], 'softmax_temperature': opti_value[3]}
-    
-    elif forager == 'Hattori2019':
-        kwargs_all = {'forager': 'Hattori2019', 'step_sizes': opti_value[0:2], 'forget_rate': opti_value[2], 'softmax_temperature': opti_value[3]}
-
-    else:
-        kwargs_all = {'forager': forager}
-        for (nn, vv) in zip(opti_names, opti_value):
-            kwargs_all = {**kwargs_all, nn:vv}
-            
-    return kwargs_all
-
-
 def negLL_func(fit_value, *argss):
     '''
     Compute negative likelihood (Core func)
     '''
     # Arguments interpretation
     forager, fit_names, choice_history, reward_history = argss
-    kwargs_all = generate_kwargs(forager, fit_names, fit_value)
-
+    
+    kwargs_all = {'forager': forager}
+    for (nn, vv) in zip(fit_names, fit_value):
+        kwargs_all = {**kwargs_all, nn:vv}
+    
     # Run **PREDICTIVE** simulation    
     bandit = BanditModels(**kwargs_all, fit_choice_history = choice_history, fit_reward_history = reward_history)  # Into the fitting mode
     bandit.simulate()
@@ -96,7 +81,7 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, i
                                                          updating = 'immediate' if pool == '' else 'deferred',
                                                          callback = callback_history if if_history else None,)
         if if_history:
-            fit_history.append(fitting_result.x)
+            fit_history.append(fitting_result.x.copy())  # Add the final result
         
         return (fitting_result, [fit_history]) if if_history else fitting_result
         
@@ -128,7 +113,7 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, i
                 
                 fitting_parallel_results.append(result)
                 if if_history: 
-                    fit_history.append(result.x)  # Add the final result
+                    fit_history.append(result.x.copy())  # Add the final result
                     fit_histories.append(fit_history)
             
         # Find the global optimal

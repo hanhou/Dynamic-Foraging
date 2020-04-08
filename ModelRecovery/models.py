@@ -12,7 +12,7 @@
 #           - 3.3: loss_count_threshold = 0 --> Always switch
 #
 #   2. NLP-like foragers
-#       1). 'NLP_softmax' (absorbs 'Corrado2005', 'Sugrue2004' and 'Iigaya2019', forget about fraction income):     
+#       1). 'LNP_softmax' (absorbs 'Corrado2005', 'Sugrue2004' and 'Iigaya2019', forget about fraction income):     
 #               income  ->  2-exp filter  ->  softmax ( = diff + sigmoid)  -> epsilon-Poisson (epsilon = 0 in their paper; has the same effect as tau_long??)
 #
 #   3. RL-like foragers
@@ -40,7 +40,7 @@ global_block_size_sd = 20
 def softmax(x,softmax_temperature):
     max_temp = np.max(x/softmax_temperature)
     
-    if np.exp(max_temp) == np.inf:  # To prevent explosion of EXP
+    if max_temp > 700: # To prevent explosion of EXP
         greedy = np.zeros(len(x))
         greedy[np.random.choice(np.where(x == np.max(x))[0])] = 1
         return greedy
@@ -57,12 +57,12 @@ class BanditModels:
     def __init__(self, forager = None, K_arm = 2, n_trials = 1000, if_baited = True,  
                  
                  epsilon = None,               # For 'RW1972_epsi'
-                 softmax_temperature = None,   # For 'NLP_softmax', 'RW1972_softmax', 'Bari2019', 'Hattori2019'
+                 softmax_temperature = None,   # For 'LNP_softmax', 'RW1972_softmax', 'Bari2019', 'Hattori2019'
                  
                  # For all
                  bias = 0,
                  
-                 # For 'NLP_softmax', up to two taus
+                 # For 'LNP_softmax', up to two taus
                  tau1 = None,  
                  tau2 = None,   
                  w_tau1 = None,      
@@ -111,11 +111,11 @@ class BanditModels:
         # =============================================================================
         #   Parameter check and prepration
         # =============================================================================
-        if forager == 'NLP_softmax':
+        if forager == 'LNP_softmax':
             assert all(x is not None for x in (tau1, softmax_temperature))
             if tau2 == None:  # Only one tau ('Sugrue2004')
-                self.taus = tau1
-                self.w_taus = 1
+                self.taus = [tau1]
+                self.w_taus = [1]
             else:                           # 'Corrado2005'
                 self.taus = [tau1, tau2]
                 self.w_taus = [w_tau1, w_tau2]
@@ -162,7 +162,7 @@ class BanditModels:
         if self.forager in ['RW1972_epsi','RW1972_softmax','Bari2019', 'Hattori2019']:
             pass
         
-        elif self.forager in ['NLP_softmax']:
+        elif self.forager in ['LNP_softmax']:
             # Compute the history filter. Compatible with any number of taus.
             reversed_t = np.flipud(np.arange(self.n_trials))  # Use the full length of the session just in case of an extremely large tau.
             self.history_filter = np.zeros_like(reversed_t).astype('float64')
@@ -376,7 +376,7 @@ class BanditModels:
         elif self.forager in ['RW1972_epsi']:
             return self.act_EpsiGreedy();
             
-        elif self.forager in ['RW1972_softmax', 'NLP_softmax', 'Bari2019', 'Hattori2019' ]:   # Probabilistic
+        elif self.forager in ['RW1972_softmax', 'LNP_softmax', 'Bari2019', 'Hattori2019' ]:   # Probabilistic
             return self.act_Probabilistic();
 
     def step(self, choice): # Compatible with either fitting mode (predictive) or not (generative). It's much clear now!!
@@ -413,7 +413,7 @@ class BanditModels:
         elif self.forager in ['RW1972_softmax', 'RW1972_epsi', 'Bari2019', 'Hattori2019']:    
             self.step_RWlike(choice, reward)
                 
-        elif self.forager == 'NLP_softmax':
+        elif self.forager == 'LNP_softmax':
             if self.if_fit_mode:
                 valid_reward_history = self.fit_reward_history[:, :self.time]   # Targeted history till now
             else:

@@ -14,7 +14,9 @@ from models import BanditModels
 from fitting_functions import fit_bandit, negLL_func
 from plot_fitting import plot_para_recovery, plot_LL_surface
    
-def fit_para_recovery(forager, para_names, para_bounds, n_models = 10, true_paras = None, n_trials = 1000, fit_method = 'DE', n_x0s = 1, pool = '', **kargs):
+def fit_para_recovery(forager, para_names, para_bounds, true_paras = None, n_models = 10, n_trials = 1000, 
+                      para_scales = None, fit_method = 'DE', n_x0s = 1, pool = '', **kargs):
+    
     n_paras = len(para_names)
     
     if true_paras is None:
@@ -45,7 +47,7 @@ def fit_para_recovery(forager, para_names, para_bounds, n_models = 10, true_para
         # print(true_paras_this, fitting_result.x)
         
     # === Plot results ===
-    plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bounds, n_trials, fit_method, n_x0s)
+    plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bounds, para_scales, n_trials, fit_method, n_x0s)
     
     return true_paras, fitted_paras
 
@@ -71,7 +73,7 @@ def generate_true_paras(para_bounds, n_models = 5, method = 'random_uniform'):
             true_paras[:,n] = true_paras_this
                 
         return true_paras
-
+    
 def generate_fake_data(forager, para_names, true_para, **kargs):
     # Generate fake data
     n_paras = len(para_names)
@@ -87,18 +89,29 @@ def generate_fake_data(forager, para_names, true_para, **kargs):
     return choice_history, reward_history
 
 
-def compute_LL_surface(forager, para_names, para_bounds, true_para, n_grid = [100,100], fit_method = 'DE', n_x0s = 1, pool = '', **kargs):
+def compute_LL_surface(forager, para_names, para_bounds, true_para, para_scales = None, n_grid = [100,100], fit_method = 'DE', n_x0s = 1, pool = '', **kargs):
     '''
     Log-likelihood landscape (Fig.3a, Wilson 2019)
 
     '''
+    
+    if para_scales is None: 
+        para_scales = ['linear'] * 2
+
     n_try_paras = np.prod(n_grid)
     n_worker = int(mp.cpu_count())
     pool_surface = mp.Pool(processes = n_worker)
     
-    p1 = np.linspace(para_bounds[0][0], para_bounds[1][0], n_grid[0])
-    p2 = np.linspace(para_bounds[0][1], para_bounds[1][1], n_grid[1])
-
+    if para_scales[0] == 'linear':
+        p1 = np.linspace(para_bounds[0][0], para_bounds[1][0], n_grid[0])
+    else:
+        p1 = np.logspace(np.log10(para_bounds[0][0]), np.log10(para_bounds[1][0]), n_grid[0])
+        
+    if para_scales[1] == 'linear':
+        p2 = np.linspace(para_bounds[0][1], para_bounds[1][1], n_grid[1])
+    else:
+        p2 = np.logspace(np.log10(para_bounds[0][1]), np.log10(para_bounds[1][1]), n_grid[1])
+        
     # Make sure the true_paras are exactly on the grid
     true_para[0] = p1[np.argmin(np.abs(true_para[0] - p1))]
     true_para[1] = p2[np.argmin(np.abs(true_para[1] - p2))]
@@ -131,7 +144,7 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para, n_grid = [10
                                              if_history = True)
     
     # Plot LL surface and fitting history
-    plot_LL_surface(LLs,fitting_result.x, true_para,fit_history,para_names,p1,p2, fit_method, n_x0s)
+    plot_LL_surface(LLs,fitting_result.x, true_para,fit_history,para_names, para_scales, [p1,p2], fit_method, n_x0s)
     
     return
 
@@ -143,24 +156,22 @@ if __name__ == '__main__':
     # - Local optimizer (`L-BFGS-B`, `SLSQP`, `TNC`, `trust-constr`): random initialization in parallel
     # - Speed: L-BFGS-B = SLSQP  >> TNC >>> trust-constr
     
-    #%% --- Use async to run multiple initializations ---
-   
     n_worker = int(mp.cpu_count()/2)
     pool = mp.Pool(processes = n_worker)
     
-    n_trials = 100
-    
-    forager = 'LossCounting'
-    para_names = ['loss_count_threshold_mean','loss_count_threshold_std']
-    para_bounds = [[0,0],[50,10]]
-    
+    #%% --- Use async to run multiple initializations ---
     # Para recovery
-    true_paras = generate_true_paras([[0,0],[30,5]], n_models = [5,5], method = 'linspace')
     
-    true_paras, fitted_para = fit_para_recovery(forager = forager, 
-                  para_names = para_names, para_bounds = para_bounds, 
-                  true_paras = true_paras, n_trials = n_trials, 
-                  fit_method = 'DE', n_x0s = 1, pool = pool);    
+    # forager = 'LossCounting'
+    # para_names = ['loss_count_threshold_mean','loss_count_threshold_std']
+    # para_bounds = [[0,0],[50,10]]
+    
+    # true_paras = generate_true_paras([[0,0],[30,5]], n_models = [5,5], method = 'linspace')
+    
+    # true_paras, fitted_para = fit_para_recovery(forager = forager, 
+    #               para_names = para_names, para_bounds = para_bounds, 
+    #               true_paras = true_paras, n_trials = n_trials, 
+    #               fit_method = 'DE', pool = pool);    
     
     # n_trials = 1000
 
@@ -175,6 +186,23 @@ if __name__ == '__main__':
     #                   true_paras = true_paras, n_trials = n_trials, 
     #                   fit_method = 'L-BFGS-B', n_x0s = 1, pool = '');    
     
+    n_trials = 1000
+    
+    forager = 'LNP_softmax'
+    para_names = ['tau1','softmax_temperature']
+    para_scales = ['linear','log']
+    para_bounds = [[1e-3,1e-2],[100,15]]
+    
+    n_models = 30
+    true_paras = np.vstack((10**np.random.uniform(0, np.log10(30), size = n_models),
+                            1/np.random.exponential(10, size = n_models))) # Inspired by Wilson 2019. I found beta ~ Exp(10) would be better
+    
+    # true_paras, fitted_para = fit_para_recovery(forager, 
+    #               para_names, para_bounds, true_paras, n_trials = n_trials, 
+    #               para_scales = para_scales,
+    #               fit_method = 'DE', pool = pool);    
+
+    
     #%% LL_surface
     # compute_LL_surface(forager, para_names, para_bounds, n_grid = [20,20], true_para = [10,3], n_trials = n_trials, 
     #                     fit_method = 'DE', pool = pool)
@@ -184,6 +212,11 @@ if __name__ == '__main__':
     
     # compute_LL_surface(forager, para_names, para_bounds, n_grid = [20,20], true_para = [10,3], n_trials = n_trials, 
     #                     fit_method = 'L-BFGS-B', n_x0s = 8, pool = pool)
+    
+    
+    compute_LL_surface(forager, para_names, para_bounds, para_scales = para_scales, n_grid = [20,20], true_para = [20, .9], n_trials = n_trials, 
+                        fit_method = 'DE', n_x0s = 8, pool = pool)
+    
 
     pool.close()   # Just a good practice
     pool.join()
