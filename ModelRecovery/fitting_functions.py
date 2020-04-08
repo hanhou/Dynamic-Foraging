@@ -17,19 +17,17 @@ def negLL_func(fit_value, *argss):
     Compute negative likelihood (Core func)
     '''
     # Arguments interpretation
-    forager, fit_names, choice_history, reward_history = argss
+    forager, fit_names, choice_history, reward_history, para_fixed = argss
     
-    # Put constraint hack here!!
-    if 'tau2' in fit_names:
-        tau1_ind = fit_names.index('tau1')
-        tau2_ind = fit_names.index('tau2')
-        
-        if fit_value[tau1_ind] > fit_value[tau2_ind]:
-            return np.inf
-    
-    kwargs_all = {'forager': forager}
+    kwargs_all = {'forager': forager, **para_fixed}  # **kargs includes all other fixed parameters
     for (nn, vv) in zip(fit_names, fit_value):
         kwargs_all = {**kwargs_all, nn:vv}
+
+    # Put constraint hack here!!
+    if 'tau2' in kwargs_all:
+        if kwargs_all['tau2'] < kwargs_all['tau1']:
+            return np.inf
+    
     
     # Run **PREDICTIVE** simulation    
     bandit = BanditModels(**kwargs_all, fit_choice_history = choice_history, fit_reward_history = reward_history)  # Into the fitting mode
@@ -65,12 +63,12 @@ def fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history
     # Append the initial point
     if callback != None: callback_history(x0)
         
-    fitting_result = optimize.minimize(negLL_func, x0, args = (forager, fit_names, choice_history, reward_history), method = fit_method,
+    fitting_result = optimize.minimize(negLL_func, x0, args = (forager, fit_names, choice_history, reward_history, {}), method = fit_method,
                                        bounds = optimize.Bounds(fit_bounds[0], fit_bounds[1]), callback = callback, )
     return fitting_result
 
 
-def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, if_history = False, fit_method = 'CG', n_x0s = 1, pool = ''):
+def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, DE_pop_size = 16, if_history = False, fit_method = 'CG', n_x0s = 1, pool = ''):
     '''
     Main fitting func and compute BIC etc.
     '''
@@ -82,9 +80,9 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, i
     if fit_method == 'DE':
         
         # Use DE's own parallel method
-        fitting_result = optimize.differential_evolution(func = negLL_func, args = (forager, fit_names, choice_history, reward_history),
+        fitting_result = optimize.differential_evolution(func = negLL_func, args = (forager, fit_names, choice_history, reward_history, {}),
                                                          bounds = optimize.Bounds(fit_bounds[0], fit_bounds[1]), 
-                                                         mutation=(0.5, 1), recombination = 0.7, popsize = 32, strategy = 'best1bin', 
+                                                         mutation=(0.5, 1), recombination = 0.7, popsize = DE_pop_size, strategy = 'best1bin', 
                                                          disp = False, 
                                                          workers = 1 if pool == '' else int(mp.cpu_count()),   # For DE, use pool to control if_parallel, although we don't use pool for DE
                                                          updating = 'immediate' if pool == '' else 'deferred',

@@ -15,7 +15,7 @@ from matplotlib.pyplot import cm
 plt.rcParams.update({'font.size': 14})
 
 
-def plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bounds, para_scales, para_color_code, para_2ds, n_trials, fit_method, n_x0s):
+def plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bounds, para_scales, para_color_code, para_2ds, n_trials, fit_method):
     n_paras, n_models = np.shape(fitted_paras)
     n_para_2ds = len(para_2ds)
     if para_scales is None: 
@@ -30,16 +30,10 @@ def plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bound
         else:
             para_color_code = 1
             
-    nn = 4  # Column number
+    nn = min(4, n_paras + n_para_2ds)  # Column number
     mm = np.ceil((n_paras + n_para_2ds)/nn).astype(int)
-     #np.ceil((n_paras + n_para_2ds)/mm).astype(int)
-        
     fig = plt.figure(figsize=(nn*4, mm*5))
     
-    
-    if fit_method != 'DE':
-        fit_method = fit_method + ' (n_x0s = %g)'%n_x0s
-        
     fig.text(0.05,0.90,'Parameter Recovery: %s, Method: %s, N_trials = %g, N_runs = %g\nColor code: %s' % (forager, fit_method, n_trials, n_models, para_names[para_color_code]), fontsize = 15)
 
     gs = GridSpec(mm, nn, wspace=0.4, hspace=0.3, bottom=0.15, top=0.80, left=0.05, right=0.97) 
@@ -105,57 +99,69 @@ def plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bound
     plt.show()
 
 
-def plot_LL_surface(LLs,fitted_para, true_para, fit_history, para_names, para_scales, ps, fit_method, n_x0s):
+def plot_LL_surface(forager, LLsurfaces, para_names, para_2ds, para_grids, para_scales, true_para, fitted_para, fit_history, fit_method, n_trials):
+    n_para_2ds = len(para_2ds)
     
-    if fit_method != 'DE':
-        fit_method = fit_method + ' (n_x0s = %g)'%n_x0s
+    # ==== Figure setting ===
+    nn_ax = min(3, n_para_2ds) # Column number
+    mm_ax = np.ceil(n_para_2ds/nn_ax).astype(int)
+    fig = plt.figure(figsize=(2.5+nn_ax*5, 1.5+mm_ax*5))
+    gs = GridSpec(mm_ax, nn_ax, wspace=0.2, hspace=0.35, bottom=0.1, top=0.84, left=0.07, right=0.97) 
+    fig.text(0.05,0.88,'Log Likelihood p(data|paras): %s,\n Method: %s, N_trials = %g\n  True values: %s\nFitted values: %s' % (forager, fit_method, n_trials, 
+                                                                                                                            np.round(true_para,3), np.round(fitted_para,3)),fontsize = 13)
 
-    # ==== Plot LL surface ===
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(1, 1, 1) 
+    # ==== Plot each LL surface ===
+    for ppp,(LLs, ps, para_2d) in enumerate(zip(LLsurfaces, para_grids, para_2ds)):
     
-    # plt.pcolor(pp1, pp2, LLs, cmap='RdBu', vmin=z_min, vmax=z_max)
-    
-    for ii in range(2):
-        if para_scales[ii] == 'log':
-            ps[ii] = np.log10(ps[ii])
-            fitted_para[ii] = np.log10(fitted_para[ii])
-            true_para[ii] = np.log10(true_para[ii])
-    
-    dx = ps[0][1]-ps[0][0]
-    dy = ps[1][1]-ps[1][0]
-    extent=[ps[0].min()-dx/2, ps[0].max()+dx/2, ps[1].min()-dy/2, ps[1].max()+dy/2]
-    
-    plt.imshow(LLs, cmap='plasma', extent=extent, interpolation='none', origin='lower')
-    plt.colorbar()
-    
-    plt.contour(-np.log(-LLs), colors='grey', levels = 20, extent=extent, linewidths=0.7)
-    
-    # ==== True value ==== 
-    plt.plot(true_para[0], true_para[1],'ok', markersize = 20, markeredgewidth=3, fillstyle='none')
-    
-    # ==== Fitting history (may have many) ==== 
-    if fit_history != []:
+        ax = fig.add_subplot(gs[np.floor(ppp/nn_ax).astype(int), np.mod(ppp,nn_ax).astype(int)]) 
         
-        # Compatible with one history (global optimizers) or multiple histories (local optimizers)
-        for nn, hh in reversed(list(enumerate(fit_history))):  
-            hh = np.array(hh)
+        fitted_para_this = [fitted_para[para_2d[0]], fitted_para[para_2d[1]]]
+        true_para_this = [true_para[para_2d[0]], true_para[para_2d[1]]]     
+        para_names_this = [para_names[para_2d[0]], para_names[para_2d[1]]]
+        para_scale = [para_scales[para_2d[0]], para_scales[para_2d[1]]]
+                            
+        for ii in range(2):
+            if para_scale[ii] == 'log':
+                ps[ii] = np.log10(ps[ii])
+                fitted_para_this[ii] = np.log10(fitted_para_this[ii])
+                true_para_this[ii] = np.log10(true_para_this[ii])
+        
+        dx = ps[0][1]-ps[0][0]
+        dy = ps[1][1]-ps[1][0]
+        extent=[ps[0].min()-dx/2, ps[0].max()+dx/2, ps[1].min()-dy/2, ps[1].max()+dy/2]
+        
+        plt.imshow(LLs, cmap='plasma', extent=extent, interpolation='none', origin='lower')
+        # plt.pcolor(pp1, pp2, LLs, cmap='RdBu', vmin=z_min, vmax=z_max)
+        plt.colorbar()
+        
+        plt.contour(-np.log(-LLs), colors='grey', levels = 20, extent=extent, linewidths=0.7)
+        
+        # ==== True value ==== 
+        plt.plot(true_para_this[0], true_para_this[1],'ob', markersize = 20, markeredgewidth=3, fillstyle='none')
+        
+        # ==== Fitting history (may have many) ==== 
+        if fit_history != []:
             
-            for ii in range(2):
-                if para_scales[ii] == 'log': hh[:,ii] = np.log10(hh[:,ii])
-            
-            sizes = 100 * np.linspace(0.1,1,np.shape(hh)[0])
-            plt.scatter(hh[:,0], hh[:,1], s = sizes, c = 'k' if nn == 0 else None)
-            plt.plot(hh[:,0], hh[:,1], '-' if nn == 0 else ':', color = 'k' if nn == 0 else None)
-            
-    # ==== Final fitted result ====
-    plt.plot(fitted_para[0], fitted_para[1],'Xk', markersize=17)
-
-    ax.set_aspect(1.0/ax.get_data_ratio()) 
+            # Compatible with one history (global optimizers) or multiple histories (local optimizers)
+            for nn, hh in reversed(list(enumerate(fit_history))):  
+                hh = np.array(hh)
+                hh = hh[:,(para_2d[0], para_2d[1])]  # The user-defined 2-d subspace
+                
+                for ii in range(2):
+                    if para_scale[ii] == 'log': hh[:,ii] = np.log10(hh[:,ii])
+                
+                sizes = 100 * np.linspace(0.1,1,np.shape(hh)[0])
+                plt.scatter(hh[:,0], hh[:,1], s = sizes, c = 'k' if nn == 0 else None)
+                plt.plot(hh[:,0], hh[:,1], '-' if nn == 0 else ':', color = 'k' if nn == 0 else None)
+                
+        # ==== Final fitted result ====
+        plt.plot(fitted_para_this[0], fitted_para_this[1],'Xb', markersize=17)
     
-    plt.xlabel(('log10 ' if para_scales[0] == 'log' else '') + para_names[0])
-    plt.ylabel(('log10 ' if para_scales[1] == 'log' else '') + para_names[1])
-    plt.title('Log Likelihood p(data|parameter), method: %s'%fit_method)
+        ax.set_aspect(1.0/ax.get_data_ratio()) 
+        
+        plt.xlabel(('log10 ' if para_scale[0] == 'log' else '') + para_names_this[0])
+        plt.ylabel(('log10 ' if para_scale[1] == 'log' else '') + para_names_this[1])
+        
     
     plt.show()
     
