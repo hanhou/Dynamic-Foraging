@@ -179,6 +179,7 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para,
         # for nn,(x,y) in tqdm(enumerate(zip(np.nditer(pp1),np.nditer(pp2))), desc='LL_surface pair #%g (serial)' % ppp):
         #     LLs[nn] = negLL_func([x, y], forager, [para_names[para_2d[0]], para_names[para_2d[1]]], choice_history, reward_history, para_fixed)
             
+        LLs = np.exp(LLs/n_trials)  # Use likelihood-per-trial = (likehood)^(1/T)
         LLs = LLs.reshape(n_g).T
         LLsurfaces.append(LLs)
  
@@ -285,7 +286,7 @@ if __name__ == '__main__':
     # -- LL_surface (see the gradient around Corrado 2005 results)
     compute_LL_surface(forager, para_names, para_bounds, 
                         true_para = [2, 16, 0.33, 0.15], # Corrado 2005 fitting results
-                        para_2ds = [[0,1],[0,2],[0,3]],#[1,2],[1,3],[2,3]], # LL surfaces for user-defined pairs of paras
+                        para_2ds = [[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]], # LL surfaces for user-defined pairs of paras
                         n_grids = [[30,30]] * 6, 
                         para_scales = para_scales,
                         DE_pop_size = 8,

@@ -107,7 +107,7 @@ def plot_LL_surface(forager, LLsurfaces, para_names, para_2ds, para_grids, para_
     mm_ax = np.ceil(n_para_2ds/nn_ax).astype(int)
     fig = plt.figure(figsize=(2.5+nn_ax*5, 1.5+mm_ax*5))
     gs = GridSpec(mm_ax, nn_ax, wspace=0.2, hspace=0.35, bottom=0.1, top=0.84, left=0.07, right=0.97) 
-    fig.text(0.05,0.88,'Log Likelihood p(data|paras): %s,\n Method: %s, N_trials = %g\n  True values: %s\nFitted values: %s' % (forager, fit_method, n_trials, 
+    fig.text(0.05,0.88,'Likelihood Per Trial = p(data|paras)^(1/T): %s,\n Method: %s, N_trials = %g\n  True values: %s\nFitted values: %s' % (forager, fit_method, n_trials, 
                                                                                                                             np.round(true_para,3), np.round(fitted_para,3)),fontsize = 13)
 
     # ==== Plot each LL surface ===
@@ -134,7 +134,8 @@ def plot_LL_surface(forager, LLsurfaces, para_names, para_2ds, para_grids, para_
         # plt.pcolor(pp1, pp2, LLs, cmap='RdBu', vmin=z_min, vmax=z_max)
         plt.colorbar()
         
-        plt.contour(-np.log(-LLs), colors='grey', levels = 20, extent=extent, linewidths=0.7)
+        plt.contour(LLs, colors='grey', levels = 20, extent=extent, linewidths=0.7)
+        # plt.contour(-np.log(-LLs), colors='grey', levels = 20, extent=extent, linewidths=0.7)
         
         # ==== True value ==== 
         plt.plot(true_para_this[0], true_para_this[1],'ob', markersize = 20, markeredgewidth=3, fillstyle='none')
