@@ -120,7 +120,7 @@ class BanditModels:
                 self.w_taus = [w_tau1, 1 - w_tau1]
                 
         elif 'RW1972' in forager:
-            assert all(x is not None for x in (learn_rate_rew))
+            assert all(x is not None for x in (learn_rate_rew,))
             self.learn_rates = [learn_rate_rew, learn_rate_rew]    # RW1972 has the same learning rate for rewarded / unrewarded trials
             self.forget_rates = [0, 0]   # RW1972 does not forget
         
@@ -159,6 +159,7 @@ class BanditModels:
         
         # Forager-specific
         if self.forager in ['RW1972_epsi','RW1972_softmax','Bari2019', 'Hattori2019']:
+            self.q_estimation = np.zeros([self.K, self.n_trials]) 
             pass
         
         elif self.forager in ['LNP_softmax']:
@@ -296,17 +297,31 @@ class BanditModels:
     
     def act_EpsiGreedy(self):
         
-        if np.random.rand() < self.epsilon: 
-            # Forced exploration with the prob. of epsilon (to avoid AlwaysLEFT/RIGHT in Sugrue2004...) or before some rewards are collected
-            choice = self.act_random() 
-        else:    # Greedy
-            choice = np.random.choice(np.where(self.q_estimation[:, self.time] == self.q_estimation[:, self.time].max())[0])
-            if self.if_fit_mode:
-                self.predictive_choice_prob[:, self.time] = 0
-                self.predictive_choice_prob[choice, self.time] = 1  # Delta-function
-                choice = None   # No need to make specific choice in fitting mode
-            else:
-                self.choice_history[0, self.time] = choice
+        # if np.random.rand() < self.epsilon: 
+        #     # Forced exploration with the prob. of epsilon (to avoid AlwaysLEFT/RIGHT in Sugrue2004...) or before some rewards are collected
+        #     choice = self.act_random() 
+            
+        # else:    # Greedy
+        #     choice = np.random.choice(np.where(self.q_estimation[:, self.time] == self.q_estimation[:, self.time].max())[0])
+        #     if self.if_fit_mode:
+        #         self.predictive_choice_prob[:, self.time] = 0
+        #         self.predictive_choice_prob[choice, self.time] = 1  # Delta-function
+        #         choice = None   # No need to make specific choice in fitting mode
+        #     else:
+        #         self.choice_history[0, self.time] = choice
+            
+        # == The above is erroneous!! ==
+        choice = np.random.choice(np.where(self.q_estimation[:, self.time] == self.q_estimation[:, self.time].max())[0])
+
+        if self.if_fit_mode:
+            self.predictive_choice_prob[:, self.time] = self.epsilon / self.K
+            self.predictive_choice_prob[choice, self.time] = 1 - self.epsilon + self.epsilon / self.K
+            choice = None   # No need to make specific choice in fitting mode
+        else:
+            if np.random.rand() < self.epsilon: 
+                choice = self.act_random()
+                
+            self.choice_history[0, self.time] = choice
                 
         return choice
 

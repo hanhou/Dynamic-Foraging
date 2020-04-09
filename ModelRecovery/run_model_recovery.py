@@ -176,7 +176,7 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para,
             LLs[nn] = - rr.get()
             
         # -- Serial for debugging --
-        # for nn,(x,y) in tqdm(enumerate(zip(np.nditer(pp1),np.nditer(pp2))), desc='LL_surface pair #%g (serial)' % ppp):
+        # for nn,(x,y) in tqdm(enumerate(zip(np.nditer(pp1),np.nditer(pp2))), total = n_scan_paras, desc='LL_surface pair #%g (serial)' % ppp):
         #     LLs[nn] = negLL_func([x, y], forager, [para_names[para_2d[0]], para_names[para_2d[1]]], choice_history, reward_history, para_fixed)
             
         LLs = np.exp(LLs/n_trials)  # Use likelihood-per-trial = (likehood)^(1/T)
@@ -223,8 +223,8 @@ if __name__ == '__main__':
     #               true_paras = true_paras, n_trials = n_trials, 
     #               fit_method = 'DE', pool = pool);    
     
-    # -------------------------------------------------------------------------------------------
-    # n_trials = 1000
+    # # -------------------------------------------------------------------------------------------
+    # n_trials = 100
 
     # forager = 'LossCounting'
     # para_names = ['loss_count_threshold_mean','loss_count_threshold_std']
@@ -242,14 +242,14 @@ if __name__ == '__main__':
     #                     fit_method = 'DE', pool = pool)
     
     # -------------------------------------------------------------------------------------------
-    # n_trials = 1000
+    # n_trials = 100
     
     # forager = 'LNP_softmax'
     # para_names = ['tau1','softmax_temperature']
     # para_scales = ['linear','log']
     # para_bounds = [[1e-3,1e-2],[100,15]]
     
-    ## -- Para recovery
+    # # -- Para recovery
     # n_models = 20
     # true_paras = np.vstack((10**np.random.uniform(0, np.log10(30), size = n_models),
     #                         1/np.random.exponential(10, size = n_models))) # Inspired by Wilson 2019. I found beta ~ Exp(10) would be better
@@ -259,40 +259,70 @@ if __name__ == '__main__':
     #               para_scales = para_scales,
     #               fit_method = 'DE', pool = pool);    
     
-    ## -- LL_surface
-    # compute_LL_surface(forager, para_names, para_bounds, para_scales = para_scales, true_para = [20, .9], n_trials = n_trials, 
-    #                     fit_method = 'DE', n_x0s = 8, pool = pool)
+    # # # -- LL_surface
+    # # compute_LL_surface(forager, para_names, para_bounds, para_scales = para_scales, true_para = [20, .9], n_trials = n_trials, 
+    # #                     fit_method = 'DE', n_x0s = 8, pool = pool)
 
     # -------------------------------------------------------------------------------------------
-    n_trials = 100
+    # n_trials = 100
     
-    forager = 'LNP_softmax'
-    para_names = ['tau1','tau2','w_tau1','softmax_temperature']
-    para_scales = ['log','log','linear','log']
-    para_bounds = [[1e-1, 1e-1, 0, 1e-2],
-                    [15  , 40,   1,  15]]
+    # forager = 'LNP_softmax'
+    # para_names = ['tau1','tau2','w_tau1','softmax_temperature']
+    # para_scales = ['log','log','linear','log']
+    # para_bounds = [[1e-1, 1e-1, 0, 1e-2],
+    #                 [15  , 40,   1,  15]]
     
-    ##-- Para recovery
-    # n_models = 1
-    # true_paras = np.vstack((10**np.random.uniform(np.log10(1), np.log10(10), size = n_models),
-    #                        10**np.random.uniform(np.log10(10), np.log10(30), size = n_models),
-    #                        np.random.uniform(0.1, 0.9, size = n_models),
-    #                        1/np.random.exponential(10, size = n_models))) # Inspired by Wilson 2019. I found beta ~ Exp(10) would be better
-    # true_paras, fitted_para = fit_para_recovery(forager, 
-    #               para_names, para_bounds, true_paras, n_trials = n_trials, 
-    #               para_scales = para_scales, para_color_code = 2, para_2ds = [[0,1],[0,2],[0,3]],
-    #               fit_method = 'DE', pool = pool);    
+    # ##-- Para recovery
+    # # n_models = 1
+    # # true_paras = np.vstack((10**np.random.uniform(np.log10(1), np.log10(10), size = n_models),
+    # #                        10**np.random.uniform(np.log10(10), np.log10(30), size = n_models),
+    # #                        np.random.uniform(0.1, 0.9, size = n_models),
+    # #                        1/np.random.exponential(10, size = n_models))) # Inspired by Wilson 2019. I found beta ~ Exp(10) would be better
+    # # true_paras, fitted_para = fit_para_recovery(forager, 
+    # #               para_names, para_bounds, true_paras, n_trials = n_trials, 
+    # #               para_scales = para_scales, para_color_code = 2, para_2ds = [[0,1],[0,2],[0,3]],
+    # #               fit_method = 'DE', pool = pool);    
 
-    # -- LL_surface (see the gradient around Corrado 2005 results)
-    compute_LL_surface(forager, para_names, para_bounds, 
-                        true_para = [2, 16, 0.33, 0.15], # Corrado 2005 fitting results
-                        para_2ds = [[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]], # LL surfaces for user-defined pairs of paras
-                        n_grids = [[30,30]] * 6, 
-                        para_scales = para_scales,
-                        DE_pop_size = 8,
-                        n_trials = n_trials,
-                        fit_method = 'DE', n_x0s = 8, pool = pool)
+    # # -- LL_surface (see the gradient around Corrado 2005 results)
+    # compute_LL_surface(forager, para_names, para_bounds, 
+    #                     true_para = [2, 16, 0.33, 0.15], # Corrado 2005 fitting results
+    #                     para_2ds = [[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]], # LL surfaces for user-defined pairs of paras
+    #                     n_grids = [[30,30]] * 6, 
+    #                     para_scales = para_scales,
+    #                     DE_pop_size = 8,
+    #                     n_trials = n_trials,
+    #                     fit_method = 'DE', n_x0s = 8, pool = pool)
     
+    # -------------------------------------------------------------------------------------------
+
+    n_trials = 1000
+
+    forager = 'RW1972_epsi'
+    para_names = ['learn_rate_rew','epsilon']
+    para_scales = ['linear','linear']
+    para_bounds = [[0, 0],
+                    [1, 1]]
+    
+    #-- Para recovery
+    n_models = 2
+    true_paras = np.vstack((np.random.uniform(0, 1, size = n_models),
+                            np.random.uniform(0, 1, size = n_models),
+                            ))
+    true_paras, fitted_para = fit_para_recovery(forager, 
+                  para_names, para_bounds, true_paras, n_trials = n_trials, 
+                  para_scales = para_scales, para_color_code = 1, para_2ds = [[0,1]],
+                  fit_method = 'DE', pool = pool);    
+    
+    # # -- LL_surface --
+    # compute_LL_surface(forager, para_names, para_bounds, 
+    #                     true_para = [0.1, 0.5],
+    #                     para_2ds = [[0,1]], # LL surfaces for user-defined pairs of paras
+    #                     n_grids = [[30,30]] * 6, 
+    #                     para_scales = para_scales,
+    #                     n_trials = n_trials,
+    #                     fit_method = 'DE', n_x0s = 8, pool = pool)
+    
+        
     #%%
     pool.close()   # Just a good practice
     pool.join()
