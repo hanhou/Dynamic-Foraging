@@ -213,40 +213,40 @@ def plot_all_reps(results_all_reps):
     
     # 3. -- Matching slope using Income VS Return (after Mar 4 2020 Foraging meeting)
     
-    fig = plt.figure(figsize=(15*1, 5*1))
+    # fig = plt.figure(figsize=(15*1, 5*1))
     
-    gs = GridSpec(1,3, wspace=0.3, hspace=0.5, bottom=0.13) 
+    # gs = GridSpec(1,3, wspace=0.3, hspace=0.5, bottom=0.13) 
     
-    # === Pooled block-wise return_log_ratio across sessions
-    ax = fig.add_subplot(gs[0,1])
+    # # === Pooled block-wise return_log_ratio across sessions
+    # ax = fig.add_subplot(gs[0,1])
     
-    # Scatter plot
-    ax.plot(rtn_log_ratio, c_log_ratio, '.k')
+    # # Scatter plot
+    # ax.plot(rtn_log_ratio, c_log_ratio, '.k')
 
-    # Get linear fit paras
-    # "a,b" in Corrado 2005, "slope" in Iigaya 2019
-    [a, a_CI95], [b, _],[r_square, p],[slope, slope_CI95] = results_all_reps['linear_fit_log_income_ratio'][0,:,:]
+    # # Get linear fit paras
+    # # "a,b" in Corrado 2005, "slope" in Iigaya 2019
+    # [a, a_CI95], [b, _],[r_square, p],[slope, slope_CI95] = results_all_reps['linear_fit_log_income_ratio'][0,:,:]
 
-    plt.xlabel('Blockwise log RETURN ratio')
-    plt.ylabel('Blockwise log choice ratio')
-    plt.plot([-4,4],[-4,4],'y--')
-    plt.title('POOLED across sessions')
-    # ax.set_aspect('equal','datalim')
-    plt.axis('square')
+    # plt.xlabel('Blockwise log RETURN ratio')
+    # plt.ylabel('Blockwise log choice ratio')
+    # plt.plot([-4,4],[-4,4],'y--')
+    # plt.title('POOLED across sessions')
+    # # ax.set_aspect('equal','datalim')
+    # plt.axis('square')
     
-    # === Matching slope using Incomd VS Return, session-wise
-    ax = fig.add_subplot(gs[0,2])
+    # # === Matching slope using Incomd VS Return, session-wise
+    # ax = fig.add_subplot(gs[0,2])
     
-    matching_slopes_income = results_all_reps['linear_fit_income_per_session'][0,:]
-    matching_slopes_return = results_all_reps['linear_fit_return_per_session'][0,:]
-    plt.plot(matching_slopes_income, matching_slopes_return,'r.') 
+    # matching_slopes_income = results_all_reps['linear_fit_income_per_session'][0,:]
+    # matching_slopes_return = results_all_reps['linear_fit_return_per_session'][0,:]
+    # plt.plot(matching_slopes_income, matching_slopes_return,'r.') 
     
-    plt.plot([0,1],[0,1],'k--')       
+    # plt.plot([0,1],[0,1],'k--')       
     
-    plt.xlabel('Matching from INCOME log ratio')
-    plt.ylabel('Matching from RETURN log ratio')
-    plt.title('Block-wise for EACH SESSION (n_rep = %g)'% results_all_reps['n_reps'])
-    plt.axis('square')
+    # plt.xlabel('Matching from INCOME log ratio')
+    # plt.ylabel('Matching from RETURN log ratio')
+    # plt.title('Block-wise for EACH SESSION (n_rep = %g)'% results_all_reps['n_reps'])
+    # plt.axis('square')
 
   
 def plot_para_scan(results_para_scan, para_to_scan, if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None, **kwargs):

@@ -81,7 +81,7 @@ class Bandit:
     # @initial: initial estimation for each action
     # @step_size: constant step size for updating estimations
     
-    def __init__(self, forager = 'SuttonBartoRLBook', k_arm = 2, n_trials = 1000, if_baited = True,  
+    def __init__(self, forager = 'SuttonBartoRLBook', k_arm = 2, n_trials = 1000, if_baited = True, if_para_optim = False,
                  epsilon = 0,          # Essential for 'SuttonBartoRLBook', 'Sugrue 2004', 'Iigaya2019'. See notes above.
                  random_before_total_reward = 0, # Not needed by default. See notes above
                  softmax_temperature = np.nan,   # For 'Bari2019', 'Hattori2019','Corrado2005'
@@ -106,6 +106,8 @@ class Bandit:
         self.k = k_arm
         self.n_trials = n_trials
         self.if_baited = if_baited
+        self.if_para_optim = if_para_optim
+        
         self.epsilon = epsilon
         self.random_before_total_reward = random_before_total_reward
         self.softmax_temperature = softmax_temperature
@@ -257,10 +259,11 @@ class Bandit:
         
     def get_AmBn_choice_history(self, p_reward_this_block, n_trials_this_block, n_trials_now):
         
-        # Calculate theoretical upper bound (ideal-p^-optimal) and the (fixed) choice history/matching point of it
-        # Ideal-p^-Optimal
-        mn_star_pHatOptimal, p_star_pHatOptimal = self.get_IdealpHatOptimal_strategy(p_reward_this_block[0])
-        self.rewards_IdealpHatOptimal += p_star_pHatOptimal * n_trials_this_block
+        if not self.if_para_optim:  
+            # Calculate theoretical upper bound (ideal-p^-optimal) and the (fixed) choice history/matching point of it
+            # Ideal-p^-Optimal
+            mn_star_pHatOptimal, p_star_pHatOptimal = self.get_IdealpHatOptimal_strategy(p_reward_this_block[0])
+            self.rewards_IdealpHatOptimal += p_star_pHatOptimal * n_trials_this_block
         
         # Ideal-p^-Greedy
         mn_star_pHatGreedy, p_star_pHatGreedy = self.get_IdealpHatGreedy_strategy(p_reward_this_block[0])

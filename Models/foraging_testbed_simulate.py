@@ -61,8 +61,11 @@ def run_one_session(bandit, para_scan = False, para_optim = False):
     
     ''' Use ideal-p^-optimal'''
     # bandit.maximum_rewards = bandit.rewards_IdealpHatGreedy
-    bandit.maximum_rewards = bandit.rewards_IdealpHatOptimal
-
+    if not para_optim: 
+        bandit.maximum_rewards = bandit.rewards_IdealpHatOptimal
+    else:  # If in optimization, fast and good
+        bandit.maximum_rewards = bandit.rewards_IdealpHatGreedy
+        
     bandit.foraging_efficiency = bandit.actual_rewards / bandit.maximum_rewards
     
    
@@ -191,10 +194,10 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
         
         if not para_optim:  # Progress bar
             for ss, bb in tqdm(enumerate(bandits_all_sessions), total = len(bandits_all_sessions), desc='serial'):     # trange: progress bar. HH
-                run_one_session(bb, para_scan)     # There is no need to assign back the resulting bandit. (Modified inside run_one_session())
+                run_one_session(bb, para_scan, para_optim)     # There is no need to assign back the resulting bandit. (Modified inside run_one_session())
         else:
             for ss, bb in enumerate(bandits_all_sessions):     # trange: progress bar. HH
-                run_one_session(bb, para_scan)     # There is no need to assign back the resulting bandit. (Modified inside run_one_session())
+                run_one_session(bb, para_scan, para_optim)     # There is no need to assign back the resulting bandit. (Modified inside run_one_session())
             
                 
         if not para_optim: print('--- serial finished in %g s ---' % (time.time()-start))
@@ -203,7 +206,7 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
         start = time.time()
         
         # Note the "," in (bb,). See here https://stackoverflow.com/questions/29585910/why-is-multiprocessings-apply-async-so-picky
-        result_ids = [pool.apply_async(run_one_session, args = (bb, para_scan)) for bb in bandits_all_sessions]  
+        result_ids = [pool.apply_async(run_one_session, args = (bb, para_scan, para_optim)) for bb in bandits_all_sessions]  
                         
         if not para_optim:  # Progress bar
             for ss, result_id in tqdm(enumerate(result_ids), total = len(bandits_all_sessions), desc='apply_async'):
@@ -223,19 +226,19 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
     stay_duration_hist_bins = np.arange(21) + 0.5
     n_unique_bandits = len(bandit)
     
+    results_all_sessions['foraging_efficiency_per_session'] = np.zeros([n_unique_bandits, n_reps])
+    
     if not (para_scan or para_optim):
         results_all_sessions['stay_duration_hist'] = np.zeros(len(stay_duration_hist_bins)-1)
         
         # if bandit[0].forager == 'IdealOptimal':
         #     results_all_sessions['matching_slope_IdealOptimal_theoretical_per_session'] = np.zeros(n_reps)
     
-    results_all_sessions['foraging_efficiency_per_session'] = np.zeros([n_unique_bandits, n_reps])
-    results_all_sessions['linear_fit_income_per_session'] = np.zeros([n_unique_bandits, n_reps])
-    results_all_sessions['linear_fit_return_per_session'] = np.zeros([n_unique_bandits, n_reps])
-    
     if not para_optim:
         results_all_sessions['linear_fit_log_income_ratio'] = np.zeros([n_unique_bandits, 4, 2])
         results_all_sessions['linear_fit_log_income_ratio'][:] = np.nan
+        results_all_sessions['linear_fit_income_per_session'] = np.zeros([n_unique_bandits, n_reps])
+        results_all_sessions['linear_fit_return_per_session'] = np.zeros([n_unique_bandits, n_reps])
         
     # Loop over all unique bandits
     for unique_idx in range(n_unique_bandits):
@@ -251,8 +254,6 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
         for ss, bb in enumerate(sessions_for_this_bandit):
             # Session-wise
             results_all_sessions['foraging_efficiency_per_session'][unique_idx,ss] = bb.foraging_efficiency
-            results_all_sessions['linear_fit_income_per_session'][unique_idx,ss] = bb.linear_fit_income_per_session # Add session-wise matching slope for model competition
-            results_all_sessions['linear_fit_return_per_session'][unique_idx,ss] = bb.linear_fit_return_per_session # Matching slope from log_return_ratio
             
             if not (para_scan or para_optim):
                 results_all_sessions['stay_duration_hist'] += np.histogram(bb.stay_durations, bins = stay_duration_hist_bins)[0]
@@ -261,6 +262,10 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
                 #     results_all_sessions['matching_slope_IdealOptimal_theoretical_per_session'][ss] = bb.matching_slope_IdealOptimal_theoretical
 
             if not para_optim:
+                
+                results_all_sessions['linear_fit_income_per_session'][unique_idx,ss] = bb.linear_fit_income_per_session # Add session-wise matching slope for model competition
+                results_all_sessions['linear_fit_return_per_session'][unique_idx,ss] = bb.linear_fit_return_per_session # Matching slope from log_return_ratio
+
                 blockwise_stats_this_bandit[:, n_blocks_now : n_blocks_now + bb.n_blocks] =  \
                     np.vstack([bb.blockwise_choice_fraction, 
                                bb.blockwise_income_fraction, 
@@ -407,7 +412,7 @@ def score_func(opti_value, *argss):
     kwargs_all = generate_kwargs(forager, opti_names, opti_value)
         
     # Run simulation
-    bandit = Bandit(**kwargs_all, if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs, p_reward_seed_override = 20200303)  # The same reward schedule for fair comparison
+    bandit = Bandit(**kwargs_all, if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs, p_reward_seed_override = 20200303, if_para_optim = True)  # The same reward schedule for fair comparison
     score = - run_sessions_parallel(bandit, n_reps = n_reps_per_iter, pool = pool, para_optim = True)  # Negative efficiency as cost function
     
     # print(np.round(opti_value,4), score, '\n')
