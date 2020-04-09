@@ -295,34 +295,80 @@ if __name__ == '__main__':
     
     # -------------------------------------------------------------------------------------------
 
-    n_trials = 1000
+    # n_trials = 1000
 
-    forager = 'RW1972_epsi'
-    para_names = ['learn_rate_rew','epsilon']
-    para_scales = ['linear','linear']
-    para_bounds = [[0, 0],
-                    [1, 1]]
+    # forager = 'RW1972_epsi'
+    # para_names = ['learn_rate_rew','epsilon']
+    # para_scales = ['linear','linear']
+    # para_bounds = [[0, 0],
+    #                 [1, 1]]
+    
+    # #-- Para recovery
+    # n_models = 2
+    # true_paras = np.vstack((np.random.uniform(0, 1, size = n_models),
+    #                         np.random.uniform(0, 1, size = n_models),
+    #                         ))
+    # true_paras, fitted_para = fit_para_recovery(forager, 
+    #               para_names, para_bounds, true_paras, n_trials = n_trials, 
+    #               para_scales = para_scales, para_color_code = 1, para_2ds = [[0,1]],
+    #               fit_method = 'DE', pool = pool);    
+    
+    # # # -- LL_surface --
+    # # compute_LL_surface(forager, para_names, para_bounds, 
+    # #                     true_para = [0.1, 0.5],
+    # #                     para_2ds = [[0,1]], # LL surfaces for user-defined pairs of paras
+    # #                     n_grids = [[30,30]] * 6, 
+    # #                     para_scales = para_scales,
+    # #                     n_trials = n_trials,
+    # #                     fit_method = 'DE', n_x0s = 8, pool = pool)
+    
+    # -------------------------------------------------------------------------------------------
+    n_trials = 1000
+    
+    forager = 'RW1972_softmax'
+    para_names = ['learn_rate_rew','softmax_temperature']
+    para_scales = ['linear','log']
+    para_bounds = [[0, 1e-2],
+                    [1, 15]]
     
     #-- Para recovery
-    n_models = 2
+    n_models = 5
     true_paras = np.vstack((np.random.uniform(0, 1, size = n_models),
-                            np.random.uniform(0, 1, size = n_models),
+                            1/np.random.exponential(10, size = n_models),
                             ))
     true_paras, fitted_para = fit_para_recovery(forager, 
                   para_names, para_bounds, true_paras, n_trials = n_trials, 
                   para_scales = para_scales, para_color_code = 1, para_2ds = [[0,1]],
                   fit_method = 'DE', pool = pool);    
+
+    # # -------------------------------------------------------------------------------------------
+    # n_trials = 100
     
+    # forager = 'Bari2019'
+    # para_names = ['learn_rate_rew','forget_rate','softmax_temperature']
+    # para_scales = ['linear','linear','log']
+    # para_bounds = [[0, 0, 1e-2],
+    #                [1, 1, 15]]
+    
+    # # #-- Para recovery
+    # n_models = 5
+    # true_paras = np.vstack((np.random.uniform(0, 1, size = n_models),
+    #                         1/np.random.exponential(10, size = n_models),
+    #                         ))
+    # fit_para_recovery(forager, 
+    #               para_names, para_bounds, true_paras, n_trials = n_trials, 
+    #               para_scales = para_scales, para_color_code = 1, para_2ds = [[0,1]],
+    #               fit_method = 'DE', pool = pool);    
+
     # # -- LL_surface --
-    # compute_LL_surface(forager, para_names, para_bounds, 
-    #                     true_para = [0.1, 0.5],
-    #                     para_2ds = [[0,1]], # LL surfaces for user-defined pairs of paras
-    #                     n_grids = [[30,30]] * 6, 
-    #                     para_scales = para_scales,
-    #                     n_trials = n_trials,
-    #                     fit_method = 'DE', n_x0s = 8, pool = pool)
+    # # compute_LL_surface(forager, para_names, para_bounds, 
+    # #                     true_para = [0.1, 0.5],
+    # #                     para_2ds = [[0,1]], # LL surfaces for user-defined pairs of paras
+    # #                     n_grids = [[30,30]] * 6, 
+    # #                     para_scales = para_scales,
+    # #                     n_trials = n_trials,
+    # #                     fit_method = 'DE', n_x0s = 8, pool = pool)
     
-        
     #%%
     pool.close()   # Just a good practice
     pool.join()

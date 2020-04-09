@@ -143,6 +143,7 @@ class Bandit:
         self.time = 0
         self.choice_history = np.zeros([1,self.n_trials])  # Choice history
         self.q_estimation = np.zeros([self.k, self.n_trials]) # Estimation for each action (e.g., Q in Bari2019, L-stage scalar value in Corrado2005) 
+        self.choice_prob = np.zeros([self.k, self.n_trials]) # Estimation for each action (e.g., Q in Bari2019, L-stage scalar value in Corrado2005) 
         self.reward_history = np.zeros([self.k, self.n_trials])    # Reward history, separated for each port (Corrado Newsome 2005)
         
         # Generate baiting prob in block structure
@@ -159,6 +160,8 @@ class Bandit:
             
             self.description = '%s, step_sizes = %s (tau_eff = %s), forget = %s, softmax_temp = %g, epsi = %g' % \
                                (self.forager, np.round(np.array(self.step_sizes),3), np.round(effective_taus,3), self.forget_rates, self.softmax_temperature, self.epsilon)
+                               
+            self.choice_prob[:] = 1/self.k   # To be strict
  
         elif self.forager in ['Sugrue2004', 'Corrado2005', 'Iigaya2019']:
             self.description = '%s, taus = %s, w_taus = %s, softmax_temp = %g, epsi = %g, random_before_total_reward = %g' % \
@@ -172,7 +175,7 @@ class Bandit:
             for tau, w_tau in zip(self.taus, self.w_taus):
                 self.history_filter += w_tau * np.exp(-reversed_t / tau) / np.sum(np.exp(-reversed_t / tau))  # Note the normalization term (= tau when n -> inf.)
             
-            self.q_estimation[:] = 1/self.k   # To be strict
+            self.choice_prob[:] = 1/self.k   # To be strict
             
         elif self.forager in ['LossCounting']:
             self.description = '%s, loss_thres +/- std = %g +/- %g' % (self.forager, self.loss_count_threshold_mean, self.loss_count_threshold_std)
@@ -396,13 +399,13 @@ class Bandit:
                     choice = np.random.choice(np.where(self.q_estimation[:, self.time] == self.q_estimation[:, self.time].max())[0])
                     
                 elif self.forager in ['Sugrue2004', 'Corrado2005', 'Iigaya2019', 'Bari2019', 'Hattori2019' ]:   # Poisson
-                    choice = self.choose_ps(self.q_estimation[:,self.time])    
+                    #  choice = self.choose_ps(self.q_estimation[:,self.time])    
+                    choice = self.choose_ps(self.choice_prob[:,self.time])    
                 
         self.choice_history[0, self.time] = int(choice)
         
         return int(choice)
-            
-  
+    
     def step(self, choice):
            
         # =============================================================================
@@ -483,9 +486,12 @@ class Bandit:
             unchosen_idx = [cc for cc in range(self.k) if cc != choice]
             self.q_estimation[unchosen_idx, self.time] = (1 - self.forget_rates[0]) * self.q_estimation[unchosen_idx, self.time - 1] 
             
+           
             # Softmax in 'Bari2019', 'Hattori2019'
             if self.forager in ['Bari2019', 'Hattori2019']:
-                self.q_estimation[:, self.time] = softmax(self.q_estimation[:, self.time], self.softmax_temperature)
+                # --- The below line is erroneous!! Should not change q_estimation!! 04/08/2020 ---
+                #     self.q_estimation[:, self.time] = softmax(self.q_estimation[:, self.time], self.softmax_temperature)
+                self.choice_prob[:, self.time] = softmax(self.q_estimation[:, self.time], self.softmax_temperature)
             
         elif self.forager in ['Sugrue2004', 'Iigaya2019']:
             # Fractional local income
@@ -499,10 +505,12 @@ class Bandit:
             # 2. Poisson choice probability = Fractional local income
             if np.sum(local_income) == 0:
                 # 50%-to-50%
-                self.q_estimation[:, self.time] = [1/self.k] * self.k
+                # self.q_estimation[:, self.time] = [1/self.k] * self.k
+                self.choice_prob[:, self.time] = [1/self.k] * self.k
             else:
                 # Local fractional income
-                self.q_estimation[:, self.time] = local_income / np.sum(local_income)
+                # self.q_estimation[:, self.time] = local_income / np.sum(local_income)
+                self.choice_prob[:, self.time] = local_income / np.sum(local_income)
                 
         elif self.forager == 'Corrado2005':
             # Softmaxed local income
@@ -513,7 +521,8 @@ class Bandit:
             local_income = np.sum(valid_reward_history * valid_filter, axis = 1)
             
             # 2. Poisson choice probability = Softmaxed local income (Note: Equivalent to "difference + sigmoid" in [Corrado etal 2005], for 2lp case)
-            self.q_estimation[:, self.time] = softmax(local_income, self.softmax_temperature)
+            # self.q_estimation[:, self.time] = softmax(local_income, self.softmax_temperature)
+            self.choice_prob[:, self.time] = softmax(local_income, self.softmax_temperature)
             
         return reward
   

@@ -45,7 +45,15 @@ def softmax(x,softmax_temperature):
         greedy[np.random.choice(np.where(x == np.max(x))[0])] = 1
         return greedy
     else:   # Normal softmax
-        return np.exp(x/softmax_temperature)/np.sum(np.exp(x/softmax_temperature))  # Accept np.arrays
+        return np.exp(x/softmax_temperature)/np.sum(np.exp(x/softmax_temperature))  # Accept np.
+    
+def choose_ps(ps):
+    '''
+    "Poisson"-choice process
+    '''
+    ps = ps/np.sum(ps)
+    return np.max(np.argwhere(np.hstack([-1e-16, np.cumsum(ps)]) < np.random.rand()))
+
 
 class BanditModels:
     
@@ -141,7 +149,10 @@ class BanditModels:
         
         # Initialization
         self.time = 0
-        
+        self.q_estimation = np.zeros([self.K, self.n_trials]) 
+        self.choice_prob = np.zeros([self.K, self.n_trials]) 
+        self.choice_prob[:] = 1/self.K   # To be strict
+         
         if self.if_fit_mode:  # Predictive mode
             self.predictive_choice_prob = np.zeros([self.K, self.n_trials])
             
@@ -159,8 +170,7 @@ class BanditModels:
         
         # Forager-specific
         if self.forager in ['RW1972_epsi','RW1972_softmax','Bari2019', 'Hattori2019']:
-            self.q_estimation = np.zeros([self.K, self.n_trials]) 
-            pass
+           pass
         
         elif self.forager in ['LNP_softmax']:
             # Compute the history filter. Compatible with any number of taus.
@@ -169,9 +179,6 @@ class BanditModels:
             
             for tau, w_tau in zip(self.taus, self.w_taus):
                 self.history_filter += w_tau * np.exp(-reversed_t / tau) / np.sum(np.exp(-reversed_t / tau))  # Note the normalization term (= tau when n -> inf.)
-            
-            self.q_estimation = np.zeros([self.K, self.n_trials]) # Estimation for each action (e.g., Q in Bari2019, L-stage scalar value in Corrado2005) 
-            self.q_estimation[:] = 1/self.K   # To be strict
             
         elif self.forager in ['LossCounting']:
             # Initialize
@@ -239,12 +246,6 @@ class BanditModels:
         # We should make it random afterwards
         np.random.seed()
         
-    def choose_ps(self, ps):
-        '''
-        "Poisson"-choice process
-        '''
-        ps = ps/np.sum(ps)
-        return np.max(np.argwhere(np.hstack([-1e-16, np.cumsum(ps)]) < np.random.rand()))
         
     def act_random(self):
         
@@ -310,7 +311,7 @@ class BanditModels:
         #     else:
         #         self.choice_history[0, self.time] = choice
             
-        # == The above is erroneous!! ==
+        # == The above is erroneous!! We should never realize any probabilistic events in model fitting!! ==
         choice = np.random.choice(np.where(self.q_estimation[:, self.time] == self.q_estimation[:, self.time].max())[0])
 
         if self.if_fit_mode:
@@ -327,11 +328,15 @@ class BanditModels:
 
     def act_Probabilistic(self):
         
+        # !! Should not change q_estimation!! Otherwise will affect following Qs
+        # And I put softmax here
+        self.choice_prob[:, self.time] = softmax(self.q_estimation[:, self.time], self.softmax_temperature)  
+
         if self.if_fit_mode:
-            self.predictive_choice_prob[:, self.time] = self.q_estimation[:, self.time]
+            self.predictive_choice_prob[:, self.time] = self.choice_prob[:, self.time]
             choice = None   # No need to make specific choice in fitting mode
         else:
-            choice = self.choose_ps(self.q_estimation[:, self.time])
+            choice = choose_ps(self.choice_prob[:, self.time])
             self.choice_history[0, self.time] = choice
             
         return choice
@@ -350,12 +355,12 @@ class BanditModels:
             else:
                 self.loss_count[0, self.time] = self.loss_count[0, self.time - 1] + 1
                 
-    def step_NLP(self,valid_reward_history):
+    def step_LNP(self,valid_reward_history):
         
         valid_filter = self.history_filter[-self.time:]
         local_income = np.sum(valid_reward_history * valid_filter, axis = 1)
         
-        self.q_estimation[:, self.time] = softmax(local_income, self.softmax_temperature)
+        self.q_estimation[:, self.time] = local_income
         
     def step_RWlike(self,choice,reward):
         
@@ -368,15 +373,16 @@ class BanditModels:
         # Choice-dependent forgetting rate ('Hattori2019')
         # Chosen:   Q(n+1) = (1- forget_rate_chosen) * Q(n) + step_size * (Reward - Q(n))
         self.q_estimation[choice, self.time] = (1 - self.forget_rates[1]) * self.q_estimation[choice, self.time - 1]  \
-                                         + learn_rate_this * (reward - self.q_estimation[choice, self.time - 1])
+                                              + learn_rate_this * (reward - self.q_estimation[choice, self.time - 1])
                                              
         # Unchosen: Q(n+1) = (1-forget_rate_unchosen) * Q(n)
         unchosen_idx = [cc for cc in range(self.K) if cc != choice]
         self.q_estimation[unchosen_idx, self.time] = (1 - self.forget_rates[0]) * self.q_estimation[unchosen_idx, self.time - 1] 
         
+        # --- The below three lines are erroneous!! Should not change q_estimation!! ---
         # Softmax in 'Bari2019', 'Hattori2019'
-        if self.forager in ['RW1972_softmax', 'Bari2019', 'Hattori2019']:
-            self.q_estimation[:, self.time] = softmax(self.q_estimation[:, self.time], self.softmax_temperature)
+        # if self.forager in ['RW1972_softmax', 'Bari2019', 'Hattori2019']:
+        #     self.q_estimation[:, self.time] = softmax(self.q_estimation[:, self.time], self.softmax_temperature)
 
        
     def act(self): # Compatible with either fitting mode (predictive) or not (generative). It's much clear now!!
@@ -433,7 +439,7 @@ class BanditModels:
             else:
                 valid_reward_history = self.reward_history[:, :self.time]   # Models' history till now
             
-            self.step_NLP(valid_reward_history)
+            self.step_LNP(valid_reward_history)
             
 
     def simulate(self):

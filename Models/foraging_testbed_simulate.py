@@ -619,10 +619,10 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # bandit = Bandit(forager = 'Bari2019', step_sizes = 0.28768228, forget_rate = 0.01592382, softmax_temperature = 0.37121355,  epsilon = 0, n_trials = global_n_trials)
     # bandit = Bandit(forager = 'Hattori2019', epsilon = 0,  step_sizes = [0.2, 0.1], forget_rate = 0.05, softmax_temperature = 0.4, n_trials = global_n_trials)   
  
-    # bandit = Bandit(forager = 'IdealOptimal')
+    # bandit = Bandit(forager = 'IdealpHatOptimal')
     # bandit = Bandit(forager = 'pMatching')
-    bandit = Bandit(forager = 'AmB1', m_AmB1=5)
-    run_sessions_parallel(bandit, n_reps = 200, pool = pool)
+    # bandit = Bandit(forager = 'AmB1', m_AmB1=5)
+    # run_sessions_parallel(bandit, n_reps = 200, pool = pool)
 
     #%% =============================================================================
     #     Parameter scan (1-D or 2-D)

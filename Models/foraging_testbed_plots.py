@@ -80,8 +80,8 @@ def plot_one_session(bandit, fig, plottype='2lickport'):
     if bandit.forager in ['LossCounting']:
         ax.plot(bandit.loss_count[0,:] / 10, color='Blue', label = 'loss count')
         
-    elif bandit.forager not in ['Random', 'IdealpHatOptimal', 'IdealpHatGreedy', 'pMatching', 'AlwaysLEFT', 'IdealpGreedy', 'SuttonBartoRLBook']:
-        ax.plot(moving_average(bandit.q_estimation[RIGHT,:], 1), color='Green', label = 'choice prob.')
+    elif bandit.forager not in ['Random', 'IdealpHatOptimal', 'IdealpHatGreedy', 'pMatching', 'AlwaysLEFT', 'IdealpGreedy', 'SuttonBartoRLBook','AmB1']:
+        ax.plot(moving_average(bandit.choice_prob[RIGHT,:], 1), color='Green', label = 'choice prob.')
         
     # Smoothed choice history
     ax.plot(moving_average(choice_history, smooth_factor) , color='black', label = 'choice (smooth = %g)' % smooth_factor)
