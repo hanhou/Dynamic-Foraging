@@ -323,7 +323,7 @@ if __name__ == '__main__':
     # #                     fit_method = 'DE', n_x0s = 8, pool = pool)
     
     # # -------------------------------------------------------------------------------------------
-    # n_trials = 1000
+    # n_trials = 100
     
     # forager = 'RW1972_softmax'
     # para_names = ['learn_rate_rew','softmax_temperature']
@@ -331,42 +331,72 @@ if __name__ == '__main__':
     # para_bounds = [[0, 1e-2],
     #                 [1, 15]]
     
-    # #-- Para recovery
-    # # n_models = 5
-    # # true_paras = np.vstack((np.random.uniform(0, 1, size = n_models),
-    # #                         1/np.random.exponential(10, size = n_models),
-    # #                         ))
-    # # true_paras, fitted_para = fit_para_recovery(forager, 
-    # #               para_names, para_bounds, true_paras, n_trials = n_trials, 
-    # #               para_scales = para_scales, para_color_code = 1, para_2ds = [[0,1]],
-    # #               fit_method = 'DE', pool = pool);    
+    # # -- Para recovery
+    # n_models = 2
+    # true_paras = np.vstack((np.random.uniform(0, 1, size = n_models),
+    #                         1/np.random.exponential(10, size = n_models),
+    #                         ))
+    # true_paras, fitted_para = fit_para_recovery(forager, 
+    #               para_names, para_bounds, true_paras, n_trials = n_trials, 
+    #               para_scales = para_scales, para_color_code = 1, para_2ds = [[0,1]],
+    #               fit_method = 'DE', pool = pool);    
 
-    # #-- LL_surface --
+    # # #-- LL_surface --
+    # # compute_LL_surface(forager, para_names, para_bounds, 
+    # #                     true_para = [0.1, 0.5],
+    # #                     para_2ds = [[0,1]], # LL surfaces for user-defined pairs of paras
+    # #                     n_grids = [[30,30]] * 6, 
+    # #                     para_scales = para_scales,
+    # #                     n_trials = n_trials,
+    # #                     fit_method = 'DE', n_x0s = 8, pool = pool)
+    
+    # # # -------------------------------------------------------------------------------------------
+    # n_trials = 1000
+
+    # forager = 'Bari2019'
+    # para_names = ['learn_rate_rew','forget_rate','softmax_temperature']
+    # para_scales = ['linear','linear', 'log']
+    # para_bounds = [[0, 0, 1e-2],
+    #                 [1, 1, 15]]
+    
+    # # -- LL_surface --
     # compute_LL_surface(forager, para_names, para_bounds, 
-    #                     true_para = [0.1, 0.5],
-    #                     para_2ds = [[0,1]], # LL surfaces for user-defined pairs of paras
-    #                     n_grids = [[30,30]] * 6, 
+    #                     true_para = [0.1976758, 0.01164267, 0.19536022],  # Use values that optimize reward
+    #                     para_2ds = [[0,1],[0,2],[1,2]], # LL surfaces for user-defined pairs of paras
+    #                     n_grids = [[50,50]] * 6, 
     #                     para_scales = para_scales,
     #                     n_trials = n_trials,
     #                     fit_method = 'DE', n_x0s = 8, pool = pool)
     
-    # # -------------------------------------------------------------------------------------------
+    # # # -------------------------------------------------------------------------------------------
     n_trials = 1000
-
-    forager = 'Bari2019'
-    para_names = ['learn_rate_rew','forget_rate','softmax_temperature']
-    para_scales = ['linear','linear', 'log']
-    para_bounds = [[0, 0, 1e-2],
-                    [1, 1, 15]]
+    
+    forager = 'Hattori2019'
+    para_names = ['learn_rate_rew','learn_rate_unrew', 'forget_rate','softmax_temperature']
+    para_scales = ['linear','linear','linear', 'log']
+    para_bounds = [[0, 0, 0, 1e-2],
+                   [1, 1, 1, 15]]
+    
+    # #-- Para recovery
+    # n_models = 50
+    # true_paras = np.vstack((np.random.uniform(0, 1, size = n_models),
+    #                         np.random.uniform(0, 1, size = n_models),
+    #                         np.random.uniform(0, 1, size = n_models),
+    #                         1/np.random.exponential(10, size = n_models),
+    #                         ))
+    # true_paras, fitted_para = fit_para_recovery(forager, 
+    #               para_names, para_bounds, true_paras, n_trials = n_trials, 
+    #               para_scales = para_scales, para_color_code = 3, para_2ds = [[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]],
+    #               fit_method = 'DE', pool = pool);    
     
     # -- LL_surface --
     compute_LL_surface(forager, para_names, para_bounds, 
-                        true_para = [0.1976758, 0.01164267, 0.19536022],  # Use values that optimize reward
-                        para_2ds = [[0,1],[0,2],[1,2]], # LL surfaces for user-defined pairs of paras
-                        n_grids = [[50,50]] * 6, 
-                        para_scales = para_scales,
-                        n_trials = n_trials,
-                        fit_method = 'DE', n_x0s = 8, pool = pool)
+                    true_para = [0.2, 0.3, 0.2, 0.3],
+                    para_2ds = [[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]], # LL surfaces for user-defined pairs of paras
+                    n_grids = [[20,20]] * 6, 
+                    para_scales = para_scales,
+                    n_trials = n_trials,
+                    fit_method = 'DE', n_x0s = 8, pool = pool)
     
     #%%
     pool.close()   # Just a good practice

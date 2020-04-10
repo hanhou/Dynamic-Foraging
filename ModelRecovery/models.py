@@ -138,7 +138,10 @@ class BanditModels:
             self.forget_rates = [forget_rate, forget_rate]
             
         elif forager == 'Hattori2019':
-            assert all(x is not None for x in (learn_rate_rew, learn_rate_unrew, forget_rate))
+            assert all(x is not None for x in (learn_rate_rew, learn_rate_unrew))
+            if forget_rate is None:
+                forget_rate = 0  # Allow Hattori2019 to not have forget_rate. In that case, it is an extension of RW1972.
+            
             self.learn_rates = [learn_rate_unrew, learn_rate_rew]   # 0: unrewarded, 1: rewarded
             self.forget_rates = [forget_rate, 0]   # 0: unchosen, 1: chosen
           

@@ -7,7 +7,8 @@ Created on Sat Mar 21 13:47:05 2020
 
 import numpy as np
 import matplotlib.pyplot as plt
-import scipy.ndimage
+import statsmodels.api as sm
+
 from matplotlib.gridspec import GridSpec
 from matplotlib.pyplot import cm
 
@@ -36,27 +37,46 @@ def plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bound
     
     fig.text(0.05,0.90,'Parameter Recovery: %s, Method: %s, N_trials = %g, N_runs = %g\nColor code: %s' % (forager, fit_method, n_trials, n_models, para_names[para_color_code]), fontsize = 15)
 
-    gs = GridSpec(mm, nn, wspace=0.4, hspace=0.3, bottom=0.15, top=0.80, left=0.05, right=0.97) 
+    gs = GridSpec(mm, nn, wspace=0.4, hspace=0.3, bottom=0.15, top=0.80, left=0.07, right=0.97) 
     
     xmin = np.min(true_paras[para_color_code,:])
     xmax = np.max(true_paras[para_color_code,:])
     if para_scales[para_color_code] == 'log':
         xmin = np.min(true_paras[para_color_code,:])
         xmax = np.max(true_paras[para_color_code,:])
-        colors = cm.copper((np.log(true_paras[para_color_code,:])-np.log(xmin)+1e-6)/(np.log(xmax)-np.log(xmin)+1e-6)) # Use second as color (backward compatibility)
+        colors = cm.copper((np.log(true_paras[para_color_code,:])-np.log(xmin))/(np.log(xmax)-np.log(xmin)+1e-6)) # Use second as color (backward compatibility)
     else:
-        colors = cm.copper((true_paras[para_color_code,:]-xmin+1e-6)/(xmax-xmin+1e-6)) # Use second as color (backward compatibility)
+        colors = cm.copper((true_paras[para_color_code,:]-xmin)/(xmax-xmin+1e-6)) # Use second as color (backward compatibility)
       
     
     # 1. 1-D plot
     for pp in range(n_paras):
         ax = fig.add_subplot(gs[np.floor(pp/nn).astype(int), np.mod(pp,nn).astype(int)])
         plt.plot([para_bounds[0][pp], para_bounds[1][pp]], [para_bounds[0][pp], para_bounds[1][pp]],'k--',linewidth=1)
-
+        
+        # Raw data
         plt.scatter(true_paras[pp,:], fitted_paras[pp,:], marker = 'o', facecolors='none', s = 100, c = colors, alpha=0.7)
+        
+        if n_models > 1:   # Linear regression
+            if para_scales[pp] == 'linear':
+                x = true_paras[pp,:]
+                y = fitted_paras[pp,:]
+            else:  #  Use log10 if needed
+                x = np.log10(true_paras[pp,:])
+                y = np.log10(fitted_paras[pp,:])
+                
+            model = sm.OLS(y, sm.add_constant(x)).fit()
+            b, k = model.params  
+            r_square, p = (model.rsquared, model.pvalues)
+            
+            if para_scales[pp] == 'linear':
+                plt.plot([min(x),max(x)], [k*min(x)+b, k*max(x)+b,], '-k', label = 'r^2 = %.2g\np = %.2g'%(r_square, p[1]))
+            else:  #  Use log10 if needed
+                plt.plot([10**min(x), 10**max(x)], [10**(k*min(x)+b), 10**(k*max(x)+b),], '-k', label = 'r^2 = %.2g\np = %.2g'%(r_square, p[1]))
         
         ax.set_xscale(para_scales[pp])
         ax.set_yscale(para_scales[pp])
+        ax.legend()
         
         plt.title(para_names[pp])
         plt.xlabel('True')
@@ -70,30 +90,30 @@ def plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bound
         ax = fig.add_subplot(gs[np.floor((pp+n_paras)/nn).astype(int), np.mod(pp+n_paras,nn).astype(int)])    
         legend_plotted = False
         
+        # Connected true and fitted data
         for n in range(n_models):
-            
             plt.plot(true_paras[para_2d[0],n], true_paras[para_2d[1],n],'ok', markersize=11, fillstyle='none', c = colors[n], label = 'True' if not legend_plotted else '',alpha=.7)
             plt.plot(fitted_paras[para_2d[0],n], fitted_paras[para_2d[1],n],'ok', markersize=7, c = colors[n], label = 'Fitted' if not legend_plotted else '',alpha=.7)
             legend_plotted = True
             
             plt.plot([true_paras[para_2d[0],n], fitted_paras[para_2d[0],n]], [true_paras[para_2d[1],n], fitted_paras[para_2d[1],n]],'-', linewidth=1, c = colors[n])
             
-            # Draw the fitting bounds
-            x1 = para_bounds[0][para_2d[0]]
-            y1 = para_bounds[0][para_2d[1]]
-            x2 = para_bounds[1][para_2d[0]]
-            y2 = para_bounds[1][para_2d[1]]
-            
-            plt.plot([x1,x2,x2,x1,x1],[y1,y1,y2,y2,y1],'k--',linewidth=1)
-            
-            plt.xlabel(para_names[para_2d[0]])
-            plt.ylabel(para_names[para_2d[1]])
-            
-            if para_scales[para_2d[0]] == 'linear' and para_scales[para_2d[1]] == 'linear':
-                ax.set_aspect(1.0/ax.get_data_ratio())  # This is the correct way of setting square display
-            
-            ax.set_xscale(para_scales[para_2d[0]])
-            ax.set_yscale(para_scales[para_2d[1]])
+        # Draw the fitting bounds
+        x1 = para_bounds[0][para_2d[0]]
+        y1 = para_bounds[0][para_2d[1]]
+        x2 = para_bounds[1][para_2d[0]]
+        y2 = para_bounds[1][para_2d[1]]
+        
+        plt.plot([x1,x2,x2,x1,x1],[y1,y1,y2,y2,y1],'k--',linewidth=1)
+        
+        plt.xlabel(para_names[para_2d[0]])
+        plt.ylabel(para_names[para_2d[1]])
+        
+        if para_scales[para_2d[0]] == 'linear' and para_scales[para_2d[1]] == 'linear':
+            ax.set_aspect(1.0/ax.get_data_ratio())  # This is the correct way of setting square display
+        
+        ax.set_xscale(para_scales[para_2d[0]])
+        ax.set_yscale(para_scales[para_2d[1]])
 
     plt.legend(bbox_to_anchor=(1.1, 1.05))
     plt.show()
@@ -130,9 +150,10 @@ def plot_LL_surface(forager, LLsurfaces, para_names, para_2ds, para_grids, para_
         dy = ps[1][1]-ps[1][0]
         extent=[ps[0].min()-dx/2, ps[0].max()+dx/2, ps[1].min()-dy/2, ps[1].max()+dy/2]
         
-        plt.imshow(LLs, cmap='plasma', extent=extent, interpolation='none', origin='lower')
+        if dx > 0 and dy > 0:
+            plt.imshow(LLs, cmap='plasma', extent=extent, interpolation='none', origin='lower')
+            plt.colorbar()
         # plt.pcolor(pp1, pp2, LLs, cmap='RdBu', vmin=z_min, vmax=z_max)
-        plt.colorbar()
         
         plt.contour(LLs, colors='grey', levels = 20, extent=extent, linewidths=0.7)
         # plt.contour(-np.log(-LLs), colors='grey', levels = 20, extent=extent, linewidths=0.7)
