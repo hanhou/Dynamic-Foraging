@@ -126,15 +126,16 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para,
         else:
             p2 = np.logspace(np.log10(para_bounds[0][para_2d[1]]), np.log10(para_bounds[1][para_2d[1]]), n_g[1])
             
+        # -- Don't do this --
         # Make sure the true_paras are exactly on the grid
-        true_para[para_2d[0]] = p1[np.argmin(np.abs(true_para[para_2d[0]] - p1))]
-        true_para[para_2d[1]] = p2[np.argmin(np.abs(true_para[para_2d[1]] - p2))]
+        # true_para[para_2d[0]] = p1[np.argmin(np.abs(true_para[para_2d[0]] - p1))]
+        # true_para[para_2d[1]] = p2[np.argmin(np.abs(true_para[para_2d[1]] - p2))]
         
         # Save para_grids
         para_grids.append([p1, p2])
         
     # === 3. Generate fake data using the adjusted true value ===
-    print('Adjusted true para on grid: %s' % np.round(true_para,3))
+    # print('Adjusted true para on grid: %s' % np.round(true_para,3))
     choice_history, reward_history = generate_fake_data(forager, para_names, true_para, n_trials, **kwargs)
 
     # === 4. Do fitting only once ===
@@ -147,6 +148,7 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para,
                                              fit_method = fit_method, DE_pop_size = DE_pop_size, n_x0s = n_x0s, pool = pool,
                                              if_history = True)
     
+    print('  True para: %s' % np.round(true_para,3))
     print('Fitted para: %s' % np.round(fitting_result.x,3))
     sys.stdout.flush()
        
