@@ -77,6 +77,8 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, D
         fit_history = []
         fit_histories = []  # All histories for different initializations
         
+    # === Fitting ===
+    
     if fit_method == 'DE':
         
         # Use DE's own parallel method
@@ -89,8 +91,7 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, D
                                                          callback = callback_history if if_history else None,)
         if if_history:
             fit_history.append(fitting_result.x.copy())  # Add the final result
-        
-        return (fitting_result, [fit_history]) if if_history else fitting_result
+            fit_histories = [fit_history]  # Backward compatibility
         
     elif fit_method in ['L-BFGS-B', 'SLSQP', 'TNC', 'trust-constr']:
         
@@ -134,11 +135,19 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, D
         if if_history and fit_histories != []:
             fit_histories.insert(0,fit_histories.pop(best_ind))  # Move the best one to the first
         
-        return (fitting_result, fit_histories) if if_history else fitting_result
+    # === For Model Comparison ===
+    fitting_result.k_model = np.sum(np.diff(np.array(fit_bounds),axis=0)>0)  # Get the number of fitted parameters with non-zero range of bounds
+    fitting_result.n_trials = np.shape(choice_history)[1]
+    fitting_result.log_likelihood = - fitting_result.fun
+    
+    fitting_result.AIC = -2 * fitting_result.log_likelihood + 2 * fitting_result.k_model
+    fitting_result.BIC = -2 * fitting_result.log_likelihood + fitting_result.k_model * np.log(fitting_result.n_trials)
+    
+    # Likelihood-Per-Trial. See Wilson 2019 (but their formula was wrong...)
+    fitting_result.LPT_AIC = np.exp(- fitting_result.AIC / 2 / fitting_result.n_trials)
+    fitting_result.LPT_BIC = np.exp(- fitting_result.BIC / 2 / fitting_result.n_trials)
+    
+    return (fitting_result, fit_histories) if if_history else fitting_result
             
-
-
-
-
 
 

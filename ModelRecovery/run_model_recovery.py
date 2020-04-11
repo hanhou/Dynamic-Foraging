@@ -150,6 +150,8 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para,
     
     print('  True para: %s' % np.round(true_para,3))
     print('Fitted para: %s' % np.round(fitting_result.x,3))
+    print('km = %g, AIC = %g, BIC = %g\n      LPT_AIC = %g, LPT_BIC = %g' % (fitting_result.k_model, np.round(fitting_result.AIC, 3), np.round(fitting_result.BIC, 3),
+                                                                             np.round(fitting_result.LPT_AIC, 3), np.round(fitting_result.LPT_BIC, 3)))
     sys.stdout.flush()
        
     # === 5. Compute LL surfaces for all pairs ===
