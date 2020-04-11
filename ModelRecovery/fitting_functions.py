@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Created on Thu Mar 19 16:30:26 2020
 
@@ -9,7 +8,7 @@ import scipy.optimize as optimize
 import multiprocessing as mp
 # from tqdm import tqdm  # For progress bar. HH
 
-from models import BanditModels
+from bandit_model import BanditModel
 global fit_history
 
 def negLL_func(fit_value, *argss):
@@ -30,7 +29,7 @@ def negLL_func(fit_value, *argss):
     
     
     # Run **PREDICTIVE** simulation    
-    bandit = BanditModels(**kwargs_all, fit_choice_history = choice_history, fit_reward_history = reward_history)  # Into the fitting mode
+    bandit = BanditModel(**kwargs_all, fit_choice_history = choice_history, fit_reward_history = reward_history)  # Into the fitting mode
     bandit.simulate()
     
     # Compute negative likelihood
@@ -68,7 +67,7 @@ def fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history
     return fitting_result
 
 
-def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, DE_pop_size = 16, if_history = False, fit_method = 'CG', n_x0s = 1, pool = ''):
+def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, if_history = False, fit_method = 'DE', DE_pop_size = 16, n_x0s = 1, pool = ''):
     '''
     Main fitting func and compute BIC etc.
     '''
@@ -77,6 +76,8 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, D
         fit_history = []
         fit_histories = []  # All histories for different initializations
         
+    # === Fitting ===
+    
     if fit_method == 'DE':
         
         # Use DE's own parallel method
@@ -89,8 +90,7 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, D
                                                          callback = callback_history if if_history else None,)
         if if_history:
             fit_history.append(fitting_result.x.copy())  # Add the final result
-        
-        return (fitting_result, [fit_history]) if if_history else fitting_result
+            fit_histories = [fit_history]  # Backward compatibility
         
     elif fit_method in ['L-BFGS-B', 'SLSQP', 'TNC', 'trust-constr']:
         
@@ -134,11 +134,19 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, D
         if if_history and fit_histories != []:
             fit_histories.insert(0,fit_histories.pop(best_ind))  # Move the best one to the first
         
-        return (fitting_result, fit_histories) if if_history else fitting_result
+    # === For Model Comparison ===
+    fitting_result.k_model = np.sum(np.diff(np.array(fit_bounds),axis=0)>0)  # Get the number of fitted parameters with non-zero range of bounds
+    fitting_result.n_trials = np.shape(choice_history)[1]
+    fitting_result.log_likelihood = - fitting_result.fun
+    
+    fitting_result.AIC = -2 * fitting_result.log_likelihood + 2 * fitting_result.k_model
+    fitting_result.BIC = -2 * fitting_result.log_likelihood + fitting_result.k_model * np.log(fitting_result.n_trials)
+    
+    # Likelihood-Per-Trial. See Wilson 2019 (but their formula was wrong...)
+    fitting_result.LPT_AIC = np.exp(- fitting_result.AIC / 2 / fitting_result.n_trials)
+    fitting_result.LPT_BIC = np.exp(- fitting_result.BIC / 2 / fitting_result.n_trials)
+    
+    return (fitting_result, fit_histories) if if_history else fitting_result
             
-
-
-
-
 
 

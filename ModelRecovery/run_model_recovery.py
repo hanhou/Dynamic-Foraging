@@ -11,7 +11,8 @@ import multiprocessing as mp
 from tqdm import tqdm  # For progress bar. HH
 import sys
 
-from models import BanditModels
+from bandit_model import BanditModel
+from bandit_model_comparison import BanditModelComparison
 from fitting_functions import fit_bandit, negLL_func
 from plot_fitting import plot_para_recovery, plot_LL_surface
    
@@ -80,14 +81,14 @@ def generate_true_paras(para_bounds, n_models = 5, method = 'random_uniform'):
                 
         return true_paras
     
-def generate_fake_data(forager, para_names, true_para, n_trials, **kwargs):
+def generate_fake_data(forager, para_names, true_para, n_trials = 1000, **kwargs):
     # Generate fake data
     n_paras = len(para_names)
     kwarg_this = {}
     for pp in range(n_paras):
         kwarg_this[para_names[pp]] = true_para[pp]
     
-    bandit = BanditModels(forager, n_trials = n_trials, **kwarg_this, **kwargs)
+    bandit = BanditModel(forager, n_trials = n_trials, **kwarg_this, **kwargs)
     bandit.simulate()
     choice_history = bandit.choice_history
     reward_history = bandit.reward_history
@@ -150,6 +151,8 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para,
     
     print('  True para: %s' % np.round(true_para,3))
     print('Fitted para: %s' % np.round(fitting_result.x,3))
+    print('km = %g, AIC = %g, BIC = %g\n      LPT_AIC = %g, LPT_BIC = %g' % (fitting_result.k_model, np.round(fitting_result.AIC, 3), np.round(fitting_result.BIC, 3),
+                                                                             np.round(fitting_result.LPT_AIC, 3), np.round(fitting_result.LPT_BIC, 3)))
     sys.stdout.flush()
        
     # === 5. Compute LL surfaces for all pairs ===
@@ -371,35 +374,43 @@ if __name__ == '__main__':
     #                     fit_method = 'DE', n_x0s = 8, pool = pool)
     
     # # # -------------------------------------------------------------------------------------------
-    n_trials = 1000
+    # n_trials = 1000
     
-    forager = 'Hattori2019'
-    para_names = ['learn_rate_rew','learn_rate_unrew', 'forget_rate','softmax_temperature']
-    para_scales = ['linear','linear','linear', 'log']
-    para_bounds = [[0, 0, 0, 1e-2],
-                   [1, 1, 1, 15]]
+    # forager = 'Hattori2019'
+    # para_names = ['learn_rate_rew','learn_rate_unrew', 'forget_rate','softmax_temperature']
+    # para_scales = ['linear','linear','linear', 'log']
+    # para_bounds = [[0, 0, 0, 1e-2],
+    #                 [1, 1, 0, 15]]
     
-    # #-- Para recovery
-    # n_models = 50
-    # true_paras = np.vstack((np.random.uniform(0, 1, size = n_models),
-    #                         np.random.uniform(0, 1, size = n_models),
-    #                         np.random.uniform(0, 1, size = n_models),
-    #                         1/np.random.exponential(10, size = n_models),
-    #                         ))
-    # true_paras, fitted_para = fit_para_recovery(forager, 
-    #               para_names, para_bounds, true_paras, n_trials = n_trials, 
-    #               para_scales = para_scales, para_color_code = 3, para_2ds = [[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]],
-    #               fit_method = 'DE', pool = pool);    
+    # # #-- Para recovery
+    # # n_models = 50
+    # # true_paras = np.vstack((np.random.uniform(0, 1, size = n_models),
+    # #                         np.random.uniform(0, 1, size = n_models),
+    # #                         np.random.uniform(0, 1, size = n_models),
+    # #                         1/np.random.exponential(10, size = n_models),
+    # #                         ))
+    # # true_paras, fitted_para = fit_para_recovery(forager, 
+    # #               para_names, para_bounds, true_paras, n_trials = n_trials, 
+    # #               para_scales = para_scales, para_color_code = 3, para_2ds = [[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]],
+    # #               fit_method = 'DE', pool = pool);    
     
-    # -- LL_surface --
-    compute_LL_surface(forager, para_names, para_bounds, 
-                    true_para = [0.2, 0.3, 0.2, 0.3],
-                    para_2ds = [[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]], # LL surfaces for user-defined pairs of paras
-                    n_grids = [[20,20]] * 6, 
-                    para_scales = para_scales,
-                    n_trials = n_trials,
-                    fit_method = 'DE', n_x0s = 8, pool = pool)
+    # # -- LL_surface --
+    # compute_LL_surface(forager, para_names, para_bounds, 
+    #                 true_para = [0.2, 0.3, 0, 0.3],
+    #                 para_2ds = [[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]], # LL surfaces for user-defined pairs of paras
+    #                 n_grids = [[20,20]] * 6, 
+    #                 para_scales = para_scales,
+    #                 n_trials = n_trials,
+    #                 fit_method = 'DE', n_x0s = 8, pool = pool)
     
+    # # # ----------------------- Model Comparison ----------------------------------
+    choice, reward = generate_fake_data('LNP_softmax', ['tau1','softmax_temperature'], [10,0.4], n_trials = 1000)
+    
+    data = {'choice': choice, 'reward': reward}
+    model_comparison = BanditModelComparison(data, pool = pool)
+    model_comparison.fit()
+    
+
     #%%
     pool.close()   # Just a good practice
     pool.join()
