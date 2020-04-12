@@ -85,7 +85,7 @@ class BanditModel:
                  
                  # For 'LossCounting' [from Shahidi 2019]
                  loss_count_threshold_mean = None,   
-                 loss_count_threshold_std = None,
+                 loss_count_threshold_std = 0, 
                  
                  p_reward_seed_override = '',  # If true, use the same random seed for generating p_reward!!
                  p_reward_sum = 0.45,   # Gain of reward. Default = 0.45

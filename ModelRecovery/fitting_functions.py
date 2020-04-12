@@ -27,7 +27,6 @@ def negLL_func(fit_value, *argss):
         if kwargs_all['tau2'] < kwargs_all['tau1']:
             return np.inf
     
-    
     # Run **PREDICTIVE** simulation    
     bandit = BanditModel(**kwargs_all, fit_choice_history = choice_history, fit_reward_history = reward_history)  # Into the fitting mode
     bandit.simulate()
@@ -67,7 +66,9 @@ def fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history
     return fitting_result
 
 
-def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, if_history = False, fit_method = 'DE', DE_pop_size = 16, n_x0s = 1, pool = ''):
+def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, 
+               if_predictive = False, if_generative = False,  # Whether compute predictive or generative choice sequence
+               if_history = False, fit_method = 'DE', DE_pop_size = 16, n_x0s = 1, pool = ''):
     '''
     Main fitting func and compute BIC etc.
     '''
@@ -134,6 +135,9 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, i
         if if_history and fit_histories != []:
             fit_histories.insert(0,fit_histories.pop(best_ind))  # Move the best one to the first
         
+    if if_history:
+        fitting_result.fit_histories = fit_histories
+        
     # === For Model Comparison ===
     fitting_result.k_model = np.sum(np.diff(np.array(fit_bounds),axis=0)>0)  # Get the number of fitted parameters with non-zero range of bounds
     fitting_result.n_trials = np.shape(choice_history)[1]
@@ -146,7 +150,22 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, i
     fitting_result.LPT_AIC = np.exp(- fitting_result.AIC / 2 / fitting_result.n_trials)
     fitting_result.LPT_BIC = np.exp(- fitting_result.BIC / 2 / fitting_result.n_trials)
     
-    return (fitting_result, fit_histories) if if_history else fitting_result
+    # === Rerun predictive choice sequence ===
+    if if_predictive:
+        
+        kwargs_all = {}
+        for (nn, vv) in zip(fit_names, fitting_result.x):  # Use the fitted data
+            kwargs_all = {**kwargs_all, nn:vv}
+        
+        bandit = BanditModel(forager = forager, **kwargs_all, fit_choice_history = choice_history, fit_reward_history = reward_history)  # Into the fitting (predictive) mode
+        bandit.simulate()
+        
+        fitting_result.predictive_choice_prob = bandit.predictive_choice_prob  # Directly using this is OK?
+        
+    # === Run generative choice sequence ==  #!!!
+        
+
+    return fitting_result
             
 
 

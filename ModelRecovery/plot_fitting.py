@@ -16,6 +16,11 @@ from matplotlib.pyplot import cm
 plt.rcParams.update({'font.size': 14})
 
 
+def moving_average(a, n=3) :
+    ret = np.cumsum(a, dtype=float)
+    ret[n:] = ret[n:] - ret[:-n]
+    return ret[n - 1:] / n
+
 def plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bounds, para_scales, para_color_code, para_2ds, n_trials, fit_method):
     n_paras, n_models = np.shape(fitted_paras)
     n_para_2ds = len(para_2ds)
@@ -187,3 +192,60 @@ def plot_LL_surface(forager, LLsurfaces, para_names, para_2ds, para_grids, para_
     
     plt.show()
     
+    
+def plot_predictive_choice_prob(model_comparison):
+
+    p_reward = model_comparison.data[2]
+    choice_history = model_comparison.fit_choice_history
+    reward_history = model_comparison.fit_reward_history
+    
+    smooth_factor = 5
+    
+    # == Fetch data ==
+    n_trials = np.shape(choice_history)[1]
+    
+    p_reward_fraction = p_reward[1,:] / (np.sum(p_reward, axis = 0))
+                                      
+    rewarded_trials = np.any(reward_history, axis = 0)
+    unrewarded_trials = np.logical_not(rewarded_trials)
+    
+    # == Choice trace ==
+    fig = plt.figure(figsize=(9, 4))
+        
+    ax = fig.add_subplot(111)
+    fig.subplots_adjust(left = 0.1, right=0.8)
+
+    # Rewarded trials
+    ax.plot(np.nonzero(rewarded_trials)[0], 0.5 + (choice_history[0,rewarded_trials]-0.5) * 1.4, 
+            'k|',color='black',markersize=20, markeredgewidth=2)
+
+    # Unrewarded trials
+    ax.plot(np.nonzero(unrewarded_trials)[0], 0.5 + (choice_history[0,unrewarded_trials] - 0.5) * 1.4, 
+            '|',color='gray', markersize=10, markeredgewidth=1)
+    
+    # Base probability
+    ax.plot(np.arange(0, n_trials), p_reward_fraction, color='y', label = 'base rew. prob.')
+    
+    # Smoothed choice history
+    ax.plot(moving_average(choice_history, smooth_factor) , linewidth = 2, color='black', label = 'choice (smooth = %g)' % smooth_factor)
+    
+    # Predictive choice prob
+    for bb in model_comparison.plot_predictive:
+        if bb < len(model_comparison.results):
+            this_id = model_comparison.results.index[bb]
+            this_choice_prob = model_comparison.results_raw[this_id].predictive_choice_prob
+            this_result = model_comparison.results.iloc[bb]
+            
+            ax.plot(this_choice_prob[1,:] , label = 'Model %g: %s, Km = %g\n%s\n%s' % (bb, this_result.model, this_result.Km, 
+                                                                                       this_result.para_notation, this_result.para_fitted))
+        
+    ax.legend(fontsize = 10, loc=1, bbox_to_anchor=(0.985, 0.89), bbox_transform=plt.gcf().transFigure)
+     
+    ax.set_yticks([0,1])
+    ax.set_yticklabels(['Left','Right'])
+    ax.set_xlim(0,300)
+    
+    # fig.tight_layout() 
+    
+    return
+

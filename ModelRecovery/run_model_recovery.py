@@ -40,7 +40,7 @@ def fit_para_recovery(forager, para_names, para_bounds, true_paras = None, n_mod
             true_paras[:,n] = true_paras_this
             
         # Generate fake data
-        choice_history, reward_history = generate_fake_data(forager, para_names, true_paras[:,n], **{'n_trials': n_trials,**kwargs})
+        choice_history, reward_history, _ = generate_fake_data(forager, para_names, true_paras[:,n], **{'n_trials': n_trials,**kwargs})
             
         # Predictive fitting
         fitting_result = fit_bandit(forager, para_names, para_bounds, choice_history, reward_history, fit_method = fit_method, DE_pop_size = DE_pop_size, n_x0s = n_x0s, pool = pool)
@@ -90,10 +90,12 @@ def generate_fake_data(forager, para_names, true_para, n_trials = 1000, **kwargs
     
     bandit = BanditModel(forager, n_trials = n_trials, **kwarg_this, **kwargs)
     bandit.simulate()
+    
     choice_history = bandit.choice_history
     reward_history = bandit.reward_history
+    schedule = bandit.p_reward 
     
-    return choice_history, reward_history
+    return choice_history, reward_history, schedule
 
 
 def compute_LL_surface(forager, para_names, para_bounds, true_para, 
@@ -137,7 +139,7 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para,
         
     # === 3. Generate fake data using the adjusted true value ===
     # print('Adjusted true para on grid: %s' % np.round(true_para,3))
-    choice_history, reward_history = generate_fake_data(forager, para_names, true_para, n_trials, **kwargs)
+    choice_history, reward_history, _ = generate_fake_data(forager, para_names, true_para, n_trials, **kwargs)
 
     # === 4. Do fitting only once ===
     if fit_method == 'DE':
@@ -145,7 +147,7 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para,
     else:
         print('Fitting using %s (n_x0s = %g), pool = %s...'%(fit_method, n_x0s, pool!=''))
     
-    fitting_result, fit_history = fit_bandit(forager, para_names, para_bounds, choice_history, reward_history, 
+    fitting_result = fit_bandit(forager, para_names, para_bounds, choice_history, reward_history, 
                                              fit_method = fit_method, DE_pop_size = DE_pop_size, n_x0s = n_x0s, pool = pool,
                                              if_history = True)
     
@@ -199,7 +201,7 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para,
     else:
         fit_method = fit_method + ' (n_x0s = %g)'%n_x0s
 
-    plot_LL_surface(forager, LLsurfaces, para_names, para_2ds, para_grids, para_scales, true_para, fitting_result.x, fit_history, fit_method, n_trials)
+    plot_LL_surface(forager, LLsurfaces, para_names, para_2ds, para_grids, para_scales, true_para, fitting_result.x, fitting_result.fit_histories, fit_method, n_trials)
     
     return
 
@@ -229,7 +231,25 @@ if __name__ == '__main__':
     #               fit_method = 'DE', pool = pool);    
     
     # # -------------------------------------------------------------------------------------------
-    # n_trials = 100
+    # n_trials = 1000
+
+    # forager = 'LossCounting'
+    # para_names = ['loss_count_threshold_mean','loss_count_threshold_std']
+    # para_bounds = [[0,0],[40,0]]
+    
+    # # -- Para recovery
+    # # true_paras = generate_true_paras([[0,0],[30,5]], n_models = [5,5], method = 'linspace')
+    # # fit_para_recovery(forager = forager, 
+    # #                   para_names = para_names, para_bounds = para_bounds, 
+    # #                   true_paras = true_paras, n_trials = n_trials, 
+    # #                   fit_method = 'L-BFGS-B', n_x0s = 1, pool = '');    
+   
+    # # -- LL_surface
+    # compute_LL_surface(forager, para_names, para_bounds, true_para = [10,0], n_trials = n_trials, 
+    #                     fit_method = 'DE', pool = pool)
+    
+    # # -------------------------------------------------------------------------------------------
+    # n_trials = 1000
 
     # forager = 'LossCounting'
     # para_names = ['loss_count_threshold_mean','loss_count_threshold_std']
@@ -336,24 +356,24 @@ if __name__ == '__main__':
     # para_bounds = [[0, 1e-2],
     #                 [1, 15]]
     
-    # # -- Para recovery
-    # n_models = 2
-    # true_paras = np.vstack((np.random.uniform(0, 1, size = n_models),
-    #                         1/np.random.exponential(10, size = n_models),
-    #                         ))
-    # true_paras, fitted_para = fit_para_recovery(forager, 
-    #               para_names, para_bounds, true_paras, n_trials = n_trials, 
-    #               para_scales = para_scales, para_color_code = 1, para_2ds = [[0,1]],
-    #               fit_method = 'DE', pool = pool);    
+    # # # -- Para recovery
+    # # n_models = 2
+    # # true_paras = np.vstack((np.random.uniform(0, 1, size = n_models),
+    # #                         1/np.random.exponential(10, size = n_models),
+    # #                         ))
+    # # true_paras, fitted_para = fit_para_recovery(forager, 
+    # #               para_names, para_bounds, true_paras, n_trials = n_trials, 
+    # #               para_scales = para_scales, para_color_code = 1, para_2ds = [[0,1]],
+    # #               fit_method = 'DE', pool = pool);    
 
-    # # #-- LL_surface --
-    # # compute_LL_surface(forager, para_names, para_bounds, 
-    # #                     true_para = [0.1, 0.5],
-    # #                     para_2ds = [[0,1]], # LL surfaces for user-defined pairs of paras
-    # #                     n_grids = [[30,30]] * 6, 
-    # #                     para_scales = para_scales,
-    # #                     n_trials = n_trials,
-    # #                     fit_method = 'DE', n_x0s = 8, pool = pool)
+    # #-- LL_surface --
+    # compute_LL_surface(forager, para_names, para_bounds, 
+    #                     true_para = [0.1, 0.5],
+    #                     para_2ds = [[0,1]], # LL surfaces for user-defined pairs of paras
+    #                     n_grids = [[30,30]] * 6, 
+    #                     para_scales = para_scales,
+    #                     n_trials = n_trials,
+    #                     fit_method = 'DE', n_x0s = 8, pool = pool)
     
     # # # -------------------------------------------------------------------------------------------
     # n_trials = 1000
@@ -404,10 +424,12 @@ if __name__ == '__main__':
     #                 fit_method = 'DE', n_x0s = 8, pool = pool)
     
     # # # ----------------------- Model Comparison ----------------------------------
-    choice, reward = generate_fake_data('LNP_softmax', ['tau1','softmax_temperature'], [10,0.4], n_trials = 1000)
+    # fake_data = generate_fake_data('LossCounting', ['loss_count_threshold_mean','loss_count_threshold_std'], [10,3], n_trials = 1000)
+    # fake_data = generate_fake_data('RW1972_softmax', ['learn_rate_rew','softmax_temperature'], [0.2,0.3])
+    fake_data = generate_fake_data('Hattori2019', ['learn_rate_rew','learn_rate_unrew', 'forget_rate','softmax_temperature'], 
+                                                      [0.23392543, 0.318161268, 0.3, 0.22028081])
     
-    data = {'choice': choice, 'reward': reward}
-    model_comparison = BanditModelComparison(data, pool = pool)
+    model_comparison = BanditModelComparison(fake_data, pool = pool, plot_predictive = [0,-1])  # The best and the worst model
     model_comparison.fit()
     
 
