@@ -3,10 +3,9 @@
 # =============================================================================
 # == Simplified from foraging_testbed_models.py
 #  
-# = Forager types:
+# = Fitting types =
 #   1. Special foragers
-#       1). 'Random'
-#       2). 'LossCounting': switch to another option when loss count exceeds a threshold drawn from Gaussian [from Shahidi 2019]
+#       1). 'LossCounting': switch to another option when loss count exceeds a threshold drawn from Gaussian [from Shahidi 2019]
 #           - 3.1: loss_count_threshold = inf --> Always One Side
 #           - 3.2: loss_count_threshold = 1 --> win-stay-lose-switch
 #           - 3.3: loss_count_threshold = 0 --> Always switch
@@ -21,7 +20,10 @@
 #       2). 'Bari2019':        return/income  ->   exp filter (both forgetting)   -> softmax     -> epsilon-Poisson (epsilon = 0 in their paper, no necessary)
 #       3). 'Hattori2019':     return/income  ->   exp filter (choice-dependent forgetting, reward-dependent step_size)  -> softmax  -> epsilon-Poisson (epsilon = 0 in their paper; no necessary)
 #
-#   
+#  = Other types that can simulate but not fit =
+#   1. 'Random'
+#   2. 'IdealpHatGreedy'
+#   3. 'pMatching'
 #
 # Feb 2020, Han Hou (houhan@gmail.com) @ Janelia 
 # Svoboda & Li lab
@@ -241,6 +243,12 @@ class BanditModel:
                 
             # Fill in trials for this block
             p_reward[:, n_trials_now : n_trials_now + n_trials_this_block] = p_reward_this_block.T
+            
+            # Fill choice history for some special foragers with choice patterns {AmBn} (including IdealpHatOptimal, IdealpHatGreedy, and AmB1)
+            if self.forager == 'IdealpHatGreedy':
+                self.get_AmBn_choice_history(p_reward_this_block, n_trials_this_block, n_trials_now)
+
+            # Next block
             n_trials_now += n_trials_this_block
         
         self.n_blocks = len(block_size)
@@ -251,6 +259,36 @@ class BanditModel:
 
         # We should make it random afterwards
         np.random.seed()
+        
+    def get_AmBn_choice_history(self, p_reward_this_block, n_trials_this_block, n_trials_now):
+        
+        # Ideal-p^-Greedy
+        mn_star_pHatGreedy, p_star_pHatGreedy = self.get_IdealpHatGreedy_strategy(p_reward_this_block[0])
+        mn_star = mn_star_pHatGreedy
+        
+        # For ideal optimal, given p_0(t) and p_1(t), the optimal choice history is fixed, i.e., {m_star, 1} (p_min > 0)
+        S = int(np.ceil(n_trials_this_block/(mn_star[0] + mn_star[1])))
+        c_max_this = np.argwhere(p_reward_this_block[0] == np.max(p_reward_this_block))[0]  # To handle the case of p0 = p1
+        c_min_this = np.argwhere(p_reward_this_block[0] == np.min(p_reward_this_block))[-1]
+        c_star_this_block = ([c_max_this] * mn_star[0] + [c_min_this] * mn_star[1]) * S    # Choice pattern of {m_star, 1}
+        c_star_this_block = c_star_this_block[:n_trials_this_block]     # Truncate to the correct length
+            
+        self.choice_history[0, n_trials_now : n_trials_now + n_trials_this_block] = c_star_this_block  # Save the optimal sequence
+        
+    def get_IdealpHatGreedy_strategy(self, p_reward):
+        '''
+        Ideal-p^-greedy, only care about the current p^, which is good enough (for 2-arm task)  03/28/2020
+        '''
+        p_max = np.max(p_reward)
+        p_min = np.min(p_reward)
+        
+        if p_min > 0:
+            m_star = np.floor(np.log(1-p_max)/np.log(1-p_min))
+            p_star = p_max + (1-(1-p_min)**(m_star + 1)-p_max**2)/(m_star+1)  # Still stands even m_star = *
+    
+            return [int(m_star),1], p_star
+        else:
+            return [self.n_trials,1], p_max   # Safe to be always on p_max side for this block
         
         
     def act_random(self):
@@ -396,6 +434,14 @@ class BanditModel:
         if self.time == 0 or self.forager == 'Random':
             return self.act_random();
             
+        elif self.forager in ['IdealpHatGreedy']:   # Foragers that have the pattern {AmBn}
+            return self.choice_history[0, self.time]  # Already initialized
+            
+        elif self.forager == 'pMatching':  # Probability matching of base probabilities p
+            choice = choose_ps(self.p_reward[:,self.time])    
+            self.choice_history[0, self.time] = choice    
+            return choice
+
         elif self.forager == 'LossCounting':
             return self.act_LossCounting();
             
