@@ -6,21 +6,21 @@ Created on Sat Apr 11 15:15:49 2020
 """
 
 from fitting_functions import fit_bandit
-from plot_fitting import plot_predictive_choice_prob
+from plot_fitting import plot_predictive_choice_prob, plot_model_comparison
 
 import numpy as np
 import pandas as pd
 import time
 
-# All models available. Use the format: [forager, [para_names], [lower bounds], [higher bounds]]
+# Default models (reordered with hindsight results). Use the format: [forager, [para_names], [lower bounds], [higher bounds]]
 MODELS = [
             ['LossCounting', ['loss_count_threshold_mean', 'loss_count_threshold_std'], [0,0], [40,10]],                   
+            ['RW1972_epsi', ['learn_rate_rew', 'epsilon'],[0, 0],[1, 1]],
             ['LNP_softmax',  ['tau1', 'softmax_temperature'], [1e-3, 1e-2], [100, 15]],                 
             ['LNP_softmax', ['tau1', 'tau2', 'w_tau1', 'softmax_temperature'],[1e-3, 1e-1, 0, 1e-2],[15, 40, 1, 15]],                 
-            ['RW1972_epsi', ['learn_rate_rew', 'epsilon'],[0, 0],[1, 1]],
             ['RW1972_softmax', ['learn_rate_rew', 'softmax_temperature'],[0, 1e-2],[1, 15]],
-            ['Bari2019', ['learn_rate_rew', 'forget_rate', 'softmax_temperature'],[0, 0, 1e-2],[1, 1, 15]],
             ['Hattori2019', ['learn_rate_rew', 'learn_rate_unrew', 'softmax_temperature'],[0, 0, 1e-2],[1, 1, 15]],
+            ['Bari2019', ['learn_rate_rew', 'forget_rate', 'softmax_temperature'],[0, 0, 1e-2],[1, 1, 15]],
             ['Hattori2019', ['learn_rate_rew', 'learn_rate_unrew', 'forget_rate', 'softmax_temperature'],[0, 0, 0, 1e-2],[1, 1, 1, 15]],
          ]
 
@@ -99,7 +99,7 @@ class BanditModelComparison:
             if if_verbose: print(' AIC = %g, BIC = %g (done in %.3g secs)' % (result_this.AIC, result_this.BIC, time.time()-start) )
             self.results_raw.append(result_this)
             self.results = self.results.append(pd.DataFrame({'model': [forager], 'Km': Km, 'AIC': result_this.AIC, 'BIC': result_this.BIC, 
-                                    'LPT_AIC': result_this.LPT_AIC, 'LPT_BIC': result_this.LPT_BIC,
+                                    'LPT_AIC': result_this.LPT_AIC, 'LPT_BIC': result_this.LPT_BIC, 'LPT': result_this.LPT,
                                     'para_names': [fit_names], 'para_bounds': [fit_bounds], 
                                     'para_notation': [para_notation], 'para_fitted': [np.round(result_this.x,3)]}, index = [mm+1]))
             
@@ -120,5 +120,7 @@ class BanditModelComparison:
     
     def show(self):
         pd.options.display.max_colwidth = 100
-        display(self.results_sort[['model','Km', 'AIC','log10_BF_AIC', 'BIC','para_notation','para_fitted']].round(2))
+        display(self.results_sort[['model','Km', 'AIC','log10_BF_AIC', 'BIC','log10_BF_BIC', 'para_notation','para_fitted']].round(2))
         
+    def plot(self):
+        plot_model_comparison(self)

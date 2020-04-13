@@ -147,6 +147,7 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history,
     fitting_result.BIC = -2 * fitting_result.log_likelihood + fitting_result.k_model * np.log(fitting_result.n_trials)
     
     # Likelihood-Per-Trial. See Wilson 2019 (but their formula was wrong...)
+    fitting_result.LPT = np.exp(fitting_result.log_likelihood / fitting_result.n_trials)  # Raw LPT without penality
     fitting_result.LPT_AIC = np.exp(- fitting_result.AIC / 2 / fitting_result.n_trials)
     fitting_result.LPT_BIC = np.exp(- fitting_result.BIC / 2 / fitting_result.n_trials)
     

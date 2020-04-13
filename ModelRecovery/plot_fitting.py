@@ -25,6 +25,7 @@ def moving_average(a, n=3) :
     return ret[n - 1:] / n
 
 def plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bounds, para_scales, para_color_code, para_2ds, n_trials, fit_method):
+    sns.reset_orig()
     n_paras, n_models = np.shape(fitted_paras)
     n_para_2ds = len(para_2ds)
     if para_scales is None: 
@@ -41,7 +42,7 @@ def plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bound
             
     nn = min(4, n_paras + n_para_2ds)  # Column number
     mm = np.ceil((n_paras + n_para_2ds)/nn).astype(int)
-    fig = plt.figure(figsize=(nn*4, mm*5))
+    fig = plt.figure(figsize=(nn*4, mm*5), dpi = 100)
     
     fig.text(0.05,0.90,'Parameter Recovery: %s, Method: %s, N_trials = %g, N_runs = %g\nColor code: %s' % (forager, fit_method, n_trials, n_models, para_names[para_color_code]), fontsize = 15)
 
@@ -128,12 +129,14 @@ def plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bound
 
 
 def plot_LL_surface(forager, LLsurfaces, para_names, para_2ds, para_grids, para_scales, true_para, fitted_para, fit_history, fit_method, n_trials):
+    sns.reset_orig()
+            
     n_para_2ds = len(para_2ds)
     
     # ==== Figure setting ===
     nn_ax = min(3, n_para_2ds) # Column number
     mm_ax = np.ceil(n_para_2ds/nn_ax).astype(int)
-    fig = plt.figure(figsize=(2.5+nn_ax*5, 1.5+mm_ax*5))
+    fig = plt.figure(figsize=(2.5+nn_ax*5, 1.5+mm_ax*5), dpi = 100)
     gs = GridSpec(mm_ax, nn_ax, wspace=0.2, hspace=0.35, bottom=0.1, top=0.84, left=0.07, right=0.97) 
     fig.text(0.05,0.88,'Likelihood Per Trial = p(data|paras, model)^(1/T): %s,\n Method: %s, N_trials = %g\n  True values: %s\nFitted values: %s' % (forager, fit_method, n_trials, 
                                                                                                                             np.round(true_para,3), np.round(fitted_para,3)),fontsize = 13)
@@ -230,16 +233,17 @@ def plot_predictive_choice_prob(model_comparison):
     ax.plot(np.arange(0, n_trials), p_reward_fraction, color='y', label = 'base rew. prob.')
     
     # Smoothed choice history
-    ax.plot(moving_average(choice_history, smooth_factor) , linewidth = 2.5, color='black', label = 'choice (smooth = %g)' % smooth_factor)
+    ax.plot(moving_average(choice_history, smooth_factor) , linewidth = 1.5, color='black', label = 'choice (smooth = %g)' % smooth_factor)
     
     # Predictive choice prob
     for bb in model_comparison.plot_predictive:
+        bb = bb - 1
         if bb < len(model_comparison.results):
             this_id = model_comparison.results_sort.index[bb] - 1
             this_choice_prob = model_comparison.results_raw[this_id].predictive_choice_prob
             this_result = model_comparison.results_sort.iloc[bb]
             
-            ax.plot(this_choice_prob[1,:] , linewidth = max(2.5-0.6*bb,0.2), 
+            ax.plot(this_choice_prob[1,:] , linewidth = max(1.5-0.3*bb,0.2), 
                     label = 'Model %g: %s, Km = %g\n%s\n%s' % (bb+1, this_result.model, this_result.Km, 
                                                                                         this_result.para_notation, this_result.para_fitted))
         
@@ -247,10 +251,70 @@ def plot_predictive_choice_prob(model_comparison):
      
     ax.set_yticks([0,1])
     ax.set_yticklabels(['Left','Right'])
-    ax.set_xlim(0,300)
+    # ax.set_xlim(0,300)
     
     # fig.tight_layout() 
     
+    return
+
+def plot_model_comparison(model_comparison):
+    sns.set()
+    
+    import pandas as pd
+    results = model_comparison.results
+    
+    # Update notations
+    para_notation_with_best_fit = []
+    for i, row in results.iterrows():
+        para_notation_with_best_fit.append('('+str(i)+') '+row.para_notation + '\n' + str(np.round(row.para_fitted,2)))
+        
+    results['para_notation_with_best_fit'] = para_notation_with_best_fit
+        
+    fig = plt.figure(figsize=(10, 7))
+    gs = GridSpec(1, 3, wspace = 0.1, bottom = 0.15, top = 0.85, left = 0.23, right = 0.95)
+    
+    
+    # -- 1. LPT -- 
+    ax = fig.add_subplot(gs[0, 0])
+    s = sns.barplot(x = 'LPT', y = 'para_notation_with_best_fit', data = results, color = 'grey')
+    s.set_xlim(min(0.5,np.min(np.min(model_comparison.results[['LPT_AIC','LPT_BIC']]))) - 0.005)
+    plt.axvline(0.5, color='k', linestyle='--')
+    s.set_ylabel('')
+    s.set_xlabel('Likelihood per trial')
+
+    # -- 2. AIC, BIC raw --
+    ax = fig.add_subplot(gs[0, 1])
+    df = pd.melt(results[['para_notation_with_best_fit','AIC','BIC']], 
+                 id_vars = 'para_notation_with_best_fit', var_name = '', value_name= 'IC')
+    s = sns.barplot(x = 'IC', y = 'para_notation_with_best_fit', hue = '', data = df)
+
+    # Annotation
+    x_max = max(plt.xlim())
+    ylim = plt.ylim()
+    best_AIC = np.where(results.best_model_AIC)[0][0]
+    plt.plot(x_max, best_AIC - 0.2, '*', markersize = 15)
+    best_BIC = np.where(results.best_model_BIC)[0][0]
+    plt.plot(x_max, best_BIC + 0.2, '*', markersize = 15)
+    plt.ylim(ylim)
+    
+    s.set_yticklabels('')
+    s.legend(bbox_to_anchor=(0,1.02,1,0.2), loc='lower left', ncol = 1)
+    s.set_ylabel('')
+    s.set_xlabel('AIC or BIC')
+
+    # -- 3. log10_BayesFactor --
+    ax = fig.add_subplot(gs[0, 2])
+    df = pd.melt(results[['para_notation_with_best_fit','log10_BF_AIC','log10_BF_BIC']], 
+                 id_vars = 'para_notation_with_best_fit', var_name = '', value_name= 'log10 (Bayes factor)')
+    s = sns.barplot(x = 'log10 (Bayes factor)', y = 'para_notation_with_best_fit', hue = '', data = df)
+    h_d = plt.axvline(-2, color='r', linestyle='--', label = 'decisive')
+    s.legend(handles = [h_d,], bbox_to_anchor=(0,1.02,1,0.2), loc='lower left')
+    s.invert_xaxis()
+    s.set_xlabel('log$_{10}p$(model) - log$_{10}p$(best model)')
+    s.set_ylabel('')
+    s.set_yticklabels('')
+    
+   
     return
 
 def plot_confusion_matrix(confusion_results, order = None):
@@ -265,6 +329,8 @@ def plot_confusion_matrix(confusion_results, order = None):
     # Reorder if needed
     if order is not None:
         model_notations = ['('+str(ii+1)+') '+model_notations[imodel] for ii,imodel in enumerate(order)]
+    else:
+        model_notations = ['('+str(ii+1)+') '+ mm for ii,mm in enumerate(model_notations)]
         
     # === Plotting ==
     contents = [
@@ -276,7 +342,7 @@ def plot_confusion_matrix(confusion_results, order = None):
 
     for cc, content in enumerate(contents):    
         fig = plt.figure(figsize=(10, 8.5))
-        fig.text(0.05,0.97,'Model Recovery: n_trials = %g, n_runs = %g' % (n_trials, n_runs))
+        fig.text(0.05,0.97,'Model Recovery: n_trials = %g, n_runs = %g, True →, Fitted ↓' % (n_trials, n_runs))
 
         gs = GridSpec(2, 2, wspace=0.15, hspace=0.1, bottom=0.02, top=0.8, left=0.15, right=0.97)
     
@@ -294,13 +360,15 @@ def plot_confusion_matrix(confusion_results, order = None):
                 # -- Plot --
                 ax = fig.add_subplot(gs[ii, jj])
                 
+                # I transpose the data here so that the columns are ground truth and the rows are fitted results,
+                # which is better aligned to the model comparison plot and the model-comparison-as-a-function-of-session in the real data.
                 if cc == 0:
-                    sns.heatmap(data, annot = True, fmt=".2g", ax = ax, square = True, annot_kws={"size": 10})
+                    sns.heatmap(data.T, annot = True, fmt=".2g", ax = ax, square = True, annot_kws={"size": 10})
                 else:
                     if jj == 0:
-                        sns.heatmap(data, annot = True, fmt=".2g", ax = ax, square = True, annot_kws={"size": 10}, vmin=-2, vmax=0)
+                        sns.heatmap(data.T, annot = True, fmt=".2g", ax = ax, square = True, annot_kws={"size": 10}, vmin=-2, vmax=0)
                     else:
-                        sns.heatmap(data, annot = False, fmt=".2g", ax = ax, square = True, annot_kws={"size": 10})
+                        sns.heatmap(data.T, annot = False, fmt=".2g", ax = ax, square = True, annot_kws={"size": 10})
                         
                 set_label(ax, ii,jj, model_notations)
                 plt.title(content[ii][jj])

@@ -256,7 +256,7 @@ def compute_confusion_matrix(models = [1,2,3,4,5,6,7,8], n_runs = 2, n_trials = 
         # == Save data (after each run) ==
         confusion_results['models_notations'] = model_comparison.results.para_notation
         if save_file == '':
-            save_file = "confusion_results_%s_%s.p" % (n_runs, models)
+            save_file = "confusion_results_%s_%s.p" % (n_runs, n_trials)
         
         pickle.dump(confusion_results, open(".\\results\\"+save_file, "wb"))
         
@@ -447,22 +447,22 @@ if __name__ == '__main__':
     #                     fit_method = 'DE', n_x0s = 8, pool = pool)
     
     # # # -------------------------------------------------------------------------------------------
-    # n_trials = 1000
+    n_trials = 1000
 
-    # forager = 'Bari2019'
-    # para_names = ['learn_rate_rew','forget_rate','softmax_temperature']
-    # para_scales = ['linear','linear', 'log']
-    # para_bounds = [[0, 0, 1e-2],
-    #                 [1, 1, 15]]
+    forager = 'Bari2019'
+    para_names = ['learn_rate_rew','forget_rate','softmax_temperature']
+    para_scales = ['linear','linear', 'log']
+    para_bounds = [[0, 0, 1e-2],
+                    [1, 1, 15]]
     
-    # # -- LL_surface --
-    # compute_LL_surface(forager, para_names, para_bounds, 
-    #                     true_para = [0.1976758, 0.01164267, 0.19536022],  # Use values that optimize reward
-    #                     para_2ds = [[0,1],[0,2],[1,2]], # LL surfaces for user-defined pairs of paras
-    #                     n_grids = [[50,50]] * 6, 
-    #                     para_scales = para_scales,
-    #                     n_trials = n_trials,
-    #                     fit_method = 'DE', n_x0s = 8, pool = pool)
+    # -- LL_surface --
+    compute_LL_surface(forager, para_names, para_bounds, 
+                        true_para = [0.1976758, 0.01164267, 0.19536022],  # Use values that optimize reward
+                        para_2ds = [[0,1],[0,2],[1,2]], # LL surfaces for user-defined pairs of paras
+                        n_grids = [[20,20]] * 6, 
+                        para_scales = para_scales,
+                        n_trials = n_trials,
+                        fit_method = 'DE', n_x0s = 8, pool = pool)
     
     # # # -------------------------------------------------------------------------------------------
     # n_trials = 1000
@@ -500,14 +500,15 @@ if __name__ == '__main__':
     # fake_data = generate_fake_data('Hattori2019', ['learn_rate_rew','learn_rate_unrew', 'forget_rate','softmax_temperature'], 
     #                                                   [0.23392543, 0.318161268, 0.3, 0.22028081])
     
-    # model_comparison = BanditModelComparison(fake_data, models = [1,2,6])
-    # model_comparison.fit(pool = pool, plot_predictive=[0,1,2])
+    # model_comparison = BanditModelComparison(fake_data)
+    # model_comparison.fit(pool = pool, plot_predictive=[1,2,3])
     # model_comparison.show()
+    # model_comparison.plot()
 
     # # # ----------------------- Confusion Matrix ----------------------------------
     # compute_confusion_matrix(models = [2,3], n_runs = 20, n_trials = 1000, pool = pool)
-    confusion_results = pickle.load(open(".\\results\confusion_results.p", "rb"))
-    plot_confusion_matrix(confusion_results, order = [1,4,2,3,5,7,6,8])
+    # confusion_results = pickle.load(open(".\\results\\confusion_results_1_100_1000.p", "rb"))
+    # plot_confusion_matrix(confusion_results, order = [1,4,2,3,5,7,6,8])
     
     #%%
     pool.close()   # Just a good practice

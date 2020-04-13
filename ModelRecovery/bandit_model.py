@@ -73,7 +73,7 @@ class BanditModel:
                  softmax_temperature = None,   # For 'LNP_softmax', 'RW1972_softmax', 'Bari2019', 'Hattori2019'
                  
                  # For all
-                 bias = 0,
+                 bias = 0, # Has the length of (K_arm - 1). The last option is 0 (softmax) or 1-sum(all other bias) (epsilon)
                  
                  # For 'LNP_softmax', up to two taus
                  tau1 = None,  
