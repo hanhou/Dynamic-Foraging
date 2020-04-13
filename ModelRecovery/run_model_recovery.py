@@ -206,7 +206,11 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para,
     
     return
 
-def compute_confusion_matrix(models = [1,2,3,4,5,6,7,8], n_runs = 2, n_trials = 1000, pool = ''):
+def compute_confusion_matrix(models = [1,2,3,4,5,6,7,8], n_runs = 2, n_trials = 1000, pool = '', save_file = ''):
+    if models is None:  
+        models = MODELS
+    elif type(models[0]) is int:
+        models = [MODELS[i-1] for i in models]
 
     n_models = len(models)
     confusion_idx = ['AIC', 'BIC', 'log10_BF_AIC', 'log10_BF_BIC', 'best_model_AIC', 'best_model_BIC']
@@ -222,8 +226,7 @@ def compute_confusion_matrix(models = [1,2,3,4,5,6,7,8], n_runs = 2, n_trials = 
     
     # == Simulation ==
     for rr in tqdm(range(n_runs), total = n_runs, desc = 'Runs'):
-        for mm, model_idx in enumerate(models):
-            this_model = MODELS[model_idx - 1]
+        for mm, this_model in enumerate(models):
             this_forager, this_para_names = this_model[0], this_model[1]
             
             # Generate para
@@ -252,12 +255,15 @@ def compute_confusion_matrix(models = [1,2,3,4,5,6,7,8], n_runs = 2, n_trials = 
         
         # == Save data (after each run) ==
         confusion_results['models_notations'] = model_comparison.results.para_notation
-        pickle.dump(confusion_results, open(".\\results\confusion_results_%s_%s.p" % (n_runs, models), "wb"))
+        if save_file == '':
+            save_file = "confusion_results_%s_%s.p" % (n_runs, models)
+        
+        pickle.dump(confusion_results, open(".\\results\\"+save_file, "wb"))
         
     return
         
 def generate_random_para(para_name):
-    # Define models to run (slightly narrower range than models in BanditModelComparison)
+    # With slightly narrower range than fitting bounds in BanditModelComparison
     if para_name in 'loss_count_threshold_mean':
         return np.random.uniform(0, 30)
     elif para_name in 'loss_count_threshold_std':
