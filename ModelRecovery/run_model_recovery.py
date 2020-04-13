@@ -8,13 +8,14 @@ Created on Thu Mar 19 17:15:59 2020
 import numpy as np
 import multiprocessing as mp
 # import matplotlib.pyplot as plt
-from tqdm import tqdm  # For progress bar. HH
+from tqdm import tqdm
+import pickle
 import sys
 
 from bandit_model import BanditModel
-from bandit_model_comparison import BanditModelComparison
+from bandit_model_comparison import BanditModelComparison, MODELS
 from fitting_functions import fit_bandit, negLL_func
-from plot_fitting import plot_para_recovery, plot_LL_surface
+from plot_fitting import plot_para_recovery, plot_LL_surface, plot_confusion_matrix
    
 def fit_para_recovery(forager, para_names, para_bounds, true_paras = None, n_models = 10, n_trials = 1000, 
                       para_scales = None, para_color_code = None, para_2ds = [[0,1]], fit_method = 'DE', DE_pop_size = 16, n_x0s = 1, pool = '', **kwargs):
@@ -204,6 +205,70 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para,
     plot_LL_surface(forager, LLsurfaces, para_names, para_2ds, para_grids, para_scales, true_para, fitting_result.x, fitting_result.fit_histories, fit_method, n_trials)
     
     return
+
+def compute_confusion_matrix(models = [1,2,3,4,5,6,7,8], n_runs = 2, n_trials = 1000, pool = ''):
+
+    n_models = len(models)
+    confusion_idx = ['AIC', 'BIC', 'log10_BF_AIC', 'log10_BF_BIC', 'best_model_AIC', 'best_model_BIC']
+    confusion_results = {}
+    
+    confusion_results['models'] = models
+    confusion_results['n_runs'] = n_runs
+    confusion_results['n_trials'] = n_trials
+    
+    for idx in confusion_idx:
+        confusion_results['raw_' + idx] = np.zeros([n_models, n_models, n_runs])
+        confusion_results['raw_' + idx][:] = np.nan
+    
+    # == Simulation ==
+    for rr in tqdm(range(n_runs), total = n_runs, desc = 'Runs'):
+        for mm, model_idx in enumerate(models):
+            this_model = MODELS[model_idx - 1]
+            this_forager, this_para_names = this_model[0], this_model[1]
+            
+            # Generate para
+            this_true_para = []
+            for pp in this_para_names:
+                this_true_para.append(generate_random_para(pp))
+            
+            # Generate fake data
+            this_fake_data = generate_fake_data(this_forager, this_para_names, this_true_para, n_trials = n_trials)
+            
+            # Do model comparison
+            model_comparison = BanditModelComparison(this_fake_data, models = models)
+            model_comparison.fit(pool = pool, if_verbose = False)
+            
+            # Save data
+            for idx in confusion_idx:
+                confusion_results['raw_' + idx][mm, :, rr] = model_comparison.results[idx]
+    
+        # == Average across runs till now ==
+        for idx in confusion_idx:
+            confusion_results['confusion_' + idx] = np.nanmean(confusion_results['raw_' + idx], axis = 2)
+        
+        # == Compute inversion matrix ==
+        confusion_results['inversion_best_model_AIC'] = confusion_results['confusion_best_model_AIC'] / (1e-10 + np.sum(confusion_results['confusion_best_model_AIC'], axis = 0)) 
+        confusion_results['inversion_best_model_BIC'] = confusion_results['confusion_best_model_BIC'] / (1e-10 + np.sum(confusion_results['confusion_best_model_BIC'], axis = 0))
+        
+        # == Save data (after each run) ==
+        confusion_results['models_notations'] = model_comparison.results.para_notation
+        pickle.dump(confusion_results, open(".\\results\confusion_results_%s_%s.p" % (n_runs, models), "wb"))
+        
+    return
+        
+def generate_random_para(para_name):
+    # Define models to run (slightly narrower range than models in BanditModelComparison)
+    if para_name in 'loss_count_threshold_mean':
+        return np.random.uniform(0, 30)
+    elif para_name in 'loss_count_threshold_std':
+        return np.random.uniform(0, 5)
+    elif para_name in ['tau1', 'tau2']:
+        return 10**np.random.uniform(0, np.log10(30)) 
+    elif para_name in ['w_tau1', 'learn_rate_rew', 'learn_rate_unrew', 'forget_rate', 'epsilon']:
+        return np.random.uniform(0, 1)
+    elif para_name in 'softmax_temperature':
+        return 1/np.random.exponential(10)
+    
 
 #%%
 if __name__ == '__main__':
@@ -424,15 +489,20 @@ if __name__ == '__main__':
     #                 fit_method = 'DE', n_x0s = 8, pool = pool)
     
     # # # ----------------------- Model Comparison ----------------------------------
-    # fake_data = generate_fake_data('LossCounting', ['loss_count_threshold_mean','loss_count_threshold_std'], [10,3], n_trials = 1000)
-    # fake_data = generate_fake_data('RW1972_softmax', ['learn_rate_rew','softmax_temperature'], [0.2,0.3])
-    fake_data = generate_fake_data('Hattori2019', ['learn_rate_rew','learn_rate_unrew', 'forget_rate','softmax_temperature'], 
-                                                      [0.23392543, 0.318161268, 0.3, 0.22028081])
+    # # fake_data = generate_fake_data('LossCounting', ['loss_count_threshold_mean','loss_count_threshold_std'], [10,3], n_trials = 1000)
+    # # fake_data = generate_fake_data('RW1972_softmax', ['learn_rate_rew','softmax_temperature'], [0.2,0.3])
+    # fake_data = generate_fake_data('Hattori2019', ['learn_rate_rew','learn_rate_unrew', 'forget_rate','softmax_temperature'], 
+    #                                                   [0.23392543, 0.318161268, 0.3, 0.22028081])
     
-    model_comparison = BanditModelComparison(fake_data, pool = pool, plot_predictive = [0,-1])  # The best and the worst model
-    model_comparison.fit()
-    
+    # model_comparison = BanditModelComparison(fake_data, models = [1,2,6])
+    # model_comparison.fit(pool = pool, plot_predictive=[0,1,2])
+    # model_comparison.show()
 
+    # # # ----------------------- Confusion Matrix ----------------------------------
+    # compute_confusion_matrix(models = [2,3], n_runs = 20, n_trials = 1000, pool = pool)
+    confusion_results = pickle.load(open(".\\results\confusion_results.p", "rb"))
+    plot_confusion_matrix(confusion_results, order = [1,4,2,3,5,7,6,8])
+    
     #%%
     pool.close()   # Just a good practice
     pool.join()

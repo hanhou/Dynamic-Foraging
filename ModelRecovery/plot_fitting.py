@@ -8,13 +8,16 @@ Created on Sat Mar 21 13:47:05 2020
 import numpy as np
 import matplotlib.pyplot as plt
 import statsmodels.api as sm
-
+import seaborn as sns
 from matplotlib.gridspec import GridSpec
 from matplotlib.pyplot import cm
 
-# matplotlib.use('qt5agg')
-plt.rcParams.update({'font.size': 14})
+import bandit_model_comparison
+# import matplotlib as mpl 
+# mpl.rcParams['figure.dpi'] = 300
 
+# matplotlib.use('qt5agg')
+plt.rcParams.update({'font.size': 14, 'figure.dpi': 150})
 
 def moving_average(a, n=3) :
     ret = np.cumsum(a, dtype=float)
@@ -227,17 +230,18 @@ def plot_predictive_choice_prob(model_comparison):
     ax.plot(np.arange(0, n_trials), p_reward_fraction, color='y', label = 'base rew. prob.')
     
     # Smoothed choice history
-    ax.plot(moving_average(choice_history, smooth_factor) , linewidth = 2, color='black', label = 'choice (smooth = %g)' % smooth_factor)
+    ax.plot(moving_average(choice_history, smooth_factor) , linewidth = 2.5, color='black', label = 'choice (smooth = %g)' % smooth_factor)
     
     # Predictive choice prob
     for bb in model_comparison.plot_predictive:
         if bb < len(model_comparison.results):
-            this_id = model_comparison.results.index[bb]
+            this_id = model_comparison.results_sort.index[bb] - 1
             this_choice_prob = model_comparison.results_raw[this_id].predictive_choice_prob
-            this_result = model_comparison.results.iloc[bb]
+            this_result = model_comparison.results_sort.iloc[bb]
             
-            ax.plot(this_choice_prob[1,:] , label = 'Model %g: %s, Km = %g\n%s\n%s' % (bb, this_result.model, this_result.Km, 
-                                                                                       this_result.para_notation, this_result.para_fitted))
+            ax.plot(this_choice_prob[1,:] , linewidth = max(2.5-0.6*bb,0.2), 
+                    label = 'Model %g: %s, Km = %g\n%s\n%s' % (bb+1, this_result.model, this_result.Km, 
+                                                                                        this_result.para_notation, this_result.para_fitted))
         
     ax.legend(fontsize = 10, loc=1, bbox_to_anchor=(0.985, 0.89), bbox_transform=plt.gcf().transFigure)
      
@@ -249,3 +253,68 @@ def plot_predictive_choice_prob(model_comparison):
     
     return
 
+def plot_confusion_matrix(confusion_results, order = None):
+    sns.set()
+    
+    n_runs = np.sum(~np.isnan(confusion_results['raw_AIC'][0,0,:]))
+    n_trials = confusion_results['n_trials']
+    
+    # === Get notations ==
+    model_notations = confusion_results['models_notations']
+    
+    # Reorder if needed
+    if order is not None:
+        model_notations = ['('+str(ii+1)+') '+model_notations[imodel] for ii,imodel in enumerate(order)]
+        
+    # === Plotting ==
+    contents = [
+               [['confusion_best_model_AIC','inversion_best_model_AIC'],
+               ['confusion_best_model_BIC','inversion_best_model_BIC']],
+               [['confusion_log10_BF_AIC','confusion_AIC'],
+               ['confusion_log10_BF_BIC','confusion_BIC']]
+               ]
+
+    for cc, content in enumerate(contents):    
+        fig = plt.figure(figsize=(10, 8.5))
+        fig.text(0.05,0.97,'Model Recovery: n_trials = %g, n_runs = %g' % (n_trials, n_runs))
+
+        gs = GridSpec(2, 2, wspace=0.15, hspace=0.1, bottom=0.02, top=0.8, left=0.15, right=0.97)
+    
+        for ii in range(2):
+            for jj in range(2):
+                
+                # Get data
+                data = confusion_results[content[ii][jj]]
+                
+                # Reorder
+                if order is not None:
+                    data = data[:, np.array(order) - 1]
+                    data = data[np.array(order) - 1, :]
+                    
+                # -- Plot --
+                ax = fig.add_subplot(gs[ii, jj])
+                
+                if cc == 0:
+                    sns.heatmap(data, annot = True, fmt=".2g", ax = ax, square = True, annot_kws={"size": 10})
+                else:
+                    if jj == 0:
+                        sns.heatmap(data, annot = True, fmt=".2g", ax = ax, square = True, annot_kws={"size": 10}, vmin=-2, vmax=0)
+                    else:
+                        sns.heatmap(data, annot = False, fmt=".2g", ax = ax, square = True, annot_kws={"size": 10})
+                        
+                set_label(ax, ii,jj, model_notations)
+                plt.title(content[ii][jj])
+
+def set_label(h,ii,jj, model_notations):
+    
+    if jj == 0:
+        h.set_yticklabels(model_notations, rotation = 0)
+    else:
+        h.set_yticklabels('')
+        
+    if ii == 0:
+        h.set_xticklabels(model_notations, rotation = 45, ha = 'left')
+        h.xaxis.tick_top()
+    else:
+        h.set_xticklabels('')
+             

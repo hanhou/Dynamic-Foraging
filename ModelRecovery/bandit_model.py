@@ -93,7 +93,7 @@ class BanditModel:
                  p_reward_sum = 0.45,   # Gain of reward. Default = 0.45
                  p_reward_pairs = None,  # Full control of reward prob
                  
-                 # !!! Important for predictive fitting !!!
+                 # !! Important for predictive fitting !!
                  # If not None, calculate predictive_choice_probs(t) based on fit_choice_history(0:t-1) and fit_reward_history(0:t-1) for negLL calculation.
                  fit_choice_history = None,
                  fit_reward_history = None,                 
