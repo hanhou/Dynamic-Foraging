@@ -11,8 +11,8 @@ You can run it online [![Binder](https://mybinder.org/badge_logo.svg)](https://m
 
 
 ## 2. <font color = 'green'> Parameter Recovery and Model Recovery</font>
-<font size=5> [Parameter Recovery](https://github.com/hanhou/Dynamic-Foraging/blob/master/ModelRecovery/Foraging_model_recovery.ipynb)
-  [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/hanhou/Dynamic-Foraging/master?filepath=%2FModelRecovery%2FForaging_model_recovery.ipynb)
+<font size=5> [Parameter Recovery](https://github.com/hanhou/Dynamic-Foraging/blob/master/ModelRecovery/Parameter_recovery.ipynb)
+  [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/hanhou/Dynamic-Foraging/master?filepath=%2FModelRecovery%2FParameter_recovery.ipynb)
   
 [Model Recovery](https://github.com/hanhou/Dynamic-Foraging/blob/master/ModelRecovery/Model_Recovery.ipynb)
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/hanhou/Dynamic-Foraging/master?filepath=ModelRecovery%2FModel_Recovery.ipynb)
