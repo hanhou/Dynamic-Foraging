@@ -15,7 +15,7 @@ import sys
 from bandit_model import BanditModel
 from bandit_model_comparison import BanditModelComparison, MODELS
 from fitting_functions import fit_bandit, negLL_func
-from plot_fitting import plot_para_recovery, plot_LL_surface, plot_confusion_matrix
+from plot_fitting import plot_para_recovery, plot_LL_surface, plot_confusion_matrix, plot_session_lightweight
    
 def fit_para_recovery(forager, para_names, para_bounds, true_paras = None, n_models = 10, n_trials = 1000, 
                       para_scales = None, para_color_code = None, para_2ds = [[0,1]], fit_method = 'DE', DE_pop_size = 16, n_x0s = 1, pool = '', **kwargs):
@@ -140,7 +140,7 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para,
         
     # === 3. Generate fake data using the adjusted true value ===
     # print('Adjusted true para on grid: %s' % np.round(true_para,3))
-    choice_history, reward_history, _ = generate_fake_data(forager, para_names, true_para, n_trials, **kwargs)
+    choice_history, reward_history, p_reward = generate_fake_data(forager, para_names, true_para, n_trials, **kwargs)
 
     # === 4. Do fitting only once ===
     if fit_method == 'DE':
@@ -150,7 +150,7 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para,
     
     fitting_result = fit_bandit(forager, para_names, para_bounds, choice_history, reward_history, 
                                              fit_method = fit_method, DE_pop_size = DE_pop_size, n_x0s = n_x0s, pool = pool,
-                                             if_history = True)
+                                             if_history = True, if_predictive = True)
     
     print('  True para: %s' % np.round(true_para,3))
     print('Fitted para: %s' % np.round(fitting_result.x,3))
@@ -158,7 +158,10 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para,
                                                                              np.round(fitting_result.LPT_AIC, 3), np.round(fitting_result.LPT_BIC, 3)))
     sys.stdout.flush()
        
-    # === 5. Compute LL surfaces for all pairs ===
+    # === 5. Plot fitted curve ===
+    plot_session_lightweight([choice_history, reward_history, p_reward], fitted_data = fitting_result.predictive_choice_prob)
+
+    # === 6. Compute LL surfaces for all pairs ===
     LLsurfaces = []
     
     for ppp,((p1, p2), n_g, para_2d) in enumerate(zip(para_grids, n_grids, para_2ds)):
@@ -232,7 +235,7 @@ def compute_confusion_matrix(models = [1,2,3,4,5,6,7,8], n_runs = 2, n_trials = 
             # Generate para
             this_true_para = []
             for pp in this_para_names:
-                this_true_para.append(generate_random_para(pp))
+                this_true_para.append(generate_random_para(this_forager, pp))
             
             # Generate fake data
             this_fake_data = generate_fake_data(this_forager, this_para_names, this_true_para, n_trials = n_trials)
@@ -262,7 +265,7 @@ def compute_confusion_matrix(models = [1,2,3,4,5,6,7,8], n_runs = 2, n_trials = 
         
     return
         
-def generate_random_para(para_name):
+def generate_random_para(forager, para_name):
     # With slightly narrower range than fitting bounds in BanditModelComparison
     if para_name in 'loss_count_threshold_mean':
         return np.random.uniform(0, 30)
@@ -274,7 +277,11 @@ def generate_random_para(para_name):
         return np.random.uniform(0, 1)
     elif para_name in 'softmax_temperature':
         return 1/np.random.exponential(10)
-    
+    elif para_name in ['biasL']:
+        if forager in ['Random', 'pMatching', 'RW1972_epsi']:
+            return np.random.uniform(-0.45, 0.45)
+        elif forager in ['RW1972_softmax', 'LNP_softmax', 'Bari2019', 'Hattori2019']:
+            return np.random.uniform(-5, 5)
 
 #%%
 if __name__ == '__main__':
@@ -447,22 +454,22 @@ if __name__ == '__main__':
     #                     fit_method = 'DE', n_x0s = 8, pool = pool)
     
     # # # -------------------------------------------------------------------------------------------
-    n_trials = 1000
+    # n_trials = 1000
 
-    forager = 'Bari2019'
-    para_names = ['learn_rate_rew','forget_rate','softmax_temperature']
-    para_scales = ['linear','linear', 'log']
-    para_bounds = [[0, 0, 1e-2],
-                    [1, 1, 15]]
+    # forager = 'Bari2019'
+    # para_names = ['learn_rate_rew','forget_rate','softmax_temperature']
+    # para_scales = ['linear','linear', 'log']
+    # para_bounds = [[0, 0, 1e-2],
+    #                 [1, 1, 15]]
     
-    # -- LL_surface --
-    compute_LL_surface(forager, para_names, para_bounds, 
-                        true_para = [0.1976758, 0.01164267, 0.19536022],  # Use values that optimize reward
-                        para_2ds = [[0,1],[0,2],[1,2]], # LL surfaces for user-defined pairs of paras
-                        n_grids = [[20,20]] * 6, 
-                        para_scales = para_scales,
-                        n_trials = n_trials,
-                        fit_method = 'DE', n_x0s = 8, pool = pool)
+    # # -- LL_surface --
+    # compute_LL_surface(forager, para_names, para_bounds, 
+    #                     true_para = [0.1976758, 0.01164267, 0.19536022],  # Use values that optimize reward
+    #                     para_2ds = [[0,1],[0,2],[1,2]], # LL surfaces for user-defined pairs of paras
+    #                     n_grids = [[20,20]] * 6, 
+    #                     para_scales = para_scales,
+    #                     n_trials = n_trials,
+    #                     fit_method = 'DE', n_x0s = 8, pool = pool)
     
     # # # -------------------------------------------------------------------------------------------
     # n_trials = 1000
@@ -510,6 +517,30 @@ if __name__ == '__main__':
     # confusion_results = pickle.load(open(".\\results\\confusion_results_1_100_1000.p", "rb"))
     # plot_confusion_matrix(confusion_results, order = [1,4,2,3,5,7,6,8])
     
+    
+    # =============== Bias ==================
+    # n_trials = 1000
+    
+    # forager = 'RW1972_softmax'
+    # para_names = ['learn_rate_rew','softmax_temperature','biasL']
+    # para_scales = ['linear','log','linear']
+    # para_bounds = [[0,1e-2,-5],
+    #                [1, 15, 5]]
+    
+    # compute_LL_surface(forager, para_names, para_bounds, para_scales = para_scales, 
+    #                    true_para = [0.2, 0.4, 2], n_trials = n_trials, para_2ds = [[0,1],[0,2],[1,2]],
+    #                    fit_method = 'DE', n_x0s = 8, pool = pool)
+    
+    # # fake_data = generate_fake_data('RW1972_softmax', ['learn_rate_rew','softmax_temperature','biasL'], 
+    # #                                                   [0.2, 0.3, 2])
+    # # plot_session_lightweight(fake_data)
+    
+    fake_data = generate_fake_data('RW1972_softmax', ['learn_rate_rew','softmax_temperature'], [0.2,0.3], n_trials = 100)
+    model_comparison = BanditModelComparison(fake_data)
+    model_comparison.fit(pool = pool, plot_predictive=[1,2,3]) # Plot predictive traces for the 1st, 2nd, and 3rd models
+    model_comparison.show()
+    model_comparison.plot()
+
     #%%
     pool.close()   # Just a good practice
     pool.join()

@@ -39,15 +39,18 @@ RIGHT = 1
 global_block_size_mean = 80
 global_block_size_sd = 20
 
-def softmax(x,softmax_temperature):
-    max_temp = np.max(x/softmax_temperature)
+def softmax(x, softmax_temperature, bias = 0):
+    
+    # Put the bias outside /sigma to make it comparable across different softmax_temperatures.
+    X = x/softmax_temperature + bias 
+    max_temp = np.max(X)
     
     if max_temp > 700: # To prevent explosion of EXP
         greedy = np.zeros(len(x))
-        greedy[np.random.choice(np.where(x == np.max(x))[0])] = 1
+        greedy[np.random.choice(np.where(X == np.max(X))[0])] = 1
         return greedy
     else:   # Normal softmax
-        return np.exp(x/softmax_temperature)/np.sum(np.exp(x/softmax_temperature))  # Accept np.
+        return np.exp(X)/np.sum(np.exp(X))  # Accept np.
     
 def choose_ps(ps):
     '''
@@ -72,8 +75,11 @@ class BanditModel:
                  epsilon = None,               # For 'RW1972_epsi'
                  softmax_temperature = None,   # For 'LNP_softmax', 'RW1972_softmax', 'Bari2019', 'Hattori2019'
                  
-                 # For all
-                 bias = 0, # Has the length of (K_arm - 1). The last option is 0 (softmax) or 1-sum(all other bias) (epsilon)
+                 # Bias terms, K-1 degrees of freedom, with constraints: 
+                 # 1. for those involve random:  b_K = 0 - sum_1toK-1_(b_k), -1/K < b_k < (K-1)/K. cp_k = cp + b_k (for pMatching, may be truncated)
+                 # 2. for those involve softmax: b_K = 0, no constraint. cp_k = exp(Q/sigma + b_k) / sum(Q/sigma + b_k). Putting b_k outside /sigma to make it comparable across different softmax_temperatures
+                 biasL = 0, # For K = 2. 
+                 biasR = 0, # Only for K = 3
                  
                  # For 'LNP_softmax', up to two taus
                  tau1 = None,  
@@ -123,6 +129,27 @@ class BanditModel:
         # =============================================================================
         #   Parameter check and prepration
         # =============================================================================
+        
+        # -- Bias terms -- 
+        # K-1 degrees of freedom, with constraints: 
+        # 1. for those involve random:  sum_(b_k) = 0, -1/K < b_k < (K-1)/K. cp_k = cp + b_k (for pMatching, may be truncated)
+        if forager in ['Random', 'pMatching', 'RW1972_epsi']:
+            if self.K == 2:
+                self.bias_terms = np.array([biasL, -biasL])  # Relative to right
+            elif self.K == 3:
+                self.bias_terms = np.array([biasL, -(biasL + biasR), biasR])  # Relative to middle
+            # Constraints (no need)
+            # assert np.all(-1/self.K <= self.bias_terms) and np.all(self.bias_terms <= (self.K - 1)/self.K), self.bias_terms
+            
+        # 2. for those involve softmax: b_undefined = 0, no constraint. cp_k = exp(Q/sigma + b_i) / sum(Q/sigma + b_i). Putting b_i outside /sigma to make it comparable across different softmax_temperatures
+        elif forager in ['RW1972_softmax', 'LNP_softmax', 'Bari2019', 'Hattori2019']:
+            if self.K == 2:
+                self.bias_terms = np.array([biasL, 0])  # Relative to right
+            elif self.K == 3:
+                self.bias_terms = np.array([biasL, 0, biasR])  # Relative to middle
+            # No constraints
+            
+        # -- Forager-dependent --
         if forager == 'LNP_softmax':
             assert all(x is not None for x in (tau1, softmax_temperature))
             if tau2 == None:  # Only one tau ('Sugrue2004')
@@ -159,10 +186,11 @@ class BanditModel:
         self.time = 0
         self.q_estimation = np.zeros([self.K, self.n_trials]) 
         self.choice_prob = np.zeros([self.K, self.n_trials]) 
-        self.choice_prob[:] = 1/self.K   # To be strict
+        self.choice_prob[:] = 1/self.K   # To be strict (actually no use)
          
         if self.if_fit_mode:  # Predictive mode
             self.predictive_choice_prob = np.zeros([self.K, self.n_trials])
+            self.predictive_choice_prob[:] = 1/self.K   # To be strict (actually no use)
             
         else:   # Generative mode
             self.choice_history = np.zeros([1,self.n_trials], dtype = int)  # Choice history
@@ -294,14 +322,22 @@ class BanditModel:
     def act_random(self):
         
         if self.if_fit_mode:
-            self.predictive_choice_prob[:, self.time] = 1/self.K
+            self.predictive_choice_prob[:, self.time] = 1/self.K + self.bias_terms
             choice = None   # No need to make specific choice in fitting mode
         else:
-            choice = np.random.choice(self.K)
+            # choice = np.random.choice(self.K)
+            choice = choose_ps(1/self.K + self.bias_terms)
             self.choice_history[0, self.time] = choice
         return choice
 
     def act_LossCounting(self):
+        
+        if self.time == 0: # Only this need special initialization
+            if self.if_fit_mode:
+                pass # No need to update self.predictive_choice_prob[:, self.time]
+                return None
+            else:
+                return np.random.choice(self.K)
         
         if self.if_fit_mode:
             # Retrieve the last choice
@@ -359,8 +395,8 @@ class BanditModel:
         choice = np.random.choice(np.where(self.q_estimation[:, self.time] == self.q_estimation[:, self.time].max())[0])
 
         if self.if_fit_mode:
-            self.predictive_choice_prob[:, self.time] = self.epsilon / self.K
-            self.predictive_choice_prob[choice, self.time] = 1 - self.epsilon + self.epsilon / self.K
+            self.predictive_choice_prob[:, self.time] = self.epsilon * (1 / self.K + self.bias_terms)
+            self.predictive_choice_prob[choice, self.time] = 1 - self.epsilon + self.epsilon * (1 / self.K + self.bias_terms[choice])
             choice = None   # No need to make specific choice in fitting mode
         else:
             if np.random.rand() < self.epsilon: 
@@ -374,7 +410,7 @@ class BanditModel:
         
         # !! Should not change q_estimation!! Otherwise will affect following Qs
         # And I put softmax here
-        self.choice_prob[:, self.time] = softmax(self.q_estimation[:, self.time], self.softmax_temperature)  
+        self.choice_prob[:, self.time] = softmax(self.q_estimation[:, self.time], self.softmax_temperature, bias = self.bias_terms)  
 
         if self.if_fit_mode:
             self.predictive_choice_prob[:, self.time] = self.choice_prob[:, self.time]
@@ -431,25 +467,26 @@ class BanditModel:
        
     def act(self): # Compatible with either fitting mode (predictive) or not (generative). It's much clear now!!
 
-        if self.time == 0 or self.forager == 'Random':
-            return self.act_random();
-            
-        elif self.forager in ['IdealpHatGreedy']:   # Foragers that have the pattern {AmBn}
+        # -- Predefined --
+        if self.forager in ['IdealpHatGreedy']:   # Foragers that have the pattern {AmBn} (not for fitting)
             return self.choice_history[0, self.time]  # Already initialized
             
-        elif self.forager == 'pMatching':  # Probability matching of base probabilities p
+        if self.forager == 'pMatching':  # Probability matching of base probabilities p (not for fitting)
             choice = choose_ps(self.p_reward[:,self.time])    
             self.choice_history[0, self.time] = choice    
             return choice
-
-        elif self.forager == 'LossCounting':
-            return self.act_LossCounting();
             
-        elif self.forager in ['RW1972_epsi']:
-            return self.act_EpsiGreedy();
+        if self.forager == 'Random':
+            return self.act_random()
+        
+        if self.forager == 'LossCounting':
+            return self.act_LossCounting()
             
-        elif self.forager in ['RW1972_softmax', 'LNP_softmax', 'Bari2019', 'Hattori2019' ]:   # Probabilistic
-            return self.act_Probabilistic();
+        if self.forager in ['RW1972_epsi']:
+            return self.act_EpsiGreedy()
+            
+        if self.forager in ['RW1972_softmax', 'LNP_softmax', 'Bari2019', 'Hattori2019' ]:   # Probabilistic
+            return self.act_Probabilistic()
 
     def step(self, choice): # Compatible with either fitting mode (predictive) or not (generative). It's much clear now!!
            
@@ -470,7 +507,7 @@ class BanditModel:
         # =================================================
         self.time += 1   # Time ticks here !!!
         if self.time == self.n_trials: 
-            return;   # Session terminates
+            return   # Session terminates
         # =================================================
         
         if not self.if_fit_mode:  # Prepare reward for the next trial (if sesson did not end)

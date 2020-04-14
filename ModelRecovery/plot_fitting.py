@@ -198,12 +198,10 @@ def plot_LL_surface(forager, LLsurfaces, para_names, para_2ds, para_grids, para_
     
     plt.show()
     
-    
-def plot_predictive_choice_prob(model_comparison):
+def plot_session_lightweight(fake_data, fitted_data = None):
+    sns.reset_orig()
 
-    p_reward = model_comparison.data[2]
-    choice_history = model_comparison.fit_choice_history
-    reward_history = model_comparison.fit_reward_history
+    choice_history, reward_history, p_reward = fake_data
     
     smooth_factor = 5
     
@@ -216,7 +214,7 @@ def plot_predictive_choice_prob(model_comparison):
     unrewarded_trials = np.logical_not(rewarded_trials)
     
     # == Choice trace ==
-    fig = plt.figure(figsize=(9, 4))
+    fig = plt.figure(figsize=(9, 4), dpi = 150)
         
     ax = fig.add_subplot(111)
     fig.subplots_adjust(left = 0.1, right=0.8)
@@ -235,18 +233,9 @@ def plot_predictive_choice_prob(model_comparison):
     # Smoothed choice history
     ax.plot(moving_average(choice_history, smooth_factor) , linewidth = 1.5, color='black', label = 'choice (smooth = %g)' % smooth_factor)
     
-    # Predictive choice prob
-    for bb in model_comparison.plot_predictive:
-        bb = bb - 1
-        if bb < len(model_comparison.results):
-            this_id = model_comparison.results_sort.index[bb] - 1
-            this_choice_prob = model_comparison.results_raw[this_id].predictive_choice_prob
-            this_result = model_comparison.results_sort.iloc[bb]
-            
-            ax.plot(this_choice_prob[1,:] , linewidth = max(1.5-0.3*bb,0.2), 
-                    label = 'Model %g: %s, Km = %g\n%s\n%s' % (bb+1, this_result.model, this_result.Km, 
-                                                                                        this_result.para_notation, this_result.para_fitted))
-        
+    if fitted_data is not None:
+        ax.plot(np.arange(0, n_trials), fitted_data[1,:], linewidth = 1.5, label = 'model') 
+
     ax.legend(fontsize = 10, loc=1, bbox_to_anchor=(0.985, 0.89), bbox_transform=plt.gcf().transFigure)
      
     ax.set_yticks([0,1])
@@ -255,9 +244,37 @@ def plot_predictive_choice_prob(model_comparison):
     
     # fig.tight_layout() 
     
+    return ax
+    
+def plot_model_comparison_predictive_choice_prob(model_comparison):
+    sns.reset_orig()
+
+    choice_history, reward_history, p_reward = model_comparison.data
+    n_trials = np.shape(choice_history)[1]
+
+    ax = plot_session_lightweight([choice_history, reward_history, p_reward])
+    
+    # Predictive choice prob
+    for bb in model_comparison.plot_predictive:
+        bb = bb - 1
+        if bb < len(model_comparison.results):
+            this_id = model_comparison.results_sort.index[bb] - 1
+            this_choice_prob = model_comparison.results_raw[this_id].predictive_choice_prob
+            this_result = model_comparison.results_sort.iloc[bb]
+            
+            ax.plot(np.arange(0, n_trials), this_choice_prob[1,:] , linewidth = max(1.5-0.3*bb,0.2), 
+                    label = 'Model %g: %s, Km = %g\n%s\n%s' % (bb+1, this_result.model, this_result.Km, 
+                                                                                        this_result.para_notation, this_result.para_fitted))
+        
+    ax.legend(fontsize = 10, loc=1, bbox_to_anchor=(0.985, 0.89), bbox_transform=plt.gcf().transFigure)
+     
+    # ax.set_xlim(0,300)
+    
+    # fig.tight_layout() 
+    
     return
 
-def plot_model_comparison(model_comparison):
+def plot_model_comparison_result(model_comparison):
     sns.set()
     
     import pandas as pd
@@ -270,8 +287,8 @@ def plot_model_comparison(model_comparison):
         
     results['para_notation_with_best_fit'] = para_notation_with_best_fit
         
-    fig = plt.figure(figsize=(10, 7))
-    gs = GridSpec(1, 3, wspace = 0.1, bottom = 0.15, top = 0.85, left = 0.23, right = 0.95)
+    fig = plt.figure(figsize=(10, 8), dpi = 150)
+    gs = GridSpec(1, 3, wspace = 0.1, bottom = 0.1, top = 0.85, left = 0.23, right = 0.95)
     
     
     # -- 1. LPT -- 

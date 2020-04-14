@@ -6,7 +6,7 @@ Created on Sat Apr 11 15:15:49 2020
 """
 
 from fitting_functions import fit_bandit
-from plot_fitting import plot_predictive_choice_prob, plot_model_comparison
+from plot_fitting import plot_model_comparison_predictive_choice_prob, plot_model_comparison_result
 
 import numpy as np
 import pandas as pd
@@ -14,6 +14,7 @@ import time
 
 # Default models (reordered with hindsight results). Use the format: [forager, [para_names], [lower bounds], [higher bounds]]
 MODELS = [
+            # No bias (1-8)
             ['LossCounting', ['loss_count_threshold_mean', 'loss_count_threshold_std'], [0,0], [40,10]],                   
             ['RW1972_epsi', ['learn_rate_rew', 'epsilon'],[0, 0],[1, 1]],
             ['LNP_softmax',  ['tau1', 'softmax_temperature'], [1e-3, 1e-2], [100, 15]],                 
@@ -22,6 +23,15 @@ MODELS = [
             ['Hattori2019', ['learn_rate_rew', 'learn_rate_unrew', 'softmax_temperature'],[0, 0, 1e-2],[1, 1, 15]],
             ['Bari2019', ['learn_rate_rew', 'forget_rate', 'softmax_temperature'],[0, 0, 1e-2],[1, 1, 15]],
             ['Hattori2019', ['learn_rate_rew', 'learn_rate_unrew', 'forget_rate', 'softmax_temperature'],[0, 0, 0, 1e-2],[1, 1, 1, 15]],
+            
+            # With bias (9-16)
+            ['RW1972_epsi', ['learn_rate_rew', 'epsilon', 'biasL'],[0, 0, -0.5],[1, 1, 0.5]],
+            ['LNP_softmax',  ['tau1', 'softmax_temperature', 'biasL'], [1e-3, 1e-2, -5], [100, 15, 5]],                 
+            ['LNP_softmax', ['tau1', 'tau2', 'w_tau1', 'softmax_temperature', 'biasL'],[1e-3, 1e-1, 0, 1e-2, -5],[15, 40, 1, 15, 5]],                 
+            ['RW1972_softmax', ['learn_rate_rew', 'softmax_temperature', 'biasL'],[0, 1e-2, -5],[1, 15, 5]],
+            ['Hattori2019', ['learn_rate_rew', 'learn_rate_unrew', 'softmax_temperature', 'biasL'],[0, 0, 1e-2, -5],[1, 1, 15, 5]],
+            ['Bari2019', ['learn_rate_rew', 'forget_rate', 'softmax_temperature', 'biasL'],[0, 0, 1e-2, -5],[1, 1, 15, 5]],
+            ['Hattori2019', ['learn_rate_rew', 'learn_rate_unrew', 'forget_rate', 'softmax_temperature', 'biasL'],[0, 0, 0, 1e-2, -5],[1, 1, 1, 15, 5]],
          ]
 
 # Define notations
@@ -34,7 +44,9 @@ PARA_NOTATIONS = {'loss_count_threshold_mean': '$\\mu_{LC}$',
             'learn_rate_unrew': '$\\alpha_{unr}$',   
             'forget_rate': '$\\delta$',
             'softmax_temperature': '$\\sigma$',
-            'epsilon': '$\\epsilon$'
+            'epsilon': '$\\epsilon$',
+            'biasL': '$b_L$',
+            'biasR': '$b_R$',
             }
 
 
@@ -114,7 +126,7 @@ class BanditModelComparison:
         # == Plotting == 
         if plot_predictive is not None: # Plot the predictive choice trace of the best fitting of the best model (Using AIC)
             self.plot_predictive = plot_predictive
-            plot_predictive_choice_prob(self)
+            plot_model_comparison_predictive_choice_prob(self)
 
         return
     
@@ -123,4 +135,4 @@ class BanditModelComparison:
         display(self.results_sort[['model','Km', 'AIC','log10_BF_AIC', 'BIC','log10_BF_BIC', 'para_notation','para_fitted']].round(2))
         
     def plot(self):
-        plot_model_comparison(self)
+        plot_model_comparison_result(self)

@@ -34,9 +34,16 @@ def negLL_func(fit_value, *argss):
     # Compute negative likelihood
     predictive_choice_prob = bandit.predictive_choice_prob  # Get all predictive choice probability [K, num_trials]
     likelihood_each_trial = predictive_choice_prob [choice_history[0,:], range(len(choice_history[0]))]  # Get the actual likelihood for each trial
-    negLL = - sum(np.log(likelihood_each_trial + 1e-16))  # To avoid infinity, which makes the number of zero likelihoods informative!
+    
+    # Deal with numerical precision
+    likelihood_each_trial[(likelihood_each_trial <= 0) & (likelihood_each_trial > -1e-5)] = 1e-16  # To avoid infinity, which makes the number of zero likelihoods informative!
+    likelihood_each_trial[likelihood_each_trial > 1] = 1
+    
+    negLL = - sum(np.log(likelihood_each_trial))  
     
     # print(np.round(fit_value,4), negLL, '\n')
+    # if np.any(likelihood_each_trial < 0):
+    #     print(predictive_choice_prob)
     
     return negLL
 
