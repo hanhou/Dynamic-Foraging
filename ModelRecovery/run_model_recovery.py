@@ -269,19 +269,21 @@ def generate_random_para(forager, para_name):
     # With slightly narrower range than fitting bounds in BanditModelComparison
     if para_name in 'loss_count_threshold_mean':
         return np.random.uniform(0, 30)
-    elif para_name in 'loss_count_threshold_std':
+    if para_name in 'loss_count_threshold_std':
         return np.random.uniform(0, 5)
-    elif para_name in ['tau1', 'tau2']:
+    if para_name in ['tau1', 'tau2']:
         return 10**np.random.uniform(0, np.log10(30)) 
-    elif para_name in ['w_tau1', 'learn_rate_rew', 'learn_rate_unrew', 'forget_rate', 'epsilon']:
+    if para_name in ['w_tau1', 'learn_rate_rew', 'learn_rate_unrew', 'forget_rate', 'epsilon']:
         return np.random.uniform(0, 1)
-    elif para_name in 'softmax_temperature':
+    if para_name in 'softmax_temperature':
         return 1/np.random.exponential(10)
-    elif para_name in ['biasL']:
+    if para_name in ['biasL']:
         if forager in ['Random', 'pMatching', 'RW1972_epsi']:
             return np.random.uniform(-0.45, 0.45)
         elif forager in ['RW1972_softmax', 'LNP_softmax', 'Bari2019', 'Hattori2019']:
             return np.random.uniform(-5, 5)
+    return np.nan    
+    
 
 #%%
 if __name__ == '__main__':
@@ -535,11 +537,16 @@ if __name__ == '__main__':
     # #                                                   [0.2, 0.3, 2])
     # # plot_session_lightweight(fake_data)
     
-    fake_data = generate_fake_data('RW1972_softmax', ['learn_rate_rew','softmax_temperature'], [0.2,0.3], n_trials = 100)
-    model_comparison = BanditModelComparison(fake_data)
-    model_comparison.fit(pool = pool, plot_predictive=[1,2,3]) # Plot predictive traces for the 1st, 2nd, and 3rd models
-    model_comparison.show()
-    model_comparison.plot()
+    # ---------------------------------------------
+    # fake_data = generate_fake_data('RW1972_softmax', ['learn_rate_rew','softmax_temperature'], [0.2,0.3], n_trials = 100)
+    # model_comparison = BanditModelComparison(fake_data)
+    # model_comparison.fit(pool = pool, plot_predictive=[1,2,3]) # Plot predictive traces for the 1st, 2nd, and 3rd models
+    # model_comparison.show()
+    # model_comparison.plot()
+    
+    # --------------------------------------------
+    confusion_results = pickle.load(open(".\\results\\confusion_results_3_100_1000_bias.p", "rb"))
+    plot_confusion_matrix(confusion_results)
 
     #%%
     pool.close()   # Just a good practice

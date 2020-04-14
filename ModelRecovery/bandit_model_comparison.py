@@ -51,14 +51,30 @@ PARA_NOTATIONS = {'loss_count_threshold_mean': '$\\mu_{LC}$',
 
 
 class BanditModelComparison:
+    
     '''
     A new class that can define models, receive data, do fitting, and generate plots.
     This is the minimized module that can be plugged into Datajoint for real data.
+    
     '''
     
-    def __init__(self, data, models = None):
-    
+    def __init__(self, data, models = None): # data = [choice_history, reward_history, p_reward]
+        """
 
+        Parameters
+        ----------
+        data : [choice_history, reward_history, (p_reward)]
+            DESCRIPTION. p_reward is only for plotting or generative validation
+        models : list of integers or models, optional
+            DESCRIPTION. If it's a list of integers, the models will be selected from the pre-defined models.
+            If it's a list of models, then it will be used directly. Use the format: [forager, [para_names], [lower bounds], [higher bounds]]
+            The default is None (using all pre-defined models).
+        Returns
+        -------
+        None.
+
+        """
+        
         if models is None:  
             self.models = MODELS
         elif type(models[0]) is int:
