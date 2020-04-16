@@ -506,13 +506,13 @@ if __name__ == '__main__':
     # # # ----------------------- Model Comparison ----------------------------------
     # # fake_data = generate_fake_data('LossCounting', ['loss_count_threshold_mean','loss_count_threshold_std'], [10,3], n_trials = 1000)
     # # fake_data = generate_fake_data('RW1972_softmax', ['learn_rate_rew','softmax_temperature'], [0.2,0.3])
-    fake_data = generate_fake_data('Hattori2019', ['learn_rate_rew','learn_rate_unrew', 'forget_rate','softmax_temperature'], 
-                                                      [0.23392543, 0.318161268, 0.3, 0.22028081], n_trials = 100)
+    # fake_data = generate_fake_data('Hattori2019', ['learn_rate_rew','learn_rate_unrew', 'forget_rate','softmax_temperature'], 
+    #                                                   [0.23392543, 0.318161268, 0.3, 0.22028081], n_trials = 100)
     
-    model_comparison = BanditModelComparison(fake_data)
-    model_comparison.fit(pool = pool, plot_predictive=[1,2,3])
-    model_comparison.show()
-    model_comparison.plot()
+    # model_comparison = BanditModelComparison(fake_data)
+    # model_comparison.fit(pool = pool, plot_predictive=[1,2,3])
+    # model_comparison.show()
+    # model_comparison.plot()
 
     # # # ----------------------- Confusion Matrix ----------------------------------
     # compute_confusion_matrix(models = [2,3], n_runs = 20, n_trials = 1000, pool = pool)
@@ -538,11 +538,11 @@ if __name__ == '__main__':
     # # plot_session_lightweight(fake_data)
     
     # ---------------------------------------------
-    # fake_data = generate_fake_data('RW1972_softmax', ['learn_rate_rew','softmax_temperature'], [0.2,0.3], n_trials = 100)
-    # model_comparison = BanditModelComparison(fake_data)
-    # model_comparison.fit(pool = pool, plot_predictive=[1,2,3]) # Plot predictive traces for the 1st, 2nd, and 3rd models
-    # model_comparison.show()
-    # model_comparison.plot()
+    fake_data = generate_fake_data('RW1972_softmax', ['learn_rate_rew','softmax_temperature'], [0.2,0.3], n_trials = 1000)
+    model_comparison = BanditModelComparison(fake_data)
+    model_comparison.fit(pool = pool, plot_predictive=[1,2,3]) # Plot predictive traces for the 1st, 2nd, and 3rd models
+    model_comparison.show()
+    model_comparison.plot()
     
     # --------------------------------------------
     # confusion_results = pickle.load(open("..\\results\\confusion_results_3_100_1000_bias.p", "rb"))

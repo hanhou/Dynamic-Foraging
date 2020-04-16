@@ -24,7 +24,7 @@ MODELS = [
             ['Bari2019', ['learn_rate_rew', 'forget_rate', 'softmax_temperature'],[0, 0, 1e-2],[1, 1, 15]],
             ['Hattori2019', ['learn_rate_rew', 'learn_rate_unrew', 'forget_rate', 'softmax_temperature'],[0, 0, 0, 1e-2],[1, 1, 1, 15]],
             
-            # With bias (9-16)
+            # With bias (9-15)
             ['RW1972_epsi', ['learn_rate_rew', 'epsilon', 'biasL'],[0, 0, -0.5],[1, 1, 0.5]],
             ['LNP_softmax',  ['tau1', 'softmax_temperature', 'biasL'], [1e-3, 1e-2, -5], [100, 15, 5]],                 
             ['LNP_softmax', ['tau1', 'tau2', 'w_tau1', 'softmax_temperature', 'biasL'],[1e-3, 1e-1, 0, 1e-2, -5],[15, 40, 1, 15, 5]],                 
@@ -142,10 +142,12 @@ class BanditModelComparison:
         # == Plotting == 
         if plot_predictive is not None: # Plot the predictive choice trace of the best fitting of the best model (Using AIC)
             self.plot_predictive = plot_predictive
-            plot_model_comparison_predictive_choice_prob(self)
-
+            self.plot_predictive_choice()
         return
     
+    def plot_predictive_choice(self):
+        plot_model_comparison_predictive_choice_prob(self)
+
     def show(self):
         pd.options.display.max_colwidth = 100
         display(self.results_sort[['model','Km', 'AIC','log10_BF_AIC', 'BIC','log10_BF_BIC', 'para_notation','para_fitted']].round(2))
