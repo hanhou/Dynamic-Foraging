@@ -128,7 +128,10 @@ def plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bound
     plt.show()
 
 
-def plot_LL_surface(forager, LLsurfaces, para_names, para_2ds, para_grids, para_scales, true_para, fitted_para, fit_history, fit_method, n_trials):
+def plot_LL_surface(forager, LLsurfaces, CI_cutoff_LPTs, para_names, para_2ds, para_grids, para_scales, true_para, fitted_para, fit_history, fit_method, n_trials):
+    
+    import scipy.ndimage as ndimage
+    
     sns.reset_orig()
             
     n_para_2ds = len(para_2ds)
@@ -142,7 +145,7 @@ def plot_LL_surface(forager, LLsurfaces, para_names, para_2ds, para_grids, para_
                                                                                                                             np.round(true_para,3), np.round(fitted_para,3)),fontsize = 13)
 
     # ==== Plot each LL surface ===
-    for ppp,(LLs, ps, para_2d) in enumerate(zip(LLsurfaces, para_grids, para_2ds)):
+    for ppp,(LLs, CI_cutoff_LPT, ps, para_2d) in enumerate(zip(LLsurfaces, CI_cutoff_LPTs, para_grids, para_2ds)):
     
         ax = fig.add_subplot(gs[np.floor(ppp/nn_ax).astype(int), np.mod(ppp,nn_ax).astype(int)]) 
         
@@ -160,14 +163,19 @@ def plot_LL_surface(forager, LLsurfaces, para_names, para_2ds, para_grids, para_
         dx = ps[0][1]-ps[0][0]
         dy = ps[1][1]-ps[1][0]
         extent=[ps[0].min()-dx/2, ps[0].max()+dx/2, ps[1].min()-dy/2, ps[1].max()+dy/2]
-        
+
+        # -- Gaussian filtering ---
+
         if dx > 0 and dy > 0:
             plt.imshow(LLs, cmap='plasma', extent=extent, interpolation='none', origin='lower')
             plt.colorbar()
         # plt.pcolor(pp1, pp2, LLs, cmap='RdBu', vmin=z_min, vmax=z_max)
         
-        plt.contour(LLs, colors='grey', levels = 20, extent=extent, linewidths=0.7)
+        h_contour = plt.contour(LLs, colors='grey', levels = 20, extent=extent, linewidths=0.7)
         # plt.contour(-np.log(-LLs), colors='grey', levels = 20, extent=extent, linewidths=0.7)
+        
+        # -- Cutoff LPT --
+        plt.contour(LLs, levels = [CI_cutoff_LPT], colors = 'r', extent=extent)
         
         # ==== True value ==== 
         plt.plot(true_para_this[0], true_para_this[1],'ob', markersize = 20, markeredgewidth=3, fillstyle='none')
@@ -354,7 +362,7 @@ def plot_confusion_matrix(confusion_results, order = None):
                [['confusion_best_model_AIC','inversion_best_model_AIC'],
                ['confusion_best_model_BIC','inversion_best_model_BIC']],
                [['confusion_log10_BF_AIC','confusion_AIC'],
-               ['confusion_log10_BF_BIC','confusion_BIC']]
+               ['confusion_log10_BF_BIC','confusion_BIC']],
                ]
 
     for cc, content in enumerate(contents):    
@@ -389,6 +397,8 @@ def plot_confusion_matrix(confusion_results, order = None):
                         
                 set_label(ax, ii,jj, model_notations)
                 plt.title(content[ii][jj])
+        
+        fig.show()
 
 def set_label(h,ii,jj, model_notations):
     

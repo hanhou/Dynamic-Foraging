@@ -133,10 +133,24 @@ class BanditModelComparison:
             
                 
         # == Reorganize data ==
-        self.results['log10_BF_AIC'] = (-(self.results.AIC - np.min(self.results.AIC))/2)/np.log(10) # Calculate Bayes factor 
-        self.results['log10_BF_BIC'] = (-(self.results.BIC - np.min(self.results.BIC))/2)/np.log(10) # Calculate Bayes factor 
+        delta_AIC = self.results.AIC - np.min(self.results.AIC) 
+        delta_BIC = self.results.BIC - np.min(self.results.BIC)
+
+        # Relative likelihood = Bayes factor = p_model/p_best = exp( - delta_AIC / 2)
+        self.results['relative_likelihood_AIC'] = np.exp( - delta_AIC / 2)
+        self.results['relative_likelihood_BIC'] = np.exp( - delta_BIC / 2)
+
+        # Model weight = Relative likelihood / sum(Relative likelihood)
+        self.results['model_weight_AIC'] = self.results['relative_likelihood_AIC'] / np.sum(self.results['relative_likelihood_AIC'])
+        self.results['model_weight_BIC'] = self.results['relative_likelihood_BIC'] / np.sum(self.results['relative_likelihood_BIC'])
+        
+        # log_10 (Bayes factor) = log_10 (exp( - delta_AIC / 2)) = (-delta_AIC / 2) / log(10)
+        self.results['log10_BF_AIC'] = - delta_AIC/2 / np.log(10) # Calculate log10(Bayes factor) (relative likelihood)
+        self.results['log10_BF_BIC'] = - delta_BIC/2 / np.log(10) # Calculate log10(Bayes factor) (relative likelihood)
+        
         self.results['best_model_AIC'] = (self.results.AIC == np.min(self.results.AIC)).astype(int)
         self.results['best_model_BIC'] = (self.results.BIC == np.min(self.results.BIC)).astype(int)
+        
         self.results_sort = self.results.sort_values(by='AIC')
         
         # == Plotting == 
@@ -150,7 +164,7 @@ class BanditModelComparison:
 
     def show(self):
         pd.options.display.max_colwidth = 100
-        display(self.results_sort[['model','Km', 'AIC','log10_BF_AIC', 'BIC','log10_BF_BIC', 'para_notation','para_fitted']].round(2))
+        display(self.results_sort[['model','Km', 'AIC','log10_BF_AIC', 'model_weight_AIC', 'BIC','log10_BF_BIC', 'model_weight_BIC', 'para_notation','para_fitted']].round(2))
         
     def plot(self):
         plot_model_comparison_result(self)

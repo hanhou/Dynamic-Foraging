@@ -163,6 +163,7 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para,
 
     # === 6. Compute LL surfaces for all pairs ===
     LLsurfaces = []
+    CI_cutoff_LPTs = []
     
     for ppp,((p1, p2), n_g, para_2d) in enumerate(zip(para_grids, n_grids, para_2ds)):
            
@@ -189,7 +190,13 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para,
         # -- Serial for debugging --
         # for nn,(x,y) in tqdm(enumerate(zip(np.nditer(pp1),np.nditer(pp2))), total = n_scan_paras, desc='LL_surface pair #%g (serial)' % ppp):
         #     LLs[nn] = negLL_func([x, y], forager, [para_names[para_2d[0]], para_names[para_2d[1]]], choice_history, reward_history, para_fixed)
-            
+        
+        # -- Confidence interval --
+        # https://www.umass.edu/landeco/teaching/ecodata/schedule/likelihood.pdf
+        CI_cutoff_LL = np.max(LLs) - 3
+        CI_cutoff_LPT = np.exp(CI_cutoff_LL / n_trials)
+        CI_cutoff_LPTs.append(CI_cutoff_LPT)
+        
         LLs = np.exp(LLs/n_trials)  # Use likelihood-per-trial = (likehood)^(1/T)
         LLs = LLs.reshape(n_g).T
         LLsurfaces.append(LLs)
@@ -205,7 +212,7 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para,
     else:
         fit_method = fit_method + ' (n_x0s = %g)'%n_x0s
 
-    plot_LL_surface(forager, LLsurfaces, para_names, para_2ds, para_grids, para_scales, true_para, fitting_result.x, fitting_result.fit_histories, fit_method, n_trials)
+    plot_LL_surface(forager, LLsurfaces, CI_cutoff_LPTs, para_names, para_2ds, para_grids, para_scales, true_para, fitting_result.x, fitting_result.fit_histories, fit_method, n_trials)
     
     return
 
@@ -521,31 +528,32 @@ if __name__ == '__main__':
     
     
     # =============== Bias ==================
-    # n_trials = 1000
+    n_trials = 300
     
-    # forager = 'RW1972_softmax'
-    # para_names = ['learn_rate_rew','softmax_temperature','biasL']
-    # para_scales = ['linear','log','linear']
-    # para_bounds = [[0,1e-2,-5],
-    #                [1, 15, 5]]
+    forager = 'RW1972_softmax'
+    para_names = ['learn_rate_rew','softmax_temperature','biasL']
+    para_scales = ['linear','log','linear']
+    para_bounds = [[0,1e-2,-5],
+                    [1, 15, 5]]
     
-    # compute_LL_surface(forager, para_names, para_bounds, para_scales = para_scales, 
-    #                    true_para = [0.2, 0.4, 2], n_trials = n_trials, para_2ds = [[0,1],[0,2],[1,2]],
-    #                    fit_method = 'DE', n_x0s = 8, pool = pool)
+    compute_LL_surface(forager, para_names, para_bounds, para_scales = para_scales, 
+                        true_para = [0.2, 0.4, 2], n_trials = n_trials, para_2ds = [[0,1],[0,2],[1,2]],
+                        fit_method = 'DE', n_x0s = 8, pool = pool)
     
     # # fake_data = generate_fake_data('RW1972_softmax', ['learn_rate_rew','softmax_temperature','biasL'], 
     # #                                                   [0.2, 0.3, 2])
     # # plot_session_lightweight(fake_data)
     
     # ---------------------------------------------
-    fake_data = generate_fake_data('RW1972_softmax', ['learn_rate_rew','softmax_temperature'], [0.2,0.3], n_trials = 1000)
-    model_comparison = BanditModelComparison(fake_data)
-    model_comparison.fit(pool = pool, plot_predictive=[1,2,3]) # Plot predictive traces for the 1st, 2nd, and 3rd models
-    model_comparison.show()
-    model_comparison.plot()
+    # fake_data = generate_fake_data('RW1972_softmax', ['learn_rate_rew','softmax_temperature'], [0.2,0.3], n_trials = 1000)
+    # model_comparison = BanditModelComparison(fake_data)
+    # model_comparison.fit(pool = pool, plot_predictive=[1,2,3]) # Plot predictive traces for the 1st, 2nd, and 3rd models
+    # model_comparison.show()
+    # model_comparison.plot()
     
     # --------------------------------------------
-    # confusion_results = pickle.load(open("..\\results\\confusion_results_3_100_1000_bias.p", "rb"))
+    # compute_confusion_matrix(n_runs = 50, n_trials = 500, pool = pool, save_file = 'confusion_results_2_50_500.p')
+    # confusion_results = pickle.load(open("..\\results\\confusion_results_2_50_500.p", "rb"))
     # plot_confusion_matrix(confusion_results)
 
     #%%
