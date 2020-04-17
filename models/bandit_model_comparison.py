@@ -58,13 +58,13 @@ class BanditModelComparison:
     
     '''
     
-    def __init__(self, data, models = None): # data = [choice_history, reward_history, p_reward]
+    def __init__(self, choice_history, reward_history, p_reward = None, session_num = None, models = None):
         """
 
         Parameters
         ----------
-        data : [choice_history, reward_history, (p_reward)]
-            DESCRIPTION. p_reward is only for plotting or generative validation
+        choice_history, reward_history, (p_reward), (session_num)
+            DESCRIPTION. p_reward is only for plotting or generative validation; session_num is for pooling across sessions
         models : list of integers or models, optional
             DESCRIPTION. If it's a list of integers, the models will be selected from the pre-defined models.
             If it's a list of models, then it will be used directly. Use the format: [forager, [para_names], [lower bounds], [higher bounds]]
@@ -82,8 +82,7 @@ class BanditModelComparison:
         else:
             self.models = models
             
-        self.data = data # choice_history, reward_history, (schedule, if want to plot)
-        self.fit_choice_history, self.fit_reward_history = self.data[0:2]
+        self.fit_choice_history, self.fit_reward_history, self.p_reward, self.session_num = choice_history, reward_history, p_reward, session_num
         self.K, self.n_trials = np.shape(self.fit_reward_history)
         assert np.shape(self.fit_choice_history)[1] == self.n_trials, 'Choice length should be equal to reward length!'
         
@@ -120,7 +119,7 @@ class BanditModelComparison:
             if if_verbose: print('Model %g/%g: %15s, Km = %g ...'%(mm+1, len(self.models), forager, Km), end='')
             start = time.time()
                 
-            result_this = fit_bandit(forager, fit_names, fit_bounds, self.fit_choice_history, self.fit_reward_history, 
+            result_this = fit_bandit(forager, fit_names, fit_bounds, self.fit_choice_history, self.fit_reward_history, self.session_num,
                                      fit_method = fit_method, **fit_settings, 
                                      pool = pool, if_predictive = plot_predictive is not None)
             
@@ -130,8 +129,7 @@ class BanditModelComparison:
                                     'LPT_AIC': result_this.LPT_AIC, 'LPT_BIC': result_this.LPT_BIC, 'LPT': result_this.LPT,
                                     'para_names': [fit_names], 'para_bounds': [fit_bounds], 
                                     'para_notation': [para_notation], 'para_fitted': [np.round(result_this.x,3)]}, index = [mm+1]))
-            
-                
+        
         # == Reorganize data ==
         delta_AIC = self.results.AIC - np.min(self.results.AIC) 
         delta_BIC = self.results.BIC - np.min(self.results.BIC)
@@ -156,6 +154,7 @@ class BanditModelComparison:
         # == Plotting == 
         if plot_predictive is not None: # Plot the predictive choice trace of the best fitting of the best model (Using AIC)
             self.plot_predictive = plot_predictive
+            self.trial_numbers = result_this.trial_numbers
             self.plot_predictive_choice()
         return
     

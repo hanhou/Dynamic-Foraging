@@ -241,6 +241,7 @@ def plot_session_lightweight(fake_data, fitted_data = None):
     # Smoothed choice history
     ax.plot(moving_average(choice_history, smooth_factor) , linewidth = 1.5, color='black', label = 'choice (smooth = %g)' % smooth_factor)
     
+    # For each session, if any
     if fitted_data is not None:
         ax.plot(np.arange(0, n_trials), fitted_data[1,:], linewidth = 1.5, label = 'model') 
 
@@ -256,8 +257,8 @@ def plot_session_lightweight(fake_data, fitted_data = None):
     
 def plot_model_comparison_predictive_choice_prob(model_comparison):
     sns.reset_orig()
-
-    choice_history, reward_history, p_reward = model_comparison.data
+    
+    choice_history, reward_history, p_reward, trial_numbers = model_comparison.fit_choice_history, model_comparison.fit_reward_history, model_comparison.p_reward, model_comparison.trial_numbers
     n_trials = np.shape(choice_history)[1]
 
     ax = plot_session_lightweight([choice_history, reward_history, p_reward])
@@ -269,11 +270,15 @@ def plot_model_comparison_predictive_choice_prob(model_comparison):
             this_id = model_comparison.results_sort.index[bb] - 1
             this_choice_prob = model_comparison.results_raw[this_id].predictive_choice_prob
             this_result = model_comparison.results_sort.iloc[bb]
-            
+           
             ax.plot(np.arange(0, n_trials), this_choice_prob[1,:] , linewidth = max(1.5-0.3*bb,0.2), 
                     label = 'Model %g: %s, Km = %g\n%s\n%s' % (bb+1, this_result.model, this_result.Km, 
                                                                                         this_result.para_notation, this_result.para_fitted))
-        
+    
+    # Plot session ends
+    for sesson_end in np.cumsum(trial_numbers):
+        plt.axvline(sesson_end, color='b', linestyle='--', linewidth = 2)
+
     ax.legend(fontsize = 10, loc=1, bbox_to_anchor=(0.985, 0.89), bbox_transform=plt.gcf().transFigure)
      
     # ax.set_xlim(0,300)
@@ -295,8 +300,8 @@ def plot_model_comparison_result(model_comparison):
         
     results['para_notation_with_best_fit'] = para_notation_with_best_fit
         
-    fig = plt.figure(figsize=(10, 8), dpi = 150)
-    gs = GridSpec(1, 3, wspace = 0.1, bottom = 0.1, top = 0.85, left = 0.23, right = 0.95)
+    fig = plt.figure(figsize=(12, 8), dpi = 150)
+    gs = GridSpec(1, 4, wspace = 0.1, bottom = 0.1, top = 0.85, left = 0.23, right = 0.95)
     
     
     # -- 1. LPT -- 
@@ -335,11 +340,22 @@ def plot_model_comparison_result(model_comparison):
     h_d = plt.axvline(-2, color='r', linestyle='--', label = 'decisive')
     s.legend(handles = [h_d,], bbox_to_anchor=(0,1.02,1,0.2), loc='lower left')
     s.invert_xaxis()
-    s.set_xlabel('log$_{10}p$(model) - log$_{10}p$(best model)')
+    s.set_xlabel('log$_{10}\\frac{p(model)}{p(best\,model)}$')
     s.set_ylabel('')
     s.set_yticklabels('')
     
-   
+    # -- 4. Model weight --
+    ax = fig.add_subplot(gs[0, 3])
+    df = pd.melt(results[['para_notation_with_best_fit','model_weight_AIC','model_weight_BIC']], 
+                 id_vars = 'para_notation_with_best_fit', var_name = '', value_name= 'Model weight')
+    s = sns.barplot(x = 'Model weight', y = 'para_notation_with_best_fit', hue = '', data = df)
+    ax.legend_.remove()
+    plt.xlim([0,1.05])
+    plt.axvline(1, color='k', linestyle='--')
+    s.set_ylabel('')
+    s.set_yticklabels('')
+
+    
     return
 
 def plot_confusion_matrix(confusion_results, order = None):

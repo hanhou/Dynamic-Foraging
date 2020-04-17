@@ -16,7 +16,7 @@ def negLL_func(fit_value, *argss):
     Compute negative likelihood (Core func)
     '''
     # Arguments interpretation
-    forager, fit_names, choice_history, reward_history, para_fixed = argss
+    forager, fit_names, choice_history, reward_history, session_num, para_fixed = argss
     
     kwargs_all = {'forager': forager, **para_fixed}  # **kargs includes all other fixed parameters
     for (nn, vv) in zip(fit_names, fit_value):
@@ -26,20 +26,35 @@ def negLL_func(fit_value, *argss):
     if 'tau2' in kwargs_all:
         if kwargs_all['tau2'] < kwargs_all['tau1']:
             return np.inf
+        
+    # Handle data from different sessions
+    if session_num is None:
+        session_num = np.zeros_like(choice_history)[0]  # Regard as one session
     
-    # Run **PREDICTIVE** simulation    
-    bandit = BanditModel(**kwargs_all, fit_choice_history = choice_history, fit_reward_history = reward_history)  # Into the fitting mode
-    bandit.simulate()
+    unique_session = np.unique(session_num)
+    negLL = 0
     
-    # Compute negative likelihood
-    predictive_choice_prob = bandit.predictive_choice_prob  # Get all predictive choice probability [K, num_trials]
-    likelihood_each_trial = predictive_choice_prob [choice_history[0,:], range(len(choice_history[0]))]  # Get the actual likelihood for each trial
-    
-    # Deal with numerical precision
-    likelihood_each_trial[(likelihood_each_trial <= 0) & (likelihood_each_trial > -1e-5)] = 1e-16  # To avoid infinity, which makes the number of zero likelihoods informative!
-    likelihood_each_trial[likelihood_each_trial > 1] = 1
-    
-    negLL = - sum(np.log(likelihood_each_trial))  
+    # -- For each session --
+    for ss in unique_session:
+        # Data in this session
+        choice_this = choice_history[:, session_num == ss]
+        reward_this = reward_history[:, session_num == ss]
+        
+        # Run **PREDICTIVE** simulation    
+        bandit = BanditModel(**kwargs_all, fit_choice_history = choice_this, fit_reward_history = reward_this)  # Into the fitting mode
+        bandit.simulate()
+        
+        # Compute negative likelihood
+        predictive_choice_prob = bandit.predictive_choice_prob  # Get all predictive choice probability [K, num_trials]
+        likelihood_each_trial = predictive_choice_prob [choice_this[0,:], range(len(choice_this[0]))]  # Get the actual likelihood for each trial
+        
+        # Deal with numerical precision
+        likelihood_each_trial[(likelihood_each_trial <= 0) & (likelihood_each_trial > -1e-5)] = 1e-16  # To avoid infinity, which makes the number of zero likelihoods informative!
+        likelihood_each_trial[likelihood_each_trial > 1] = 1
+        
+        negLL_this = - sum(np.log(likelihood_each_trial))  
+        negLL += negLL_this
+        
     
     # print(np.round(fit_value,4), negLL, '\n')
     # if np.any(likelihood_each_trial < 0):
@@ -57,7 +72,7 @@ def callback_history(x, **kargs):
     return
 
 
-def fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history, fit_method, callback):
+def fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history, session_num, fit_method, callback):
     '''
     For local optimizers, fit using ONE certain initial condition    
     '''
@@ -73,7 +88,7 @@ def fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history
     return fitting_result
 
 
-def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, 
+def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, session_num = None, 
                if_predictive = False, if_generative = False,  # Whether compute predictive or generative choice sequence
                if_history = False, fit_method = 'DE', DE_pop_size = 16, n_x0s = 1, pool = ''):
     '''
@@ -89,7 +104,7 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history,
     if fit_method == 'DE':
         
         # Use DE's own parallel method
-        fitting_result = optimize.differential_evolution(func = negLL_func, args = (forager, fit_names, choice_history, reward_history, {}),
+        fitting_result = optimize.differential_evolution(func = negLL_func, args = (forager, fit_names, choice_history, reward_history, session_num, {}),
                                                          bounds = optimize.Bounds(fit_bounds[0], fit_bounds[1]), 
                                                          mutation=(0.5, 1), recombination = 0.7, popsize = DE_pop_size, strategy = 'best1bin', 
                                                          disp = False, 
@@ -111,7 +126,7 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history,
             # Must use two separate for loops, one for assigning and one for harvesting!
             for nn in range(n_x0s):
                 # Assign jobs
-                pool_results.append(pool.apply_async(fit_each_init, args = (forager, fit_names, fit_bounds, choice_history, reward_history, fit_method, 
+                pool_results.append(pool.apply_async(fit_each_init, args = (forager, fit_names, fit_bounds, choice_history, reward_history, session_num, fit_method, 
                                                                             None)))   # We can have multiple histories only in serial mode
             for rr in pool_results:
                 # Get data    
@@ -123,7 +138,7 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history,
                 # We can have multiple histories only in serial mode
                 if if_history: fit_history = []  # Clear this history
                 
-                result = fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history, fit_method,
+                result = fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history, session_num, fit_method,
                                        callback = callback_history if if_history else None)
                 
                 fitting_parallel_results.append(result)
@@ -165,10 +180,27 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history,
         for (nn, vv) in zip(fit_names, fitting_result.x):  # Use the fitted data
             kwargs_all = {**kwargs_all, nn:vv}
         
-        bandit = BanditModel(forager = forager, **kwargs_all, fit_choice_history = choice_history, fit_reward_history = reward_history)  # Into the fitting (predictive) mode
-        bandit.simulate()
+        # Handle data from different sessions
+        if session_num is None:
+            session_num = np.zeros_like(choice_history)[0]  # Regard as one session
         
-        fitting_result.predictive_choice_prob = bandit.predictive_choice_prob  # Directly using this is OK?
+        unique_session = np.unique(session_num)
+        predictive_choice_prob = []
+        fitting_result.trial_numbers = []
+        
+        # -- For each session --
+        for ss in unique_session:
+            # Data in this session
+            choice_this = choice_history[:, session_num == ss]
+            reward_this = reward_history[:, session_num == ss]
+            fitting_result.trial_numbers.append(np.sum(session_num == ss))
+            
+            # Run **PREDICTIVE** simulation    
+            bandit = BanditModel(forager = forager, **kwargs_all, fit_choice_history = choice_this, fit_reward_history = reward_this)  # Into the fitting mode
+            bandit.simulate()
+            predictive_choice_prob.append(bandit.predictive_choice_prob)
+        
+        fitting_result.predictive_choice_prob = np.hstack(predictive_choice_prob)
         
     # === Run generative choice sequence ==  #!!!
         

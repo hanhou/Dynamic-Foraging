@@ -122,6 +122,7 @@ class BanditModel:
         
         if self.if_fit_mode: 
             self.K, self.n_trials = np.shape(fit_reward_history)  # Use the targeted histories
+                    
         else:  # Backward compatibility
             self.K = K_arm
             self.n_trials = n_trials
