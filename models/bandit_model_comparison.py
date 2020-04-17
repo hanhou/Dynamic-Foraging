@@ -121,7 +121,7 @@ class BanditModelComparison:
                 
             result_this = fit_bandit(forager, fit_names, fit_bounds, self.fit_choice_history, self.fit_reward_history, self.session_num,
                                      fit_method = fit_method, **fit_settings, 
-                                     pool = pool, if_predictive = plot_predictive is not None)
+                                     pool = pool, if_predictive = True) #plot_predictive is not None)
             
             if if_verbose: print(' AIC = %g, BIC = %g (done in %.3g secs)' % (result_this.AIC, result_this.BIC, time.time()-start) )
             self.results_raw.append(result_this)
@@ -151,10 +151,11 @@ class BanditModelComparison:
         
         self.results_sort = self.results.sort_values(by='AIC')
         
+        self.trial_numbers = result_this.trial_numbers 
+        
         # == Plotting == 
         if plot_predictive is not None: # Plot the predictive choice trace of the best fitting of the best model (Using AIC)
             self.plot_predictive = plot_predictive
-            self.trial_numbers = result_this.trial_numbers
             self.plot_predictive_choice()
         return
     
