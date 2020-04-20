@@ -85,7 +85,7 @@ def fit_each_mice(data, if_session_wise = False, if_verbose = True, file_name = 
     
     return results_each_mice
 
-def fit_all_mice(path, pool = '', models = None):
+def fit_all_mice(path, save_prefix = 'model_comparison', pool = '', models = None):
     # -- Find all files --
     start_all = time.time()
     for r, _, f in os.walk(path):
@@ -97,7 +97,7 @@ def fit_all_mice(path, pool = '', models = None):
             # Do it
             try:
                 results_each_mice = fit_each_mice(data, file_name = file, pool = pool, models = models, if_session_wise = True, if_verbose = False)
-                np.savez_compressed( path + "model_comparison_%s" % file, results_each_mice = results_each_mice)
+                np.savez_compressed( path + save_prefix + '_%s' % file, results_each_mice = results_each_mice)
                 print('Mice %s done in %g mins!\n' % (file, (time.time() - start)/60))
             except:
                 print('SOMETHING WENT WRONG!!')
@@ -112,10 +112,10 @@ if __name__ == '__main__':
     
     # ---
     # data = np.load("..\\export\\FOR01.npz")
-    # model_comparison = behavior_model_comparison(data, pool = pool, models = [1,9], use_trials = np.r_[0:500])
+    # model_comparison = fit_each_mice(data, pool = pool, models = [1,9], use_trials = np.r_[0:500])
     
     # --- Fit all mice, session-wise and pooling
-    fit_all_mice(path = '..\\export\\', models = [1,9,10,11,12,13,14,15], pool = pool)
+    fit_all_mice(path = '..\\export\\', save_prefix = 'model_comparison_no_bias' , models = [1,9,10,11,12,13,14,15], pool = pool)
     
     pool.close()   # Just a good practice
     pool.join()

@@ -130,8 +130,6 @@ def plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bound
 
 def plot_LL_surface(forager, LLsurfaces, CI_cutoff_LPTs, para_names, para_2ds, para_grids, para_scales, true_para, fitted_para, fit_history, fit_method, n_trials):
     
-    import scipy.ndimage as ndimage
-    
     sns.reset_orig()
             
     n_para_2ds = len(para_2ds)
