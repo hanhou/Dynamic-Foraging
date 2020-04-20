@@ -413,6 +413,10 @@ def plot_confusion_matrix(confusion_results, order = None):
                 plt.title(content[ii][jj])
         
         fig.show()
+        
+
+    
+    
 
 def set_label(h,ii,jj, model_notations):
     

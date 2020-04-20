@@ -103,6 +103,84 @@ def fit_all_mice(path, save_prefix = 'model_comparison', pool = '', models = Non
                 print('SOMETHING WENT WRONG!!')
                 
     print('\n ALL FINISHED IN %g hrs!' % ((time.time() - start_all)/3600) )
+
+def combine_each_model_comparison(objectA, objectB):
+    '''
+    Combine two BanditModelComparison objects
+
+    '''
+    import pandas as pd
+    
+    # Confirm they were from the same dataset
+    assert(np.all(objectA.fit_choice_history == objectB.fit_choice_history))
+    assert(np.all(objectA.fit_reward_history == objectB.fit_reward_history))
+
+    # -- Add info in objectB into object A --
+    objectA.models.extend(objectB.models) 
+    objectA.results_raw.extend(objectB.results_raw) 
+    
+    new_pd = pd.concat([objectA.results, objectB.results], axis = 0)
+
+    # -- Update table --
+    delta_AIC = new_pd.AIC - np.min(new_pd.AIC) 
+    delta_BIC = new_pd.BIC - np.min(new_pd.BIC)
+
+    # Relative likelihood = Bayes factor = p_model/p_best = exp( - delta_AIC / 2)
+    new_pd['relative_likelihood_AIC'] = np.exp( - delta_AIC / 2)
+    new_pd['relative_likelihood_BIC'] = np.exp( - delta_BIC / 2)
+
+    # Model weight = Relative likelihood / sum(Relative likelihood)
+    new_pd['model_weight_AIC'] = new_pd['relative_likelihood_AIC'] / np.sum(new_pd['relative_likelihood_AIC'])
+    new_pd['model_weight_BIC'] = new_pd['relative_likelihood_BIC'] / np.sum(new_pd['relative_likelihood_BIC'])
+    
+    # log_10 (Bayes factor) = log_10 (exp( - delta_AIC / 2)) = (-delta_AIC / 2) / log(10)
+    new_pd['log10_BF_AIC'] = - delta_AIC/2 / np.log(10) # Calculate log10(Bayes factor) (relative likelihood)
+    new_pd['log10_BF_BIC'] = - delta_BIC/2 / np.log(10) # Calculate log10(Bayes factor) (relative likelihood)
+    
+    new_pd['best_model_AIC'] = (new_pd.AIC == np.min(new_pd.AIC)).astype(int)
+    new_pd['best_model_BIC'] = (new_pd.BIC == np.min(new_pd.BIC)).astype(int)
+    
+    new_pd.index = range(1,1+len(new_pd))
+    
+    # Update notations
+    para_notation_with_best_fit = []
+    for i, row in new_pd.iterrows():
+        para_notation_with_best_fit.append('('+str(i)+') '+row.para_notation + '\n' + str(np.round(row.para_fitted,2)))
+
+    new_pd['para_notation_with_best_fit'] = para_notation_with_best_fit
+
+    objectA.results = new_pd
+    objectA.results_sort = new_pd.sort_values(by='AIC')
+
+    return objectA
+
+def combine_group_results(raw_path = "..\\export\\", result_path = "..\\results\\model_comparison\\",
+                          combine_prefix = ['model_comparison_', 'model_comparison_no_bias_'], save_prefix = 'model_comparison_15_'):
+    '''
+    Combine TWO runs of model comparison
+    '''
+    
+    import pickle
+   
+    for r, _, f in os.walk(raw_path):
+        for file in f:
+
+            data_A = np.load(result_path + combine_prefix[0] + file, allow_pickle=True)
+            data_A = data_A.f.results_each_mice.item()
+            
+            data_B = np.load(result_path + combine_prefix[1] + file, allow_pickle=True)
+            data_B = data_B.f.results_each_mice.item()
+            
+            new_grand_mc = combine_each_model_comparison(data_A['model_comparison_grand'], data_B['model_comparison_grand'])
+            
+            new_session_wise_mc = []
+            for AA, BB in zip(data_A['model_comparison_session_wise'], data_B['model_comparison_session_wise']):
+                new_session_wise_mc.append(combine_each_model_comparison(AA, BB))
+                
+            # -- Save data --
+            results_each_mice = {'model_comparison_grand': new_grand_mc, 'model_comparison_session_wise': new_session_wise_mc}
+            np.savez_compressed( result_path + save_prefix + file, results_each_mice = results_each_mice)
+            print('%s + %s: Combined!' %(combine_prefix[0] + file, combine_prefix[1] + file))
     
 
 if __name__ == '__main__':
@@ -115,7 +193,12 @@ if __name__ == '__main__':
     # model_comparison = fit_each_mice(data, pool = pool, models = [1,9], use_trials = np.r_[0:500])
     
     # --- Fit all mice, session-wise and pooling
-    fit_all_mice(path = '..\\export\\', save_prefix = 'model_comparison_no_bias' , models = [1,9,10,11,12,13,14,15], pool = pool)
+    # fit_all_mice(path = '..\\export\\', save_prefix = 'model_comparison_no_bias' , models = [1,9,10,11,12,13,14,15], pool = pool)
+    
+    # --- Combine different runs ---
+    # combine_group_results()
+    
+    
     
     pool.close()   # Just a good practice
     pool.join()

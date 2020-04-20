@@ -168,3 +168,4 @@ class BanditModelComparison:
         
     def plot(self):
         plot_model_comparison_result(self)
+
