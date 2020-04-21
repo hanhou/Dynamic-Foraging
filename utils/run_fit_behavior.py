@@ -6,13 +6,13 @@ Created on Wed Apr 15 21:33:33 2020
 """
 import numpy as np
 import multiprocessing as mp
-import os
+import os, fnmatch
 import time
 import sys
 from tqdm import tqdm
 
 from models.bandit_model_comparison import BanditModelComparison
-
+from utils.plot_fitting import plot_each_mice
 
 def fit_each_mice(data, if_session_wise = False, if_verbose = True, file_name = '', pool = '', models = None, use_trials = None):
     choice = data.f.choice
@@ -159,9 +159,6 @@ def combine_group_results(raw_path = "..\\export\\", result_path = "..\\results\
     '''
     Combine TWO runs of model comparison
     '''
-    
-    import pickle
-   
     for r, _, f in os.walk(raw_path):
         for file in f:
 
@@ -181,7 +178,21 @@ def combine_group_results(raw_path = "..\\export\\", result_path = "..\\results\
             results_each_mice = {'model_comparison_grand': new_grand_mc, 'model_comparison_session_wise': new_session_wise_mc}
             np.savez_compressed( result_path + save_prefix + file, results_each_mice = results_each_mice)
             print('%s + %s: Combined!' %(combine_prefix[0] + file, combine_prefix[1] + file))
+            
+
+def plot_all_mice(result_path = "..\\results\\model_comparison\\", combine_prefix = 'model_comparison_15_'):
     
+
+    listOfFiles = os.listdir(result_path)
+    
+    for file in listOfFiles:
+        if fnmatch.fnmatch(file, combine_prefix + '*'):
+            data = np.load(result_path + file, allow_pickle=True)
+            data = data.f.results_each_mice.item()
+            
+            plot_each_mice(data, file)
+            
+            
 
 if __name__ == '__main__':
     
@@ -198,7 +209,8 @@ if __name__ == '__main__':
     # --- Combine different runs ---
     # combine_group_results()
     
-    
+    # --- Plot all results ---
+    plot_all_mice()
     
     pool.close()   # Just a good practice
     pool.join()

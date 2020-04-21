@@ -9,8 +9,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import statsmodels.api as sm
 import seaborn as sns
+import pandas as pd
+
 from matplotlib.gridspec import GridSpec
 from matplotlib.pyplot import cm
+from matplotlib.patches import Rectangle
+
 
 import models.bandit_model_comparison
 # import matplotlib as mpl 
@@ -415,9 +419,6 @@ def plot_confusion_matrix(confusion_results, order = None):
         fig.show()
         
 
-    
-    
-
 def set_label(h,ii,jj, model_notations):
     
     if jj == 0:
@@ -431,3 +432,80 @@ def set_label(h,ii,jj, model_notations):
     else:
         h.set_xticklabels('')
              
+        
+def plot_each_mice(data, file):
+   
+    plt.rcParams.update({'font.size': 8, 'figure.dpi': 150})
+
+    fig = plt.figure(figsize=(15, 9), dpi = 150)
+    gs = GridSpec(1, 20, wspace = 0.1, bottom = 0.15, top = 0.9, left = 0.15, right = 0.95)
+    fig.text(0.05,0.95,'%s' % (file), fontsize = 15)
+    
+    # === 1. Model_weights ===
+    
+    # Grand result
+    grand_result = data['model_comparison_grand'].results
+    model_notations = grand_result['para_notation_with_best_fit']
+    
+    ax = fig.add_subplot(gs[0, 0:1])
+    sns.heatmap(grand_result[['model_weight_AIC']], annot = True, fmt=".2f", square = False, cbar = False, cbar_ax = [0,1])
+    
+    patch = Rectangle((0, np.where(grand_result['best_model_AIC'])[0]),1,1, color = 'dodgerblue', linewidth = 4, fill= False)
+    ax.add_artist(patch)
+    
+    set_label(ax, 1,0, model_notations)
+    ax.set_xticklabels(['Grand\n(' + str(data['model_comparison_grand'].n_trials) + ')'])
+
+    
+    # Session-wise
+    ax = fig.add_subplot(gs[0, 1: round(20)])
+    sessionwise_result =  data['model_comparison_session_wise']
+    n_session = len(sessionwise_result)
+    n_models = len(grand_result)
+    
+    group_result = {'n_trials': np.zeros((1,n_session))}
+    group_result['session_number'] = np.unique(data['model_comparison_grand'].session_num)
+    group_result['xlabel'] = []
+    
+    for ss,this_mc in enumerate(sessionwise_result):
+        group_result['n_trials'][0,ss] = this_mc.n_trials
+        group_result['xlabel'].append(str(group_result['session_number'][ss]) + '\n('+ str(this_mc.n_trials) +')')
+
+    
+    para_of_interest = ['model_weight_AIC']
+    
+    for pp in para_of_interest:
+        group_result[pp] = np.zeros((n_models, n_session))
+        
+        for ss,this_mc in enumerate(sessionwise_result):
+            group_result[pp][:, ss] = this_mc.results[pp]
+            
+        sns.heatmap(group_result[pp], annot = True, fmt=".2f", square = False, cbar = False, cbar_ax = [0,1])
+        ax.set_yticklabels('')
+        ax.set_xticklabels(group_result['xlabel'])
+
+        # -- Annotation --
+        for ss,this_mc in enumerate(sessionwise_result):
+            patch = Rectangle((ss, np.where(this_mc.results['best_model_AIC'])[0]),1,1, color = 'dodgerblue', linewidth = 4, fill= False)
+            ax.add_artist(patch)
+
+    # plt.pause(10)
+
+    return
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
