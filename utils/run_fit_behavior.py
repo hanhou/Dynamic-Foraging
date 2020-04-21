@@ -4,6 +4,7 @@ Created on Wed Apr 15 21:33:33 2020
 
 @author: Han
 """
+
 import numpy as np
 import multiprocessing as mp
 import os, fnmatch
@@ -197,7 +198,7 @@ def plot_all_mice(result_path = "..\\results\\model_comparison\\", combine_prefi
 if __name__ == '__main__':
     
     n_worker = 8
-    pool = mp.Pool(processes = n_worker)
+    # pool = mp.Pool(processes = n_worker)
     
     # ---
     # data = np.load("..\\export\\FOR01.npz")

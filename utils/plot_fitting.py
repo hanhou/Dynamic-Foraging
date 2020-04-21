@@ -16,7 +16,7 @@ from matplotlib.pyplot import cm
 from matplotlib.patches import Rectangle
 
 
-import models.bandit_model_comparison
+# import models.bandit_model_comparison
 # import matplotlib as mpl 
 # mpl.rcParams['figure.dpi'] = 300
 
@@ -173,7 +173,7 @@ def plot_LL_surface(forager, LLsurfaces, CI_cutoff_LPTs, para_names, para_2ds, p
             plt.colorbar()
         # plt.pcolor(pp1, pp2, LLs, cmap='RdBu', vmin=z_min, vmax=z_max)
         
-        h_contour = plt.contour(LLs, colors='grey', levels = 20, extent=extent, linewidths=0.7)
+        plt.contour(LLs, colors='grey', levels = 20, extent=extent, linewidths=0.7)
         # plt.contour(-np.log(-LLs), colors='grey', levels = 20, extent=extent, linewidths=0.7)
         
         # -- Cutoff LPT --
@@ -292,7 +292,6 @@ def plot_model_comparison_predictive_choice_prob(model_comparison):
 def plot_model_comparison_result(model_comparison):
     sns.set()
     
-    import pandas as pd
     results = model_comparison.results
     
     # Update notations
@@ -434,63 +433,148 @@ def set_label(h,ii,jj, model_notations):
              
         
 def plot_each_mice(data, file):
-   
+
+    sns.set()
+    #%%
     plt.rcParams.update({'font.size': 8, 'figure.dpi': 150})
 
     fig = plt.figure(figsize=(15, 9), dpi = 150)
     gs = GridSpec(1, 20, wspace = 0.1, bottom = 0.15, top = 0.9, left = 0.15, right = 0.95)
-    fig.text(0.05,0.95,'%s' % (file), fontsize = 15)
+    fig.text(0.01,0.95,'%s' % (file), fontsize = 20)
     
-    # === 1. Model_weights ===
-    
-    # Grand result
-    grand_result = data['model_comparison_grand'].results
-    model_notations = grand_result['para_notation_with_best_fit']
+    # === 1.1 Overall result ===
+    overall_result = data['model_comparison_grand'].results
+    model_notations = overall_result['para_notation_with_best_fit']
+    overall_best = np.where(overall_result['best_model_AIC'])[0][0] + 1
     
     ax = fig.add_subplot(gs[0, 0:1])
-    sns.heatmap(grand_result[['model_weight_AIC']], annot = True, fmt=".2f", square = False, cbar = False, cbar_ax = [0,1])
+    sns.heatmap(overall_result[['model_weight_AIC']], annot = True, fmt=".2f", square = False, cbar = False, cbar_ax = [0,1])
     
-    patch = Rectangle((0, np.where(grand_result['best_model_AIC'])[0]),1,1, color = 'dodgerblue', linewidth = 4, fill= False)
+    patch = Rectangle((0, np.where(overall_result['best_model_AIC'])[0]),1,1, color = 'dodgerblue', linewidth = 4, fill= False)
     ax.add_artist(patch)
     
     set_label(ax, 1,0, model_notations)
-    ax.set_xticklabels(['Grand\n(' + str(data['model_comparison_grand'].n_trials) + ')'])
+    ax.set_xticklabels(['Overall\n(' + str(data['model_comparison_grand'].n_trials) + ')'])
 
     
-    # Session-wise
-    ax = fig.add_subplot(gs[0, 1: round(20)])
+    # === Session-wise ===
     sessionwise_result =  data['model_comparison_session_wise']
     n_session = len(sessionwise_result)
-    n_models = len(grand_result)
+    n_models = len(overall_result)
     
+    # --- Trial info ---
     group_result = {'n_trials': np.zeros((1,n_session))}
     group_result['session_number'] = np.unique(data['model_comparison_grand'].session_num)
     group_result['xlabel'] = []
-    
     for ss,this_mc in enumerate(sessionwise_result):
         group_result['n_trials'][0,ss] = this_mc.n_trials
         group_result['xlabel'].append(str(group_result['session_number'][ss]) + '\n('+ str(this_mc.n_trials) +')')
 
+    # --- Reorganize data ---
+    things_of_interest = ['model_weight_AIC','AIC', 'LPT_AIC']
     
-    para_of_interest = ['model_weight_AIC']
-    
-    for pp in para_of_interest:
+    for pp in things_of_interest:
         group_result[pp] = np.zeros((n_models, n_session))
-        
+
         for ss,this_mc in enumerate(sessionwise_result):
             group_result[pp][:, ss] = this_mc.results[pp]
             
-        sns.heatmap(group_result[pp], annot = True, fmt=".2f", square = False, cbar = False, cbar_ax = [0,1])
-        ax.set_yticklabels('')
-        ax.set_xticklabels(group_result['xlabel'])
+            
+    # --- 1.2 Session-wise model weight ---
+    ax = fig.add_subplot(gs[0, 1: round(20)])
+    sns.heatmap(group_result['model_weight_AIC'], annot = True, fmt=".2f", square = False, cbar = False, cbar_ax = [0,1])
+    ax.set_yticklabels('')
+    ax.set_xticklabels(group_result['xlabel'])
 
-        # -- Annotation --
-        for ss,this_mc in enumerate(sessionwise_result):
-            patch = Rectangle((ss, np.where(this_mc.results['best_model_AIC'])[0]),1,1, color = 'dodgerblue', linewidth = 4, fill= False)
-            ax.add_artist(patch)
+    session_best = []
+    for ss,this_mc in enumerate(sessionwise_result):
+        session_best.append(np.where(this_mc.results['best_model_AIC'])[0][0] + 1)
+        patch = Rectangle((ss, session_best[ss] - 1),1,1, color = 'dodgerblue', linewidth = 4, fill= False)
+        ax.add_artist(patch)
+        
+    session_best_matched = session_best == overall_best
+            
+    # -- 2.1 deltaAIC relative to RW1972-softmax-noBias (Fig.1I of Hattori 2019) --        
+    standardRL_idx = 12  # RW1972-softmax-noBias (0 of Fig.1I of Hattori 2019)    
+    plot_models = [13, 6, 15, 8]  
+    plot_colors = ['orange', 'b', 'g', 'r'] # Orange, blue, green, red
+    group_result['delta_AIC'] = group_result['AIC'] - group_result['AIC'][standardRL_idx - 1]
+    marker_sizes = (group_result["n_trials"]/100 * 2)**2
+    
+    fig = plt.figure(figsize=(15, 5), dpi = 150)
+    gs = GridSpec(1, 2, wspace = 0.2, bottom = 0.15, top = 0.9, left = 0.05, right = 0.95)
+    ax = fig.add_subplot(gs[0, 0])    
+    
+    plt.axhline(0, c = 'k', ls = '--')
+    
+    for mm, cc in zip(plot_models, plot_colors):
+        # plt.plot(group_result['session_number'].T, group_result['delta_AIC'].T)
+        x = group_result['session_number']
+        y = group_result['delta_AIC'][mm-1,:]
+        plt.plot(x, y, color = cc, label = overall_result['para_notation'].iloc[mm-1], linewidth = 0.7)
+        
+        plt.scatter(x[session_best_matched], y[session_best_matched], color = cc, s = marker_sizes, alpha = 0.9)
+        plt.scatter(x[np.logical_not(session_best_matched)], y[np.logical_not(session_best_matched)], facecolors='none', edgecolors = cc, s = marker_sizes, alpha = 0.7)
+        
+    
+    plt.text(min(plt.xlim()),10,'(12) RW1972-noBias')
+    plt.xlabel('Session number')
+    plt.ylabel('$\\Delta$ AIC')
+    plt.legend()    
+    
+    # -- 2.2 Likelihood per trial and prediction accuracy (TBD) --
+    ax = fig.add_subplot(gs[0, 1])    
+    plt.axhline(0.5, c = 'k', ls = '--')
+    
+    x = group_result['session_number']
+    y = group_result['LPT_AIC'][overall_best-1,:]
+    plt.plot(x, y, 'k',label = 'LPT_AIC', linewidth = 0.7)
+    plt.scatter(x[session_best_matched], y[session_best_matched], color = 'k', s = marker_sizes, alpha = 0.9, label = 'session = overall best')
+    plt.scatter(x[np.logical_not(session_best_matched)], y[np.logical_not(session_best_matched)], 
+                facecolors='none', edgecolors = 'k', s = marker_sizes, alpha = 0.7, label = 'session $\\neq$ overall best')
+    
+    plt.title('Overall best: %s {%s}' % (overall_result['model'].iloc[overall_best-1], overall_result['para_notation'].iloc[overall_best-1]))
+    plt.xlabel('Session number')
+    plt.ylabel('Likelihood per trial (AIC)')
+    plt.legend()    
 
-    # plt.pause(10)
+    # -- 3 Fitted paras of the overall best model --
+    
+    fitted_para_names = np.array(overall_result['para_notation'].iloc[overall_best-1].split(','))
+    para_plot_group = [[0,1,2], [3], [4]]
+    para_plot_color = [('g','r','k'),('k'),('k')]
+    
+    group_result['fitted_paras'] = np.zeros((len(fitted_para_names), n_session))
+    for ss,this_mc in enumerate(sessionwise_result):
+        group_result['fitted_paras'][:,ss] = this_mc.results['para_fitted'].iloc[overall_best-1]
+        
+    fig = plt.figure(figsize=(15, 5), dpi = 150)
+    gs = GridSpec(1, len(para_plot_group), wspace = 0.2, bottom = 0.15, top = 0.85, left = 0.05, right = 0.95)
 
+    for pp, (ppg, ppc) in enumerate(zip(para_plot_group, para_plot_color)):
+        ax = fig.add_subplot(gs[0, pp])  
+        ax.set_prop_cycle(color = ppc)
+        
+        x = group_result['session_number']
+        y = group_result['fitted_paras'][ppg,:]
+        
+        plt.plot(x.T, y.T, linewidth = 0.7)
+        
+        for yy in y:
+            hh = plt.scatter(x[session_best_matched], yy[session_best_matched], s = marker_sizes, alpha = 0.9)
+            plt.scatter(x[np.logical_not(session_best_matched)], yy[np.logical_not(session_best_matched)], 
+                        edgecolor = hh.get_edgecolor(), facecolors = 'none', s = marker_sizes, alpha = 0.9)
+
+
+        plt.xlabel('Session number')
+        if pp == 0: plt.ylabel('Fitted parameters')
+        plt.legend(fitted_para_names[ppg], bbox_to_anchor=(0,1.02,1,0.2), loc='lower center', ncol = 4)    
+        plt.axhline(0, c = 'k', ls = '--')
+
+    
+    # plt.pause(5)
+    
+    #%%
     return
 
 
