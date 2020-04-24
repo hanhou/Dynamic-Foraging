@@ -464,17 +464,29 @@ def plot_each_mice(data, file):
     n_session = len(sessionwise_result)
     n_models = len(grand_result)
     
-    # --- Trial info ---
+    # --- Reorganize data ---
     group_result = {'n_trials': np.zeros((1,n_session))}
     group_result['session_number'] = np.unique(data['model_comparison_grand'].session_num)
+    group_result['session_best'] = np.zeros(n_session).astype(int)
+    group_result['prediction_accuracy_NONCV'] = np.zeros(n_session)
+
     group_result['xlabel'] = []
     for ss,this_mc in enumerate(sessionwise_result):
         group_result['n_trials'][0,ss] = this_mc.n_trials
         group_result['xlabel'].append(str(group_result['session_number'][ss]) + '\n('+ str(this_mc.n_trials) +')')
+        
+        # Prediction accuracy (NOT cross-validated!!)
+        group_result['session_best'][ss] = (np.where(this_mc.results['best_model_AIC'])[0][0] + 1)
+        this_predictive_choice_prob =  this_mc.results_raw[group_result['session_best'][ss] - 1].predictive_choice_prob
+        this_predictive_choice = np.argmax(this_predictive_choice_prob, axis = 0)
+        group_result['prediction_accuracy_NONCV'][ss] = np.sum(this_predictive_choice == this_mc.fit_choice_history) / this_mc.n_trials
+        
+    this_predictive_choice_prob_grand =  data['model_comparison_grand'].results_raw[overall_best - 1].predictive_choice_prob
+    this_predictive_choice_grand = np.argmax(this_predictive_choice_prob_grand, axis = 0)
+    group_result['prediction_accuracy_NONCV_grand'] = np.sum(this_predictive_choice_grand == data['model_comparison_grand'].fit_choice_history) / data['model_comparison_grand'].n_trials 
 
-    # --- Reorganize data ---
+    # Iteratively copy data
     things_of_interest = ['model_weight_AIC','AIC', 'LPT_AIC']
-    
     for pp in things_of_interest:
         group_result[pp] = np.zeros((n_models, n_session))
 
@@ -493,13 +505,11 @@ def plot_each_mice(data, file):
     ax.set_yticklabels('')
     ax.set_xticklabels(group_result['xlabel'])
 
-    session_best = []
     for ss,this_mc in enumerate(sessionwise_result):
-        session_best.append(np.where(this_mc.results['best_model_AIC'])[0][0] + 1)
-        patch = Rectangle((ss, session_best[ss] - 1),1,1, color = 'dodgerblue', linewidth = 4, fill= False)
+        patch = Rectangle((ss, group_result['session_best'][ss] - 1),1,1, color = 'dodgerblue', linewidth = 4, fill= False)
         ax.add_artist(patch)
         
-    session_best_matched = session_best == overall_best
+    session_best_matched = group_result['session_best'] == overall_best
             
     # -- 2.1 deltaAIC relative to RW1972-softmax-noBias (Fig.1I of Hattori 2019) --        
     plot_models = [13, 6, 15, 8]  
@@ -528,26 +538,41 @@ def plot_each_mice(data, file):
     ax.legend()    
     
     # -- 2.2 Likelihood per trial and prediction accuracy (TBD) --
-    
     ax_grand = fig.add_subplot(gs[0, 10])    
     plt.axhline(0.5, c = 'k', ls = '--')
+    
+    # > Overall
+    # LPT_AIC
     sns.pointplot(data = group_result['LPT_AIC'][overall_best-1,:], ax = ax_grand, color = 'k', ci = 68, edgecolor = 'k')
     ax_grand.plot(-1, group_result['LPT_AIC_grand'][overall_best-1], marker = 's', markersize = 13, color = 'k')
-
+    
+    # Prediction accuracy NONCV
+    sns.pointplot(data = group_result['prediction_accuracy_NONCV'], ax = ax_grand, color = 'gray', ci = 68, edgecolor = 'k')
+    ax_grand.plot(-1, group_result['prediction_accuracy_NONCV_grand'], marker = 's', markersize = 13, color = 'gray')
+    
+    # > Session-wise
     ax = fig.add_subplot(gs[0, 11:20], sharey = ax_grand)    
     plt.axhline(0.5, c = 'k', ls = '--')
     
+    # LPT_AIC
     x = group_result['session_number']
     y = group_result['LPT_AIC'][overall_best-1,:]
-    plt.plot(x, y, 'k',label = 'LPT_AIC', linewidth = 0.7)
+    plt.plot(x, y, 'k',label = 'likelihood per trial (AIC)', linewidth = 0.7)
     plt.scatter(x[session_best_matched], y[session_best_matched], color = 'k', s = marker_sizes, alpha = 0.9, label = 'session = overall best')
     plt.scatter(x[np.logical_not(session_best_matched)], y[np.logical_not(session_best_matched)], 
                 facecolors='none', edgecolors = 'k', s = marker_sizes, alpha = 0.7, label = 'session $\\neq$ overall best')
+
+    # Prediction accuracy NONCV
+    y = group_result['prediction_accuracy_NONCV']
+    plt.plot(x, y, 'gray',label = 'prediction accuracy NONCV', linewidth = 0.7)
+    plt.scatter(x[session_best_matched], y[session_best_matched], color = 'gray', s = marker_sizes, alpha = 0.9)
+    plt.scatter(x[np.logical_not(session_best_matched)], y[np.logical_not(session_best_matched)], 
+                facecolors='none', edgecolors = 'gray', s = marker_sizes, alpha = 0.7)
     
     ax_grand.set_xticks([-1,0])
     ax_grand.set_xlim([-1.5,.5])
     ax_grand.set_xticklabels(['Overall','mean'], rotation = 45)
-    ax_grand.set_ylabel('Likelihood per trial (AIC)')
+    # ax_grand.set_ylabel('Likelihood per trial (AIC)')
     plt.setp(ax.get_yticklabels(), visible=False)
     
     plt.title('Overall best: %s {%s}' % (grand_result['model'].iloc[overall_best-1], grand_result['para_notation'].iloc[overall_best-1]))
