@@ -7,13 +7,13 @@ Created on Wed Apr 15 21:33:33 2020
 
 import numpy as np
 import multiprocessing as mp
-import os, fnmatch
 import time
-import sys
+import sys, os
 from tqdm import tqdm
+import pandas as pd
 
 from models.bandit_model_comparison import BanditModelComparison
-from utils.plot_fitting import plot_each_mice
+from utils.plot_fitting import plot_each_mice, plot_all_mice, plot_group_results
 
 def fit_each_mice(data, if_session_wise = False, if_verbose = True, file_name = '', pool = '', models = None, use_trials = None):
     choice = data.f.choice
@@ -181,20 +181,6 @@ def combine_group_results(raw_path = "..\\export\\", result_path = "..\\results\
             print('%s + %s: Combined!' %(combine_prefix[0] + file, combine_prefix[1] + file))
             
 
-def plot_all_mice(result_path = "..\\results\\model_comparison\\", combine_prefix = 'model_comparison_15_'):
-    
-
-    listOfFiles = os.listdir(result_path)
-    
-    for file in listOfFiles:
-        if fnmatch.fnmatch(file, combine_prefix + '*'):
-            data = np.load(result_path + file, allow_pickle=True)
-            data = data.f.results_each_mice.item()
-            
-            plot_each_mice(data, file)
-            
-            
-
 if __name__ == '__main__':
     
     n_worker = 8
@@ -211,7 +197,8 @@ if __name__ == '__main__':
     # combine_group_results()
     
     # --- Plot all results ---
-    plot_all_mice()
+    # plot_all_mice(result_path = "..\\results\\model_comparison\\", combine_prefix = 'model_comparison_15_')
+    plot_group_results()
     
-    pool.close()   # Just a good practice
-    pool.join()
+    # pool.close()   # Just a good practice
+    # pool.join()

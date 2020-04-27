@@ -209,7 +209,7 @@ def plot_LL_surface(forager, LLsurfaces, CI_cutoff_LPTs, para_names, para_2ds, p
     plt.show()
     
 def plot_session_lightweight(fake_data, fitted_data = None):
-    sns.reset_orig()
+    # sns.reset_orig()
 
     choice_history, reward_history, p_reward = fake_data
     
@@ -258,13 +258,15 @@ def plot_session_lightweight(fake_data, fitted_data = None):
     return ax
     
 def plot_model_comparison_predictive_choice_prob(model_comparison):
-    sns.reset_orig()
+    # sns.reset_orig()
     
     choice_history, reward_history, p_reward, trial_numbers = model_comparison.fit_choice_history, model_comparison.fit_reward_history, model_comparison.p_reward, model_comparison.trial_numbers
+    if not hasattr(model_comparison,'plot_predictive'):
+        model_comparison.plot_predictive = [1,2,3]
+        
     n_trials = np.shape(choice_history)[1]
 
     ax = plot_session_lightweight([choice_history, reward_history, p_reward])
-    
     # Predictive choice prob
     for bb in model_comparison.plot_predictive:
         bb = bb - 1
@@ -510,9 +512,17 @@ def plot_each_mice(data, file):
         ax.add_artist(patch)
         
     session_best_matched = group_result['session_best'] == overall_best
+    
+    # -- Fitting results --
+    data['model_comparison_grand'].plot_predictive = [1,2,3]
+    data['model_comparison_grand'].plot_predictive_choice()
             
     # -- 2.1 deltaAIC relative to RW1972-softmax-noBias (Fig.1I of Hattori 2019) --        
-    plot_models = [13, 6, 15, 8]  
+    plot_models = np.array([13, 6, 15, 8])
+    group_result['delta_AIC'] = group_result['delta_AIC'][plot_models - 1,:]
+    group_result['delta_AIC_para_notation'] = grand_result['para_notation'].iloc[plot_models-1]
+    group_result['delta_AIC_grand'] = group_result['delta_AIC_grand'][plot_models - 1]
+    
     plot_colors = ['orange', 'b', 'g', 'r'] # Orange, blue, green, red
     
     marker_sizes = (group_result["n_trials"]/100 * 2)**2
@@ -522,12 +532,12 @@ def plot_each_mice(data, file):
     
     ax = fig.add_subplot(gs[0, 0:9])    
     plt.axhline(0, c = 'k', ls = '--')
-    for mm, cc in zip(plot_models, plot_colors):
+    for mm, cc in enumerate(plot_colors):
         
         # plt.plot(group_result['session_number'].T, group_result['delta_AIC'].T)
         x = group_result['session_number']
-        y = group_result['delta_AIC'][mm-1,:]
-        ax.plot(x, y, color = cc, label = grand_result['para_notation'].iloc[mm-1], linewidth = 0.7)
+        y = group_result['delta_AIC'][mm,:]
+        ax.plot(x, y, color = cc, label = group_result['delta_AIC_para_notation'].iloc[mm], linewidth = 0.7)
         
         ax.scatter(x[session_best_matched], y[session_best_matched], color = cc, s = marker_sizes, alpha = 0.9)
         ax.scatter(x[np.logical_not(session_best_matched)], y[np.logical_not(session_best_matched)], facecolors='none', edgecolors = cc, s = marker_sizes, alpha = 0.7)
@@ -582,6 +592,7 @@ def plot_each_mice(data, file):
     # -- 3 Fitted paras of the overall best model --
     
     fitted_para_names = np.array(grand_result['para_notation'].iloc[overall_best-1].split(','))
+    group_result['fitted_para_names'] = fitted_para_names
     para_plot_group = [[0,1,2], [3], [4]]
     para_plot_color = [('g','r','k'),('k'),('k')]
     
@@ -624,13 +635,137 @@ def plot_each_mice(data, file):
         plt.setp(ax.get_yticklabels(), visible=False)
     
     # plt.pause(10)
+    #%%
+    return group_result
+
+def plot_all_mice(result_path = "..\\results\\model_comparison\\", combine_prefix = 'model_comparison_15_', mice_select = ''):
+    import os
+    
+    plt.rcParams.update({'figure.max_open_warning': 0})
     
     #%%
+    listOfFiles = os.listdir(result_path)
+    
+    results_all_mice = pd.DataFrame()
+    n_mice = 0
+    
+    for file in listOfFiles:
+        
+        # -- Screening of file name --
+        if mice_select != '':
+            skip = True
+            for ss in mice_select:
+                if ss in file: 
+                    skip = False
+                    break
+            if skip: continue  # Pass this file
+        
+        if combine_prefix not in file: continue # Pass this file
+        
+        # print(file)
+        n_mice += 1
+        data = np.load(result_path + file, allow_pickle=True)
+        data = data.f.results_each_mice.item()
+        
+        group_result_this = plot_each_mice(data, file)
+        df_this = pd.DataFrame({'mice': file.replace(combine_prefix,'').replace('.npz',''),
+                                'session_idx': np.arange(len(group_result_this['session_number'])) + 1,
+                                'session_number': group_result_this['session_number'],
+                                 })
+        df_this['prediction_accuracy_NONCV'] = group_result_this['prediction_accuracy_NONCV']
+        df_this = pd.concat([df_this, pd.DataFrame(group_result_this['fitted_paras'].T, columns = group_result_this['fitted_para_names'])], axis = 1)
+        df_this = pd.concat([df_this, pd.DataFrame(group_result_this['delta_AIC'].T, columns = group_result_this['delta_AIC_para_notation'])], axis = 1)
+        
+        results_all_mice = results_all_mice.append(df_this)
+        
+    # Save group results   
+    group_results = {'results_all_mice': results_all_mice}     
+    group_results['delta_AIC_para_notation'] = group_result_this['delta_AIC_para_notation']
+    group_results['fitted_para_names'] = group_result_this['fitted_para_names']
+    group_results['n_mice'] = n_mice 
+    np.savez_compressed(result_path + 'group_results.npz', group_results = group_results)
+    
+    # results_all_mice.to_pickle(result_path + 'results_all_mice.pkl')
+    print('Group results saved: %s!' %(result_path + 'group_results'))
+        
+
+def plot_group_results(result_path = "..\\results\\model_comparison\\", group_results_name = 'group_results.npz'):
+    #%%
+    sns.set()
+    
+    # results_all_mice = pd.read_pickle(result_path + group_results_name)
+    data = np.load(result_path + group_results_name, allow_pickle=True)
+    group_results = data.f.group_results.item()
+    results_all_mice = group_results['results_all_mice']   
+    delta_AIC_para_notation = group_results['delta_AIC_para_notation']
+    fitted_para_names = group_results['fitted_para_names']
+
+    # == Plotting ==
+    
+    # -- 1. deltaAIC, aligned to session_number (Hattori Figure 1I) --
+    fig = plt.figure(figsize=(10, 5), dpi = 150)
+    ax = fig.subplots() 
+    plt.axhline(0, c = 'k', ls = '--')
+    palette = sns.color_palette(['orange', 'b', 'g', 'r'])
+    sns.pointplot(data = results_all_mice.melt(id_vars = ['session_idx', 'session_number'], var_name='parameters',
+                                               value_vars = delta_AIC_para_notation.tolist()),
+                  x = 'session_number', y = 'value' , hue = 'parameters', ci = 68, palette=palette)
+        
+    ax.text(min(plt.xlim()),10,'(12) RW1972-noBias')
+    ax.set_xlabel('Session number (actual)')
+    ax.set_ylabel('$\\Delta$ AIC')
+    # ax.set_title('%g mice' % group_results['n_mice'])
+    plt.xticks(rotation=60, horizontalalignment='right')
+
+    n_mice_per_session = results_all_mice.session_number.value_counts().sort_index()
+    ax.plot(n_mice_per_session.values * max(plt.ylim()) / max(n_mice_per_session.values) * 0.9, 'ks-', label = 'max = %g mice' % group_results['n_mice'])
+
+    ax.legend()    
+
+    # -- 1. deltaAIC, aligned to session_idx (Hattori Figure 1I) --
+    fig = plt.figure(figsize=(10, 5), dpi = 150)
+    ax = fig.subplots() 
+    plt.axhline(0, c = 'k', ls = '--')
+    palette = sns.color_palette(['orange', 'b', 'g', 'r'])
+    sns.pointplot(data = results_all_mice.melt(id_vars = ['session_idx', 'session_number'], var_name='parameters',
+                                               value_vars = delta_AIC_para_notation.tolist()),
+                  x = 'session_idx', y = 'value' , hue = 'parameters', ci = 68, palette=palette)
+        
+    ax.text(min(plt.xlim()),10,'(12) RW1972-noBias')
+    ax.set_xlabel('Session Index')
+    ax.set_ylabel('$\\Delta$ AIC')
+    # ax.set_title('%g mice' % group_results['n_mice'])
+    plt.xticks(rotation=60, horizontalalignment='right')
+
+    n_mice_per_session = results_all_mice.session_idx.value_counts().sort_index()
+    ax.plot(n_mice_per_session.values * max(plt.ylim()) / max(n_mice_per_session.values) * 0.9, 'ks-', label = 'max = %g mice' % group_results['n_mice'])
+
+    ax.legend()   
+
+    # -- 2. Prediction accuracy (Hattori Figure 1J)
+    fig = plt.figure(figsize=(10, 5), dpi = 150)
+    ax = fig.subplots() 
+    plt.axhline(0.5, c = 'k', ls = '--')
+    sns.violinplot(x="mice", y="prediction_accuracy_NONCV", data = results_all_mice)        
+    ax.set_ylabel('Prediction accuracy (nonCVed)')
+    plt.xticks(rotation=45, horizontalalignment='right')
+    ax.set_xlabel('')
+    
+    # -- 3. alpha_reward --
+   
+    for ff, fitted_para_this in enumerate(fitted_para_names):
+        fig = plt.figure(figsize=(10, 5), dpi = 150)
+        ax = fig.subplots() 
+        plt.axhline(0, c = 'k', ls = '--')
+        sns.violinplot(x="mice", y = fitted_para_this, data = results_all_mice)    
+        ax.set_title(fitted_para_this)
+        plt.xticks(rotation=45, horizontalalignment='right')
+        ax.set_xlabel('')
+        ax.set_ylabel('')
+    
+    plt.pause(10)
     return
-
-
-
-
+    
 
 
 
