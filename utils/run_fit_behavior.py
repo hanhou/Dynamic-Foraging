@@ -13,7 +13,7 @@ from tqdm import tqdm
 import pandas as pd
 
 from models.bandit_model_comparison import BanditModelComparison
-from utils.plot_fitting import process_all_mice, plot_group_results
+from utils.plot_mice import plot_each_mice, plot_group_results
 
 def fit_each_mice(data, if_session_wise = False, if_verbose = True, file_name = '', pool = '', models = None, use_trials = None):
     choice = data.f.choice
@@ -179,6 +179,144 @@ def combine_group_results(raw_path = "..\\export\\", result_path = "..\\results\
             np.savez_compressed( result_path + save_prefix + file, results_each_mice = results_each_mice)
             print('%s + %s: Combined!' %(combine_prefix[0] + file, combine_prefix[1] + file))
             
+
+def process_each_mice(data, file, if_plot_each_mice):
+
+    # === 1.1 Overall result ===
+    grand_result = data['model_comparison_grand'].results
+    overall_best = np.where(grand_result['best_model_AIC'])[0][0] + 1
+
+    # === Session-wise ===
+    sessionwise_result =  data['model_comparison_session_wise']
+    n_session = len(sessionwise_result)
+    n_models = len(grand_result)
+    
+    # --- Reorganize data ---
+    group_result = {'n_trials': np.zeros((1,n_session))}
+    group_result['session_number'] = np.unique(data['model_comparison_grand'].session_num)
+    group_result['session_best'] = np.zeros(n_session).astype(int)
+    group_result['prediction_accuracy_NONCV'] = np.zeros(n_session)
+    group_result['raw_data'] = data
+    group_result['file'] = file
+
+    group_result['xlabel'] = []
+    for ss,this_mc in enumerate(sessionwise_result):
+        group_result['n_trials'][0,ss] = this_mc.n_trials
+        group_result['xlabel'].append(str(group_result['session_number'][ss]) + '\n('+ str(this_mc.n_trials) +')')
+        
+        # Prediction accuracy of the best model (NOT cross-validated!!)
+        group_result['session_best'][ss] = (np.where(this_mc.results['best_model_AIC'])[0][0] + 1)
+        this_predictive_choice_prob =  this_mc.results_raw[group_result['session_best'][ss] - 1].predictive_choice_prob
+        this_predictive_choice = np.argmax(this_predictive_choice_prob, axis = 0)
+        group_result['prediction_accuracy_NONCV'][ss] = np.sum(this_predictive_choice == this_mc.fit_choice_history) / this_mc.n_trials
+
+    this_predictive_choice_prob_grand =  data['model_comparison_grand'].results_raw[overall_best - 1].predictive_choice_prob
+    this_predictive_choice_grand = np.argmax(this_predictive_choice_prob_grand, axis = 0)
+    group_result['prediction_accuracy_NONCV_grand'] = np.sum(this_predictive_choice_grand == data['model_comparison_grand'].fit_choice_history) / data['model_comparison_grand'].n_trials 
+
+    # Iteratively copy data
+    things_of_interest = ['model_weight_AIC','AIC', 'LPT_AIC']
+    for pp in things_of_interest:
+        group_result[pp] = np.zeros((n_models, n_session))
+
+        for ss,this_mc in enumerate(sessionwise_result):
+            group_result[pp][:, ss] = this_mc.results[pp]
+            
+    standardRL_idx = 12  # RW1972-softmax-noBias (0 of Fig.1I of Hattori 2019)    
+    group_result['delta_AIC'] = group_result['AIC'] - group_result['AIC'][standardRL_idx - 1]
+    group_result['delta_AIC_grand'] = grand_result['AIC'] -  grand_result['AIC'][standardRL_idx]
+    group_result['LPT_AIC_grand']  = grand_result['LPT_AIC']
+    group_result['fitted_paras_grand'] = grand_result['para_fitted'].iloc[overall_best-1]
+
+    
+    # -- Fitting results --
+    data['model_comparison_grand'].plot_predictive = [1,2,3]
+            
+    # -- 2.1 deltaAIC relative to RW1972-softmax-noBias (Fig.1I of Hattori 2019) --        
+    plot_models = np.array([13, 6, 15, 8])
+    group_result['delta_AIC'] = group_result['delta_AIC'][plot_models - 1,:]
+    group_result['delta_AIC_para_notation'] = grand_result['para_notation'].iloc[plot_models-1]
+    group_result['delta_AIC_grand'] = group_result['delta_AIC_grand'][plot_models - 1]
+    
+    # -- 3. Fitted paras of the overall best model --
+    fitted_para_names = np.array(grand_result['para_notation'].iloc[overall_best-1].split(','))
+    group_result['fitted_para_names'] = fitted_para_names
+    group_result['fitted_paras'] = np.zeros((len(fitted_para_names), n_session))
+    for ss,this_mc in enumerate(sessionwise_result):
+        group_result['fitted_paras'][:,ss] = this_mc.results['para_fitted'].iloc[overall_best-1]
+        
+    # -- 4. Prediction accuracy of the bias term only (Hattori Fig.1J) --
+    # When softmax only have a bias term, choice_right_prob = 1/(1+exp(delta/sigma)), choice_left_prob = 1/(1+exp(-delta/sigma))
+    # Therefore, the prediction accuracy = proportion of left (right) choices, if delta > 0 (delta <= 0)
+    group_result['prediction_accuracy_bias_only'] = np.zeros(n_session)
+    for ss,this_mc in enumerate(sessionwise_result):
+        bias_this = group_result['fitted_paras'][fitted_para_names == ' $b_L$', ss]
+        which_largest = int(bias_this <= 0) # If bias_this < 0, bias predicts all rightward choices
+        group_result['prediction_accuracy_bias_only'][ss] = np.sum(this_mc.fit_choice_history == which_largest) / this_mc.n_trials
+        
+    bias_grand = group_result['fitted_paras_grand'][fitted_para_names == ' $b_L$']
+    which_largest_grand = int(bias_grand <= 0)
+    group_result['prediction_accuracy_bias_only_grand'] = np.sum(data['model_comparison_grand'].fit_choice_history == which_largest_grand) /\
+                                                          data['model_comparison_grand'].n_trials 
+
+    if if_plot_each_mice:
+        plot_each_mice(group_result)
+    
+    return group_result
+
+
+def process_all_mice(result_path = "..\\results\\model_comparison\\", combine_prefix = 'model_comparison_15_', mice_select = '', 
+                  group_results_name_to_save = 'group_results.npz', if_plot_each_mice = True):
+    
+    #%%
+    listOfFiles = os.listdir(result_path)
+    
+    results_all_mice = pd.DataFrame()
+    n_mice = 0
+    
+    for file in listOfFiles:
+        
+        # -- Screening of file name --
+        if mice_select != '':
+            skip = True
+            for ss in mice_select:
+                if ss in file: 
+                    skip = False
+                    break
+            if skip: continue  # Pass this file
+        
+        if combine_prefix not in file: continue # Pass this file
+        
+        # print(file)
+        n_mice += 1
+        data = np.load(result_path + file, allow_pickle=True)
+        data = data.f.results_each_mice.item()
+        
+        group_result_this = process_each_mice(data, file, if_plot_each_mice = if_plot_each_mice)
+        df_this = pd.DataFrame({'mice': file.replace(combine_prefix,'').replace('.npz',''),
+                                'session_idx': np.arange(len(group_result_this['session_number'])) + 1,
+                                'session_number': group_result_this['session_number'],
+                                 })
+        df_this['prediction_accuracy_NONCV'] = group_result_this['prediction_accuracy_NONCV']
+        df_this['prediction_accuracy_bias_only'] = group_result_this['prediction_accuracy_bias_only']
+        df_this = pd.concat([df_this, pd.DataFrame(group_result_this['fitted_paras'].T, columns = group_result_this['fitted_para_names'])], axis = 1)
+        df_this = pd.concat([df_this, pd.DataFrame(group_result_this['delta_AIC'].T, columns = group_result_this['delta_AIC_para_notation'])], axis = 1)
+        
+        # Turn mine definition of bias (outside softmax) into Hattori's definition (inside softmax) ??? (I think they're incorrect...)
+        # df_this[' $b_L$'] = df_this[' $b_L$'] * df_this[' $\sigma$']
+        
+        results_all_mice = results_all_mice.append(df_this)
+        
+    # Save group results   
+    group_results = {'results_all_mice': results_all_mice}     
+    group_results['delta_AIC_para_notation'] = group_result_this['delta_AIC_para_notation']
+    group_results['fitted_para_names'] = group_result_this['fitted_para_names']
+    group_results['n_mice'] = n_mice 
+    np.savez_compressed(result_path + group_results_name_to_save, group_results = group_results)
+    
+    # results_all_mice.to_pickle(result_path + 'results_all_mice.pkl')
+    print('Group results saved: %s!' %(result_path + group_results_name_to_save))
+        
 
 if __name__ == '__main__':
     
