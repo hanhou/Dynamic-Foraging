@@ -13,7 +13,7 @@ from tqdm import tqdm
 import pandas as pd
 
 from models.bandit_model_comparison import BanditModelComparison
-from utils.plot_fitting import plot_each_mice, plot_all_mice, plot_group_results
+from utils.plot_fitting import process_all_mice, plot_group_results
 
 def fit_each_mice(data, if_session_wise = False, if_verbose = True, file_name = '', pool = '', models = None, use_trials = None):
     choice = data.f.choice
@@ -110,7 +110,6 @@ def combine_each_model_comparison(objectA, objectB):
     Combine two BanditModelComparison objects
 
     '''
-    import pandas as pd
     
     # Confirm they were from the same dataset
     assert(np.all(objectA.fit_choice_history == objectB.fit_choice_history))
@@ -197,8 +196,8 @@ if __name__ == '__main__':
     # combine_group_results()
     
     # --- Plot all results ---
-    # plot_all_mice(result_path = "..\\results\\model_comparison\\", combine_prefix = 'model_comparison_15_')
-    plot_group_results()
+    # process_all_mice(result_path = "..\\results\\model_comparison\\", combine_prefix = 'model_comparison_15_', if_plot_each_mice = False)
+    plot_group_results(group_results_name = 'group_results.npz', average_session_number_range = [0,20])
     
     # pool.close()   # Just a good practice
     # pool.join()
