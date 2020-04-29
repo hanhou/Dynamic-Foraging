@@ -10,7 +10,7 @@ import time
 
 from models.fitting_functions import fit_bandit
 from utils.plot_fitting import plot_model_comparison_predictive_choice_prob, plot_model_comparison_result
-
+from IPython.display import display
 
 # Default models (reordered with hindsight results). Use the format: [forager, [para_names], [lower bounds], [higher bounds]]
 MODELS = [

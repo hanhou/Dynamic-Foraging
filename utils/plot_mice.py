@@ -89,7 +89,7 @@ def plot_each_mice(group_result):
     ax.set_ylabel('$\\Delta$ AIC')
     ax.legend()    
     
-    # -- 2.2 Likelihood per trial and prediction accuracy (TBD) --
+    # -- 2.2 Likelihood per trial, prediction accuracy (nonCVed), and foraging efficiency --
     ax_grand = fig.add_subplot(gs[0, 10])    
     plt.axhline(0.5, c = 'k', ls = '--')
     
@@ -103,9 +103,13 @@ def plot_each_mice(group_result):
     ax_grand.plot(-1, group_result['prediction_accuracy_NONCV_grand'], marker = 's', markersize = 13, color = 'black')
     
     # Prediction accuracy bias only
-    sns.pointplot(data = group_result['prediction_accuracy_bias_only'], ax = ax_grand, color = 'r', ci = 68)
-    ax_grand.plot(-1, group_result['prediction_accuracy_bias_only_grand'], marker = 's', markersize = 13, color = 'r')
-
+    sns.pointplot(data = group_result['prediction_accuracy_bias_only'], ax = ax_grand, color = 'gray', ci = 68)
+    ax_grand.plot(-1, group_result['prediction_accuracy_bias_only_grand'], marker = 's', markersize = 13, color = 'gray')
+    
+    # Foraging efficiency
+    sns.pointplot(data = group_result['foraging_efficiency'], ax = ax_grand, color = 'g', ci = 68, marker = '^')
+    ax_grand.plot(-1, group_result['foraging_efficiency_grand'], marker = '^', markersize = 13, color = 'g')
+    
     # > Session-wise
     ax = fig.add_subplot(gs[0, 11:20], sharey = ax_grand)    
     plt.axhline(0.5, c = 'k', ls = '--')
@@ -127,10 +131,17 @@ def plot_each_mice(group_result):
     
     # Prediction accuracy bias only
     y = group_result['prediction_accuracy_bias_only']
-    plt.plot(x, y, 'r', ls = '--', label = 'prediction accuracy of bias only', linewidth = 0.7)
-    plt.scatter(x[session_best_matched], y[session_best_matched], color = 'r', s = marker_sizes, alpha = 0.9)
+    plt.plot(x, y, 'gray', ls = '--', label = 'prediction accuracy of bias only', linewidth = 0.7)
+    plt.scatter(x[session_best_matched], y[session_best_matched], color = 'gray', s = marker_sizes, alpha = 0.9)
     plt.scatter(x[np.logical_not(session_best_matched)], y[np.logical_not(session_best_matched)], 
-                facecolors='none', edgecolors = 'r', s = marker_sizes, alpha = 0.7)
+                facecolors='none', edgecolors = 'gray', s = marker_sizes, alpha = 0.7)
+
+    # Foraging efficiency
+    y = group_result['foraging_efficiency']
+    plt.plot(x, y, 'g', ls = '-', label = 'foraging efficiency', linewidth = 0.7)
+    plt.scatter(x[session_best_matched], y[session_best_matched], color = 'g', s = marker_sizes, alpha = 0.9, marker = '^')
+    plt.scatter(x[np.logical_not(session_best_matched)], y[np.logical_not(session_best_matched)], 
+                facecolors='none', edgecolors = 'g', s = marker_sizes, alpha = 0.7, marker = '^')
 
     ax_grand.set_xticks([-1,0])
     ax_grand.set_xlim([-1.5,.5])
@@ -193,6 +204,9 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\", group_re
     group_results = data.f.group_results.item()
     results_all_mice = group_results['results_all_mice'] 
     
+    # to %
+    results_all_mice[['foraging_efficiency', 'prediction_accuracy_NONCV', 'prediction_accuracy_bias_only']] *= 100
+    
     if average_session_number_range is None:
         average_session_number_range = [0,np.inf]
         
@@ -205,7 +219,6 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\", group_re
     fitted_para_names = group_results['fitted_para_names']
 
     # == Plotting ==
-    
     # -- 1. deltaAIC, aligned to session_number (Hattori Figure 1I) --
     fig = plt.figure(figsize=(10, 5), dpi = 150)
     ax = fig.subplots() 
@@ -235,8 +248,27 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\", group_re
                           color = 'gray', linewidth = 1, fill= True, alpha = 0.2)
         ax.add_artist(patch)
 
-    ax.legend()    
+    ax.legend() 
+    
+    # -- 1.5 Foraging efficiency, aligned to session_number --
+    fig = plt.figure(figsize=(10, 5), dpi = 150)
+    ax = fig.subplots() 
+    plt.axhline(100, c = 'k', ls = '--')
+    
+    means = results_all_mice.groupby('session_number')['foraging_efficiency'].mean() 
+    errs = results_all_mice.groupby('session_number')['foraging_efficiency'].sem() 
+    ax.set_ylim([50,120])
+    ax.errorbar(means.index, means, marker='^', yerr=errs, color = 'g')
 
+    ax.text(min(plt.xlim()),100,'Ideal-$\hat{p}$-optimal')
+    ax.set_xlabel('Session number (actual)')
+    ax.set_ylabel('Foraging efficiency')
+    
+    if average_session_number_range is not None:
+        patch = Rectangle((average_session_number_range[0], min(plt.ylim())), np.diff(np.array(average_session_number_range)), np.diff(np.array(plt.ylim())),
+                          color = 'gray', linewidth = 1, fill= True, alpha = 0.2)
+        ax.add_artist(patch)
+        
     # -- 2. deltaAIC, aligned to session_idx (Hattori Figure 1I) --
     fig = plt.figure(figsize=(10, 5), dpi = 150)
     ax = fig.subplots() 
@@ -261,6 +293,21 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\", group_re
     ax.plot(n_mice_per_session.values * max(plt.ylim()) / max(n_mice_per_session.values) * 0.9, 'ks-', label = 'max = %g mice' % group_results['n_mice'])
 
     ax.legend()   
+    
+    # -- 2.5 Foraging efficiency, aligned to session_idx --
+    fig = plt.figure(figsize=(10, 5), dpi = 150)
+    ax = fig.subplots() 
+    plt.axhline(100, c = 'k', ls = '--')
+    
+    means = results_all_mice_session_filtered.groupby('session_idx')['foraging_efficiency'].mean()
+    errs = results_all_mice_session_filtered.groupby('session_idx')['foraging_efficiency'].sem()
+    ax.set_ylim([50,120])
+    ax.errorbar(means.index, means, marker='^', yerr=errs, color = 'g')
+
+    ax.text(min(plt.xlim()),100,'Ideal-$\hat{p}$-optimal')
+    ax.set_xlabel('Session Index')
+    ax.set_ylabel('Foraging efficiency')
+ 
 
     # -- 3. Prediction accuracy (Hattori Figure 1J)
     fig = plt.figure(figsize=(10, 5), dpi = 150)
@@ -270,7 +317,6 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\", group_re
     prediction_accuracies = results_all_mice_session_filtered[['mice','prediction_accuracy_NONCV', 'prediction_accuracy_bias_only']]
     prediction_accuracies = prediction_accuracies.rename(columns={"prediction_accuracy_NONCV": "Hattori 2019", "prediction_accuracy_bias_only": "Bias only"})
     prediction_accuracies = pd.DataFrame.melt(prediction_accuracies, id_vars = 'mice', var_name = 'models', value_name= 'value')
-    prediction_accuracies.value *= 100
 
     x="mice"
     y="value"
@@ -389,12 +435,92 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\", group_re
     ax.set_xticklabels(['$\\beta_0$'])
     ax.set_ylabel('')
     ax.set_ylim([-2,2])
-
     
-    plt.pause(5)
+    #%% 5> Correlations
+    # - All paras, session filtered -
+    data = results_all_mice_session_filtered[['session_number','prediction_accuracy_NONCV', 'foraging_efficiency',
+                           '$\\alpha_{rew}$', ' $\\alpha_{unr}$', ' $\\delta$', ' $\\sigma$', ' $b_L$',]]
+    data = data.rename(columns = {'session_number':'session #', 'prediction_accuracy_NONCV': 'pred. accu.', 
+                 'foraging_efficiency': 'foraging eff.'})
+    
+    hh = sns.pairplot( data = data,
+                 kind="reg", height = 1.5, corner = True, plot_kws = {'scatter_kws': dict(s=5, color='gray'), 'line_kws': dict(color='k')})
+    
+    hh.map_lower(corrfunc)
+    plt.tight_layout()
+    
+    #%% - Foraging Efficiency VS Prediction Accuracy (all sessions included) -
+    # > All mice
+    data = results_all_mice[['session_number','mice',
+                             'prediction_accuracy_NONCV', 'foraging_efficiency', 'n_trials']].copy()
+    data['prediction_accuracy_NONCV'] = data['prediction_accuracy_NONCV']
+    
+    palette = sns.color_palette("coolwarm",len(results_all_mice['session_number'].unique()))
+    x, y = ["prediction_accuracy_NONCV","foraging_efficiency"]
+    
+    hh = sns.relplot(x=x, y=y, hue="session_number", size="n_trials",
+            sizes=(40, 400), alpha=.5, palette = palette, height=6, data=data, legend = False)
+    
+    plt.axhline(100, c = 'k', ls = '--', lw = 1)
+    plt.axvline(50, c = 'k', ls = '--', lw = 1)
+
+    (r, p) = pearsonr(data[x], data[y])
+    sns.regplot(x=x, y=y, ax = hh.ax, data=data,
+                scatter = False, label='r = %.3g\np = %.3g'%(r,p), color = 'k')
+    
+    plt.legend()            
+    plt.title('All sessions')    
+    plt.tight_layout()
+    
+    #%% > Each mice
+    fig = plt.figure(figsize=(9, 8), dpi = 150)
+    n_mice = len(data.mice.unique())
+    gs = GridSpec(int(np.ceil(n_mice/4)), 4, hspace = .6, wspace = 0.5, 
+                  left = 0.1, right = 0.95, bottom = 0.05, top = 0.95)
+    
+    for mm, mouse in enumerate(data.mice.unique()):
+        ax = fig.add_subplot(gs[mm]) 
+        
+        x = data[data.mice == mouse].prediction_accuracy_NONCV
+        y = data[data.mice == mouse].foraging_efficiency
+        (r, p) = pearsonr(x, y)
+        
+        palette = sns.color_palette("coolwarm", sum(data.mice == mouse))
+        sns.scatterplot(x = 'prediction_accuracy_NONCV',y = 'foraging_efficiency', data = data[data.mice == mouse], 
+                        hue = 'session_number', size = 'session_number', 
+                        sizes = (20,100), alpha = 0.7, palette=palette, ax = ax, legend = False)
+
+        sns.regplot(x,y, ax = ax, scatter = False, label='r = %.3f\np = %.3f'%(r,p), color = 'k',
+                    line_kws = {'linestyle': ('--','-')[p<0.05], 'lw':2})
+        plt.legend(fontsize=7, handlelength=0)
+        
+        if mm > 0:
+            plt.xlabel('')
+            plt.ylabel('')
+        else:
+            plt.xlabel('Prediction accuracy %')
+            plt.ylabel('Foraging efficiency %')
+        
+        plt.xlim([48,100])
+        plt.axhline(100, c = 'k', ls = '--', lw = 1)
+        plt.axvline(50, c = 'k', ls = '--', lw = 1)
+        plt.title(mouse)
+
+    # hh = sns.relplot(x="prediction_accuracy_NONCV", y="foraging_efficiency", hue = "session_number", col="mice", size="n_trials",
+    #         sizes=(40, 400), alpha=.5, palette = palette, data=data, legend = False, col_wrap = 4, height=3, aspect=1)
+    # plt.tight_layout()
+
+    #%%
+    plt.pause(10)
     #%%
     return
-    
 
+from scipy.stats import pearsonr
 
-
+def corrfunc(x, y, **kws):
+    (r, p) = pearsonr(x, y)
+    ax = plt.gca()
+    title_obj = ax.set_title("r = %.3f, p = %.4f " % (r, p), fontsize = 8)
+    if p < 0.05:
+        plt.setp(title_obj, color='r')
+            

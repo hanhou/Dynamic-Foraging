@@ -179,6 +179,19 @@ def combine_group_results(raw_path = "..\\export\\", result_path = "..\\results\
             np.savez_compressed( result_path + save_prefix + file, results_each_mice = results_each_mice)
             print('%s + %s: Combined!' %(combine_prefix[0] + file, combine_prefix[1] + file))
             
+def get_p_hat_greedy(p_reward):
+    p_max = np.max(p_reward, axis=0)
+    p_min = np.min(p_reward, axis=0)
+    
+    # p_min > 0
+    m_star = np.floor(np.log(1-p_max[p_min > 0])/np.log(1-p_min[p_min > 0]))
+    p_star = p_max[p_min > 0] + (1-(1-p_min[p_min > 0])**(m_star + 1)-p_max[p_min > 0]**2)/(m_star+1)
+    
+    # p_min == 0
+    p_star = np.hstack([p_star, p_max[p_min == 0]])
+    p_star_aver = np.mean(p_star)
+    
+    return p_star_aver
 
 def process_each_mice(data, file, if_plot_each_mice):
 
@@ -196,9 +209,10 @@ def process_each_mice(data, file, if_plot_each_mice):
     group_result['session_number'] = np.unique(data['model_comparison_grand'].session_num)
     group_result['session_best'] = np.zeros(n_session).astype(int)
     group_result['prediction_accuracy_NONCV'] = np.zeros(n_session)
+    group_result['foraging_efficiency'] = np.zeros(n_session)
     group_result['raw_data'] = data
     group_result['file'] = file
-
+    
     group_result['xlabel'] = []
     for ss,this_mc in enumerate(sessionwise_result):
         group_result['n_trials'][0,ss] = this_mc.n_trials
@@ -210,15 +224,26 @@ def process_each_mice(data, file, if_plot_each_mice):
         this_predictive_choice = np.argmax(this_predictive_choice_prob, axis = 0)
         group_result['prediction_accuracy_NONCV'][ss] = np.sum(this_predictive_choice == this_mc.fit_choice_history) / this_mc.n_trials
 
+        # Calculate foraging efficiency
+        p_reward_this = data['model_comparison_grand'].p_reward[:, data['model_comparison_grand'].session_num == group_result['session_number'][ss]]
+        reward_rate_p_hat_greedy = get_p_hat_greedy(p_reward_this)
+        group_result['foraging_efficiency'][ss] = (np.sum(this_mc.fit_reward_history)/group_result['n_trials'][0,ss]) / reward_rate_p_hat_greedy
+
+    # Grand stuffs
     this_predictive_choice_prob_grand =  data['model_comparison_grand'].results_raw[overall_best - 1].predictive_choice_prob
     this_predictive_choice_grand = np.argmax(this_predictive_choice_prob_grand, axis = 0)
     group_result['prediction_accuracy_NONCV_grand'] = np.sum(this_predictive_choice_grand == data['model_comparison_grand'].fit_choice_history) / data['model_comparison_grand'].n_trials 
+    
+    p_reward_grand = data['model_comparison_grand'].p_reward
+    reward_rate_p_hat_greedy = get_p_hat_greedy(p_reward_grand)
+    group_result['foraging_efficiency_grand'] = (np.sum(data['model_comparison_grand'].fit_reward_history)/data['model_comparison_grand'].n_trials) /\
+                                                reward_rate_p_hat_greedy
+
 
     # Iteratively copy data
     things_of_interest = ['model_weight_AIC','AIC', 'LPT_AIC']
     for pp in things_of_interest:
         group_result[pp] = np.zeros((n_models, n_session))
-
         for ss,this_mc in enumerate(sessionwise_result):
             group_result[pp][:, ss] = this_mc.results[pp]
             
@@ -227,7 +252,6 @@ def process_each_mice(data, file, if_plot_each_mice):
     group_result['delta_AIC_grand'] = grand_result['AIC'] -  grand_result['AIC'][standardRL_idx]
     group_result['LPT_AIC_grand']  = grand_result['LPT_AIC']
     group_result['fitted_paras_grand'] = grand_result['para_fitted'].iloc[overall_best-1]
-
     
     # -- Fitting results --
     data['model_comparison_grand'].plot_predictive = [1,2,3]
@@ -266,7 +290,7 @@ def process_each_mice(data, file, if_plot_each_mice):
 
 
 def process_all_mice(result_path = "..\\results\\model_comparison\\", combine_prefix = 'model_comparison_15_', mice_select = '', 
-                  group_results_name_to_save = 'group_results.npz', if_plot_each_mice = True):
+                  group_results_name_to_save = 'temp.npz', if_plot_each_mice = True):
     
     #%%
     listOfFiles = os.listdir(result_path)
@@ -299,19 +323,26 @@ def process_all_mice(result_path = "..\\results\\model_comparison\\", combine_pr
                                  })
         df_this['prediction_accuracy_NONCV'] = group_result_this['prediction_accuracy_NONCV']
         df_this['prediction_accuracy_bias_only'] = group_result_this['prediction_accuracy_bias_only']
+        df_this['foraging_efficiency'] = group_result_this['foraging_efficiency']
+        df_this['n_trials'] = group_result_this['n_trials'][0]
         df_this = pd.concat([df_this, pd.DataFrame(group_result_this['fitted_paras'].T, columns = group_result_this['fitted_para_names'])], axis = 1)
         df_this = pd.concat([df_this, pd.DataFrame(group_result_this['delta_AIC'].T, columns = group_result_this['delta_AIC_para_notation'])], axis = 1)
         
-        # Turn mine definition of bias (outside softmax) into Hattori's definition (inside softmax) ??? (I think they're incorrect...)
+        # Turn mine definition of bias (outside softmax) into Hattori's definition (inside softmax) ??? 
+        # But I think they actually used my definition? Otherwise their biases are huge (beta * beta_deltaQ is much larger than beta)...
+        # So I don't want to do any modifications
         # df_this[' $b_L$'] = df_this[' $b_L$'] * df_this[' $\sigma$']
         
+        # Save dataframe of this mice into a HUGE dataframe
         results_all_mice = results_all_mice.append(df_this)
         
-    # Save group results   
+    # Add some more stuffs for convenience
     group_results = {'results_all_mice': results_all_mice}     
     group_results['delta_AIC_para_notation'] = group_result_this['delta_AIC_para_notation']
     group_results['fitted_para_names'] = group_result_this['fitted_para_names']
     group_results['n_mice'] = n_mice 
+    
+    # Save group results to file
     np.savez_compressed(result_path + group_results_name_to_save, group_results = group_results)
     
     # results_all_mice.to_pickle(result_path + 'results_all_mice.pkl')
@@ -334,8 +365,9 @@ if __name__ == '__main__':
     # combine_group_results()
     
     # --- Plot all results ---
-    # process_all_mice(result_path = "..\\results\\model_comparison\\", combine_prefix = 'model_comparison_15_', if_plot_each_mice = False)
-    plot_group_results(group_results_name = 'group_results.npz', average_session_number_range = [0,20])
+    # process_all_mice(result_path = "..\\results\\model_comparison\\", combine_prefix = 'model_comparison_15_', 
+    #                   group_results_name_to_save = 'temp.npz', if_plot_each_mice = False)
+    plot_group_results(group_results_name = 'temp.npz', average_session_number_range = [0,20])
     
     # pool.close()   # Just a good practice
     # pool.join()
