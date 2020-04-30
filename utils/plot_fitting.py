@@ -207,7 +207,7 @@ def plot_LL_surface(forager, LLsurfaces, CI_cutoff_LPTs, para_names, para_2ds, p
     
     plt.show()
     
-def plot_session_lightweight(fake_data, smooth_factor, fitted_data = None):
+def plot_session_lightweight(fake_data, smooth_factor = 5, fitted_data = None):
     # sns.reset_orig()
 
     choice_history, reward_history, p_reward = fake_data

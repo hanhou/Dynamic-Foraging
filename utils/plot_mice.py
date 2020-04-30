@@ -14,7 +14,6 @@ from matplotlib.patches import Rectangle
 from scipy.stats import pearsonr
 import statsmodels.api as sm
 
-from utils.run_fit_behavior import runlength_Bernoulli
 from utils.plot_fitting import set_label
 
 plt.rcParams.update({'figure.max_open_warning': 0})
@@ -580,8 +579,6 @@ def plot_example_sessions(result_path = "..\\results\\model_comparison\\", combi
     
     sns.set()
     
-    mean_runlength_Bernoulli = runlength_Bernoulli()
-
     data = np.load(result_path + group_results_name, allow_pickle=True)
     group_results = data.f.group_results.item()
     results_all_mice = group_results['results_all_mice'] 
@@ -638,7 +635,7 @@ def plot_example_sessions(result_path = "..\\results\\model_comparison\\", combi
         
         # -- Lau2005 Runlength -- 
         df_run_length_Lau = analyze_runlength_Lau2005(choice_history, p_reward)
-        plot_runlength_Lau2005(df_run_length_Lau, block_partitions, mean_runlength_Bernoulli)
+        plot_runlength_Lau2005(df_run_length_Lau, block_partitions)
         
     
 def analyze_runlength_Lau2005(choice_history, p_reward, block_parts = [0.5,0.5], min_trial = 50, block_partitions = [70, 70]):
@@ -724,8 +721,22 @@ def analyze_runlength_Lau2005(choice_history, p_reward, block_parts = [0.5,0.5],
             df_run_length_Lau[pp] = df_run_length_Lau[pp].append(df_this_half, ignore_index=True)
         
     return df_run_length_Lau
+
+
+#%% Compute mean_runlength_Bernoulli
+X = np.linspace(1,16,50)
+mean_runlength_Bernoulli = np.zeros([3,len(X)])
+n = np.r_[1:100]
+
+mean_runlength_Bernoulli[2,:] = X
+
+for i, x in enumerate(X):
+    p = x/(x+1)
+    mean_runlength_Bernoulli[0,i] = np.sum(n * ((1-p)**(n-1)) * p)  # Lean
+    mean_runlength_Bernoulli[1,i] = np.sum(n * (p**(n-1)) * (1-p))  # Rich
+
         
-def plot_runlength_Lau2005(df_run_length_Lau, block_partitions, mean_runlength_Bernoulli):
+def plot_runlength_Lau2005(df_run_length_Lau, block_partitions = ['unknown', 'unknown']):
     #%%
     
     # --- Plotting ---

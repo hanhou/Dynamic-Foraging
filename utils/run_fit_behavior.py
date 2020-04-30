@@ -16,7 +16,7 @@ import seaborn as sns
 
 
 from models.bandit_model_comparison import BanditModelComparison
-from utils.plot_mice import *
+from utils.plot_mice import plot_each_mice, analyze_runlength_Lau2005, plot_runlength_Lau2005
 
 def fit_each_mice(data, if_session_wise = False, if_verbose = True, file_name = '', pool = '', models = None, use_trials = None):
     choice = data.f.choice
@@ -366,8 +366,6 @@ def analyze_runlength(result_path = "..\\results\\model_comparison\\", combine_p
                           efficiency_partitions = [30, 30],  block_partitions = [70, 70], if_first_plot = True):
     sns.set()
     
-    mean_runlength_Bernoulli = runlength_Bernoulli()
-
     # Load dataframe
     data = np.load(result_path + group_results_name, allow_pickle=True)
     group_results = data.f.group_results.item()
@@ -425,24 +423,43 @@ def analyze_runlength(result_path = "..\\results\\model_comparison\\", combine_p
                 for i in [0,1]:
                     df_run_length_Lau_all[i] = df_run_length_Lau_all[i].append(this_df_run_length_Lau[i])
                 
-            fig = plot_runlength_Lau2005(df_run_length_Lau_all, block_partitions, mean_runlength_Bernoulli)
+            fig = plot_runlength_Lau2005(df_run_length_Lau_all, block_partitions)
             fig.text(0.1, 0.92, this_marker + ', mean foraging eff. = %g%%, %g blocks' %\
                            (np.mean(df_this.foraging_efficiency[this_session_idxs - 1]), len(df_run_length_Lau_all[0])), fontsize = 15)
             plt.show()
             
-def runlength_Bernoulli():
-    X = np.linspace(1,16,50)
-    mean_runlength_Bernoulli = np.zeros([3,len(X)])
-    n = np.r_[1:100]
+def analyze_runlength_of_models(block_partitions = [50,50]):   # Runlength analyses for Hattori and Ideal-optimal etc. as a comparison
+
+    from utils.run_model_recovery import generate_fake_data
+    from utils.plot_fitting import plot_session_lightweight
     
-    mean_runlength_Bernoulli[2,:] = X
+    # Best Hattori 2019 model (under the default schedules of Bari 2019)
+    choice_history, reward_history, p_reward = generate_fake_data('Hattori2019', ['learn_rate_rew','learn_rate_unrew', 'forget_rate','softmax_temperature'], 
+                                                      [0.23392543, 0.318161268, 0.00343416, 0.22028081], n_trials = 10000)
     
-    for i, x in enumerate(X):
-        p = x/(x+1)
-        mean_runlength_Bernoulli[0,i] = np.sum(n * ((1-p)**(n-1)) * p)  # Lean
-        mean_runlength_Bernoulli[1,i] = np.sum(n * (p**(n-1)) * (1-p))  # Rich
+    foraging_efficiency = np.sum(reward_history) / np.shape(reward_history)[1] / get_p_hat_greedy(p_reward) * 100
+    plot_session_lightweight([choice_history, reward_history, p_reward], smooth_factor = 1)
+    plt.gca().set_title('Best Hattori, foraging eff. = %g%%'%foraging_efficiency)
+    plt.gca().set_xlim([0,200])
     
-    return mean_runlength_Bernoulli
+    run_length_Lau = analyze_runlength_Lau2005(choice_history, p_reward, block_partitions = block_partitions)
+    plot_runlength_Lau2005(run_length_Lau, block_partitions)
+    plt.gcf().text(0.02,0.92,'Best Hattori, foraging eff. = %g%%'%foraging_efficiency)
+    
+    # Best Hattori 2019 model (under the default schedules of Bari 2019)
+    choice_history, reward_history, p_reward = generate_fake_data('IdealpHatGreedy', [],[], n_trials = 10000)
+    
+    foraging_efficiency = np.sum(reward_history) / np.shape(reward_history)[1] / get_p_hat_greedy(p_reward) * 100
+    plot_session_lightweight([choice_history, reward_history, p_reward], smooth_factor = 1)
+    plt.gca().set_title('Ideal-$\\hat{p}$-greedy, foraging eff. = %g%%'%foraging_efficiency)
+    plt.gca().set_xlim([0,200])
+    
+    run_length_Lau = analyze_runlength_Lau2005(choice_history, p_reward, block_partitions = block_partitions)
+    plot_runlength_Lau2005(run_length_Lau, block_partitions)
+    
+    plot_runlength_Lau2005(run_length_Lau, block_partitions)
+    plt.gcf().text(0.02,0.92,'Ideal-$\\hat{p}$-greedy, foraging eff. = %g%%'%foraging_efficiency)
+  
                     
 #%%        
 if __name__ == '__main__':
@@ -468,6 +485,7 @@ if __name__ == '__main__':
     # plot_example_sessions(group_results_name = 'temp.npz', session_of_interest = [['FOR05', 33]])
     
     # analyze_runlength(mice_of_interest = ['FOR05', 'FOR06'], efficiency_partitions = [20, 20], block_partitions = [30, 30])
-    analyze_runlength(efficiency_partitions = [20, 20], block_partitions = [50, 50], if_first_plot = False)
+    # analyze_runlength(efficiency_partitions = [20, 20], block_partitions = [50, 50], if_first_plot = False)
+    analyze_runlength_of_models()
     # pool.close()   # Just a good practice
     # pool.join()
