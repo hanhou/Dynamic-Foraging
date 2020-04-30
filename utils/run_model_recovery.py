@@ -217,7 +217,7 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para,
     
     return
 
-def compute_confusion_matrix(models = [1,2,3,4,5,6,7,8], n_runs = 2, n_trials = 1000, pool = '', save_file = ''):
+def compute_confusion_matrix(models = [1,2,3,4,5,6,7,8], n_runs = 2, n_trials = 1000, pool = '', save_file = '', save_folder = '..\\results\\'):
     if models is None:  
         models = MODELS
     elif type(models[0]) is int:
@@ -246,10 +246,10 @@ def compute_confusion_matrix(models = [1,2,3,4,5,6,7,8], n_runs = 2, n_trials = 
                 this_true_para.append(generate_random_para(this_forager, pp))
             
             # Generate fake data
-            this_fake_data = generate_fake_data(this_forager, this_para_names, this_true_para, n_trials = n_trials)
+            choice_history, reward_history, p_reward = generate_fake_data(this_forager, this_para_names, this_true_para, n_trials = n_trials)
             
             # Do model comparison
-            model_comparison = BanditModelComparison(this_fake_data, models = models)
+            model_comparison = BanditModelComparison(choice_history, reward_history, p_reward , models = models)
             model_comparison.fit(pool = pool, if_verbose = False)
             
             # Save data
@@ -269,7 +269,7 @@ def compute_confusion_matrix(models = [1,2,3,4,5,6,7,8], n_runs = 2, n_trials = 
         if save_file == '':
             save_file = "confusion_results_%s_%s.p" % (n_runs, n_trials)
         
-        pickle.dump(confusion_results, open("..\\results\\"+save_file, "wb"))
+        pickle.dump(confusion_results, open(save_folder+save_file, "wb"))
         
     return
         
@@ -351,8 +351,9 @@ if __name__ == '__main__':
     # #                   fit_method = 'L-BFGS-B', n_x0s = 1, pool = '');    
    
     # # -- LL_surface
-    # compute_LL_surface(forager, para_names, para_bounds, true_para = [10,1], n_trials = n_trials, 
-    #                     fit_method = 'DE', pool = pool)
+    # compute_LL_surface(forager, para_names, para_bounds, true_para = [10,0], n_trials = n_trials, 
+    #                     # fit_method = 'DE', pool = pool)
+    #                     fit_method = 'L-BFGS-B', n_x0s = 1, pool = '')
     
     # -------------------------------------------------------------------------------------------
     # n_trials = 100
@@ -546,17 +547,45 @@ if __name__ == '__main__':
     # # plot_session_lightweight(fake_data)
     
     # ---------------------------------------------
-    choice_history, reward_history, p_reward = generate_fake_data('RW1972_softmax', ['learn_rate_rew','softmax_temperature'], [0.2,0.3], n_trials = 100)
-    model_comparison = BanditModelComparison(choice_history, reward_history, p_reward, models = [1,2,3])
-    model_comparison.fit(pool = pool, plot_predictive=[1,2,3]) # Plot predictive traces for the 1st, 2nd, and 3rd models
-    model_comparison.show()
-    model_comparison.plot()
+    # choice_history, reward_history, p_reward = generate_fake_data('RW1972_softmax', ['learn_rate_rew','softmax_temperature'], [0.2,0.3], n_trials = 100)
+    # model_comparison = BanditModelComparison(choice_history, reward_history, p_reward, models = [1,2,3])
+    # model_comparison.fit(pool = pool, plot_predictive=[1,2,3]) # Plot predictive traces for the 1st, 2nd, and 3rd models
+    # model_comparison.show()
+    # model_comparison.plot()
     
     # --------------------------------------------
     # compute_confusion_matrix(n_runs = 50, n_trials = 500, pool = pool, save_file = 'confusion_results_2_50_500.p')
     # confusion_results = pickle.load(open("..\\results\\confusion_results_2_50_500.p", "rb"))
     # plot_confusion_matrix(confusion_results)
 
+
+    # models = [
+    #             # No bias (1-8)
+    #             # ['LossCounting', ['loss_count_threshold_mean', 'loss_count_threshold_std'], [0,0], [40,10]],                   
+    #             #　['RW1972_epsi', ['learn_rate_rew', 'epsilon'],[0, 0],[1, 1]],
+    #             #　['LNP_softmax',  ['tau1', 'softmax_temperature'], [1e-3, 1e-2], [100, 15]],                 
+    #             # ['LNP_softmax', ['tau1', 'tau2', 'w_tau1', 'softmax_temperature'],[1e-3, 1e-1, 0, 1e-2],[15, 40, 1, 15]],                 
+    #             ['RW1972_softmax', ['learn_rate_rew', 'softmax_temperature'],[0, 1e-2],[1, 15]],
+    #             # ['Hattori2019', ['learn_rate_rew', 'learn_rate_unrew', 'softmax_temperature'],[0, 0, 1e-2],[1, 1, 15]],
+    #             # ['Bari2019', ['learn_rate_rew', 'forget_rate', 'softmax_temperature'],[0, 0, 1e-2],[1, 1, 15]],
+    #             # ['Hattori2019', ['learn_rate_rew', 'learn_rate_unrew', 'forget_rate', 'softmax_temperature'],[0, 0, 0, 1e-2],[1, 1, 1, 15]],
+                
+    #             # With bias (9-16)
+    #             # ['RW1972_epsi', ['learn_rate_rew', 'epsilon', 'biasL'],[0, 0, -0.5],[1, 1, 0.5]],
+    #             # ['LNP_softmax',  ['tau1', 'softmax_temperature', 'biasL'], [1e-3, 1e-2, -5], [100, 15, 5]],                 
+    #             # ['LNP_softmax', ['tau1', 'tau2', 'w_tau1', 'softmax_temperature', 'biasL'],[1e-3, 1e-1, 0, 1e-2, -5],[15, 40, 1, 15, 5]],                 
+    #             ['RW1972_softmax', ['learn_rate_rew', 'softmax_temperature', 'biasL'],[0, 1e-2, -5],[1, 15, 5]],
+    #             # ['Hattori2019', ['learn_rate_rew', 'learn_rate_unrew', 'softmax_temperature', 'biasL'],[0, 0, 1e-2, -5],[1, 1, 15, 5]],
+    #             # ['Bari2019', ['learn_rate_rew', 'forget_rate', 'softmax_temperature', 'biasL'],[0, 0, 1e-2, -5],[1, 1, 15, 5]],
+    #             # ['Hattori2019', ['learn_rate_rew', 'learn_rate_unrew', 'forget_rate', 'softmax_temperature', 'biasL'],[0, 0, 0, 1e-2, -5],[1, 1, 1, 15, 5]],
+    #          ]
+    
+    # compute_confusion_matrix(models = models, n_runs = 100, n_trials = 500, pool = pool, 
+    #                          save_file = 'confusion_results_4_100_1000_bias_test.p')
+    
+    confusion_results = pickle.load(open("..\\results\\confusion_results_4_100_1000_bias_test.p", "rb"))
+    plot_confusion_matrix(confusion_results)
+    
     #%%
     pool.close()   # Just a good practice
     pool.join()

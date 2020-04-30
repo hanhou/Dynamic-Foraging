@@ -83,7 +83,7 @@ def fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history
     # Append the initial point
     if callback != None: callback_history(x0)
         
-    fitting_result = optimize.minimize(negLL_func, x0, args = (forager, fit_names, choice_history, reward_history, {}), method = fit_method,
+    fitting_result = optimize.minimize(negLL_func, x0, args = (forager, fit_names, choice_history, reward_history, session_num, {}), method = fit_method,
                                        bounds = optimize.Bounds(fit_bounds[0], fit_bounds[1]), callback = callback, )
     return fitting_result
 

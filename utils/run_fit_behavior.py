@@ -13,10 +13,11 @@ from tqdm import tqdm
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from scipy.stats import pearsonr
 
 
 from models.bandit_model_comparison import BanditModelComparison
-from utils.plot_mice import plot_each_mice, analyze_runlength_Lau2005, plot_runlength_Lau2005
+from utils.plot_mice import plot_each_mice, analyze_runlength_Lau2005, plot_runlength_Lau2005, plot_example_sessions
 
 def fit_each_mice(data, if_session_wise = False, if_verbose = True, file_name = '', pool = '', models = None, use_trials = None):
     choice = data.f.choice
@@ -384,12 +385,20 @@ def analyze_runlength(result_path = "..\\results\\model_comparison\\", combine_p
 
         #%% Plot foraging histogram 
         if if_first_plot: 
+            
+            
+            x = df_this.prediction_accuracy_NONCV
+            y = df_this.foraging_efficiency
+            (r, p) = pearsonr(x, y)
+  
             g = sns.jointplot(x="prediction_accuracy_NONCV", y="foraging_efficiency", data = df_this.sort_values(by = 'session_number'), 
-                              kind="reg", color="b", marginal_kws = {'bins':20,'color':'k'}, joint_kws = {'marker':'', 'color':'k'})
+                              kind="reg", color="b", marginal_kws = {'bins':20,'color':'k'}, joint_kws = {'marker':'', 'color':'k', 
+                                                                                                          'label':'r$^2$ = %.3f, p = %.3f'%(r**2,p)})
             
             palette = sns.color_palette("RdYlGn", len(df_this))
             
             g.plot_joint(plt.scatter, color = palette, sizes = df_this.n_trials**2 / 3000, alpha = 0.7)
+            plt.legend()
             ax = plt.gca()
             ax.axvline(50, c='k', ls='--')
             ax.axhline(100, c='k', ls='--')
@@ -484,8 +493,10 @@ if __name__ == '__main__':
     # --- Example sessions ---
     # plot_example_sessions(group_results_name = 'temp.npz', session_of_interest = [['FOR05', 33]])
     
-    # analyze_runlength(mice_of_interest = ['FOR05', 'FOR06'], efficiency_partitions = [20, 20], block_partitions = [30, 30])
+    analyze_runlength(mice_of_interest = ['FOR05', 'FOR06'], efficiency_partitions = [20, 20], block_partitions = [30, 30])
     # analyze_runlength(efficiency_partitions = [20, 20], block_partitions = [50, 50], if_first_plot = False)
-    analyze_runlength_of_models()
+    
+    # analyze_runlength_of_models()
+    
     # pool.close()   # Just a good practice
     # pool.join()

@@ -207,7 +207,7 @@ def plot_LL_surface(forager, LLsurfaces, CI_cutoff_LPTs, para_names, para_2ds, p
     
     plt.show()
     
-def plot_session_lightweight(fake_data, smooth_factor = 5, fitted_data = None):
+def plot_session_lightweight(fake_data, fitted_data = None, smooth_factor = 5):
     # sns.reset_orig()
 
     choice_history, reward_history, p_reward = fake_data
@@ -339,7 +339,7 @@ def plot_model_comparison_result(model_comparison):
     s = sns.barplot(x = 'log10 (Bayes factor)', y = 'para_notation_with_best_fit', hue = '', data = df)
     h_d = plt.axvline(-2, color='r', linestyle='--', label = 'decisive')
     s.legend(handles = [h_d,], bbox_to_anchor=(0,1.02,1,0.2), loc='lower left')
-    s.invert_xaxis()
+    # s.invert_xaxis()
     s.set_xlabel('log$_{10}\\frac{p(model)}{p(best\,model)}$')
     s.set_ylabel('')
     s.set_yticklabels('')

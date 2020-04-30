@@ -573,7 +573,7 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\", group_re
 
 
 def plot_example_sessions(result_path = "..\\results\\model_comparison\\", combine_prefix = 'model_comparison_15_', 
-                          group_results_name = 'group_results.npz', session_of_interest = [['FOR05', 33]], block_partitions = [70, 70]):
+                          group_results_name = 'group_results.npz', session_of_interest = [['FOR05', 33]], block_partitions = [70, 70], smooth_factor = 1):
     #%%
     from utils.plot_fitting import plot_model_comparison_predictive_choice_prob
     
@@ -601,7 +601,7 @@ def plot_example_sessions(result_path = "..\\results\\model_comparison\\", combi
         this_class.plot()
         
         # -- Plot session
-        plot_model_comparison_predictive_choice_prob(this_class, smooth_factor = 1)
+        plot_model_comparison_predictive_choice_prob(this_class, smooth_factor = smooth_factor)
         fig = plt.gcf()
         fig.text(0.05,0.94,'Mouse = %s, Session_number = %g (idx = %g), Foraging eff. = %g%%' % (mouse, session, session_idx, 
                                                                                                this_entry.foraging_efficiency.iloc[0] * 100),fontsize = 13)
@@ -638,7 +638,7 @@ def plot_example_sessions(result_path = "..\\results\\model_comparison\\", combi
         plot_runlength_Lau2005(df_run_length_Lau, block_partitions)
         
     
-def analyze_runlength_Lau2005(choice_history, p_reward, block_parts = [0.5,0.5], min_trial = 50, block_partitions = [70, 70]):
+def analyze_runlength_Lau2005(choice_history, p_reward, min_trial = 50, block_partitions = [70, 70]):
     '''
     Runlength analysis in Fig.5, Lau2005
     '''
@@ -659,7 +659,7 @@ def analyze_runlength_Lau2005(choice_history, p_reward, block_parts = [0.5,0.5],
         if this_block_p_base_ratio < 1: # if rich arm = Left
             this_block_choice = 1 - this_block_choice
             
-        #!!! Define block partitions (TBD. I just use all block right now)
+        # Define block partitions
         block_len = len(this_block_choice)
         
         if block_len < 30: continue  # Exclude too short blocks
@@ -741,7 +741,7 @@ def plot_runlength_Lau2005(df_run_length_Lau, block_partitions = ['unknown', 'un
     
     # --- Plotting ---
     fig = plt.figure(figsize=(12, 9), dpi = 150)
-    gs = GridSpec(2, 3, hspace = .6, wspace = 0.5, 
+    gs = GridSpec(2, 3, hspace = .3, wspace = 0.3, 
                   left = 0.1, right = 0.95, bottom = 0.15, top = 0.85)
     
     annotations = ['First %g%% trials'%block_partitions[0], 'Last %g%% trials'%block_partitions[1]]
@@ -751,7 +751,7 @@ def plot_runlength_Lau2005(df_run_length_Lau, block_partitions = ['unknown', 'un
         df_this_half = df_this_half[~ df_this_half.isin([0, np.inf, -np.inf]).choice_ratio]
         df_this_half = df_this_half[~ df_this_half.isin([0, np.inf, -np.inf]).p_base_ratio]
         
-        # == Fig.5 Hattori ==
+        # == Fig.5 Lau 2005 ==
         ax = fig.add_subplot(gs[pp,0]) 
         
         plt.plot(df_this_half.choice_ratio, df_this_half.mean_runlength_rich, 'go', label = 'Rich', alpha = 0.7, markersize = 5)
