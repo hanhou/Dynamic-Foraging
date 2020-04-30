@@ -11,12 +11,20 @@ import pandas as pd
 from statannot import add_stat_annotation
 from matplotlib.gridspec import GridSpec
 from matplotlib.patches import Rectangle
+from scipy.stats import pearsonr
+import statsmodels.api as sm
 
 from utils.plot_fitting import set_label
 
 plt.rcParams.update({'figure.max_open_warning': 0})
 
-
+def corrfunc(x, y, **kws):
+    (r, p) = pearsonr(x, y)
+    ax = plt.gca()
+    title_obj = ax.set_title("r = %.3f, p = %.4f " % (r, p), fontsize = 8)
+    if p < 0.05:
+        plt.setp(title_obj, color='r')
+            
 def plot_each_mice(group_result):
     
     # Unpack data
@@ -60,6 +68,7 @@ def plot_each_mice(group_result):
     for ss,this_mc in enumerate(sessionwise_result):
         patch = Rectangle((ss, group_result['session_best'][ss] - 1),1,1, color = 'dodgerblue', linewidth = 4, fill= False)
         ax.add_artist(patch)
+        
         
     # -- Fitting results --
     data['model_comparison_grand'].plot_predictive_choice()
@@ -194,6 +203,7 @@ def plot_each_mice(group_result):
     # plt.pause(10)      
     return
 
+
 def plot_group_results(result_path = "..\\results\\model_comparison\\", group_results_name = 'group_results.npz',
                        average_session_number_range = None):
     #%%
@@ -205,7 +215,7 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\", group_re
     results_all_mice = group_results['results_all_mice'] 
     
     # to %
-    results_all_mice[['foraging_efficiency', 'prediction_accuracy_NONCV', 'prediction_accuracy_bias_only']] *= 100
+    results_all_mice[['foraging_efficiency', 'prediction_accuracy_NONCV', 'prediction_accuracy_bias_only', 'prediction_accuracy_Sugrue_NONCV']] *= 100
     
     if average_session_number_range is None:
         average_session_number_range = [0,np.inf]
@@ -323,7 +333,7 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\", group_re
     hue = 'models'
     hh = sns.violinplot(x=x, y=y, hue = hue, data = prediction_accuracies, inner="box")    
     
-    ax.set_ylabel('Prediction accuracy % (nonCVed)')
+    ax.set_ylabel('Hattori pred. acc.% (nonCVed)')
     plt.xticks(rotation=45, horizontalalignment='right')
     ax.set_xlabel('')
     
@@ -387,7 +397,7 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\", group_re
     add_stat_annotation(hh, data=prediction_accuracies, x = 'models', y = 'value', box_pairs=[['Bias only', 'Hattori 2019']],
                         test='Wilcoxon', loc='inside', verbose=0, line_offset_to_box=0)
     ax.set_xlabel('')
-    ax.set_ylabel('Prediction accuracy % (not CV-ed)')
+    ax.set_ylabel('Hattori pred. acc. % (not CV-ed)')
     ax.set_title('n = %g sessions'%len(prediction_accuracies))
     
     # 2> Step sizes 
@@ -438,9 +448,9 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\", group_re
     
     #%% 5> Correlations
     # - All paras, session filtered -
-    data = results_all_mice_session_filtered[['session_number','prediction_accuracy_NONCV', 'foraging_efficiency',
+    data = results_all_mice_session_filtered[['session_number','prediction_accuracy_NONCV', 'prediction_accuracy_Sugrue_NONCV', 'foraging_efficiency',
                            '$\\alpha_{rew}$', ' $\\alpha_{unr}$', ' $\\delta$', ' $\\sigma$', ' $b_L$',]]
-    data = data.rename(columns = {'session_number':'session #', 'prediction_accuracy_NONCV': 'pred. accu.', 
+    data = data.rename(columns = {'session_number':'session #', 'prediction_accuracy_NONCV': 'pred. accu.', 'prediction_accuracy_Sugrue_NONCV': 'pred. accu. Sugrue',
                  'foraging_efficiency': 'foraging eff.'})
     
     hh = sns.pairplot( data = data,
@@ -452,12 +462,12 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\", group_re
     #%% - Foraging Efficiency VS Prediction Accuracy (all sessions included) -
     # > All mice
     data = results_all_mice[['session_number','mice',
-                             'prediction_accuracy_NONCV', 'foraging_efficiency', 'n_trials']].copy()
-    data['prediction_accuracy_NONCV'] = data['prediction_accuracy_NONCV']
+                             'prediction_accuracy_NONCV', 'prediction_accuracy_Sugrue_NONCV', 'foraging_efficiency', 'n_trials']].copy()
     
     palette = sns.color_palette("coolwarm",len(results_all_mice['session_number'].unique()))
-    x, y = ["prediction_accuracy_NONCV","foraging_efficiency"]
     
+    # Hattori prediction accuracy
+    x, y = ["prediction_accuracy_NONCV","foraging_efficiency"]
     hh = sns.relplot(x=x, y=y, hue="session_number", size="n_trials",
             sizes=(40, 400), alpha=.5, palette = palette, height=6, data=data, legend = False)
     
@@ -465,12 +475,38 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\", group_re
     plt.axvline(50, c = 'k', ls = '--', lw = 1)
 
     (r, p) = pearsonr(data[x], data[y])
+
+    ## OLS
     sns.regplot(x=x, y=y, ax = hh.ax, data=data,
                 scatter = False, label='r = %.3g\np = %.3g'%(r,p), color = 'k')
+    
+    plt.xlabel('Hattori pred. acc. %')
+    plt.ylabel('Foraging efficiency %')
     
     plt.legend()            
     plt.title('All sessions')    
     plt.tight_layout()
+    
+    # Sugrue prediction acc (Matron's question)
+    x, y = ["prediction_accuracy_Sugrue_NONCV","foraging_efficiency"]
+    hh = sns.relplot(x=x, y=y, hue="session_number", size="n_trials",
+            sizes=(40, 400), alpha=.5, palette = palette, height=6, data=data, legend = False)
+    
+    plt.axhline(100, c = 'k', ls = '--', lw = 1)
+    plt.axvline(50, c = 'k', ls = '--', lw = 1)
+
+    (r, p) = pearsonr(data[x], data[y])
+
+    ## OLS
+    sns.regplot(x=x, y=y, ax = hh.ax, data=data,
+                scatter = False, label='r = %.3g\np = %.3g'%(r,p), color = 'k')
+    
+    plt.xlabel('Sugrue pred. acc. %')
+    plt.ylabel('Foraging efficiency %')
+    
+    plt.legend()            
+    plt.title('All sessions')    
+    plt.tight_layout()    
     
     #%% > Each mice
     fig = plt.figure(figsize=(9, 8), dpi = 150)
@@ -487,18 +523,27 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\", group_re
         
         palette = sns.color_palette("coolwarm", sum(data.mice == mouse))
         sns.scatterplot(x = 'prediction_accuracy_NONCV',y = 'foraging_efficiency', data = data[data.mice == mouse], 
-                        hue = 'session_number', size = 'session_number', 
+                        hue = 'session_number', size = 'n_trials', 
                         sizes = (20,100), alpha = 0.7, palette=palette, ax = ax, legend = False)
 
-        sns.regplot(x,y, ax = ax, scatter = False, label='r = %.3f\np = %.3f'%(r,p), color = 'k',
+        # OLS
+        sns.regplot(x,y, ax = ax, scatter = False, label='r$^2$ = %.3f, p = %.3f'%(r**2,p), color = 'k',
                     line_kws = {'linestyle': ('--','-')[p<0.05], 'lw':2})
+        
+        # Trial-number-weighted WLS
+        # wls_model = sm.WLS(y,sm.add_constant(x), weights = data[data.mice == mouse].session_number)
+        # result_wls = wls_model.fit()
+        # b_wls, k_wls = result_wls.params
+        # r2_wls, p_wls = result_wls.rsquared, result_wls.pvalues[1]
+        # plt.plot(np.sort(x), result_wls.fittedvalues[np.argsort(x)], 'k', label='r$^2$ = %.3f, p = %.3f'%(r2_wls, p_wls), linestyle = ('--','-')[p_wls<0.05])
+        
         plt.legend(fontsize=7, handlelength=0)
         
         if mm > 0:
             plt.xlabel('')
             plt.ylabel('')
         else:
-            plt.xlabel('Prediction accuracy %')
+            plt.xlabel('Hattori pred. acc. %')
             plt.ylabel('Foraging efficiency %')
         
         plt.xlim([48,100])
@@ -509,18 +554,176 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\", group_re
     # hh = sns.relplot(x="prediction_accuracy_NONCV", y="foraging_efficiency", hue = "session_number", col="mice", size="n_trials",
     #         sizes=(40, 400), alpha=.5, palette = palette, data=data, legend = False, col_wrap = 4, height=3, aspect=1)
     # plt.tight_layout()
-
+    plt.show()
+    
     #%%
-    plt.pause(10)
+    # plt.pause(10)
     #%%
     return
 
-from scipy.stats import pearsonr
 
-def corrfunc(x, y, **kws):
-    (r, p) = pearsonr(x, y)
-    ax = plt.gca()
-    title_obj = ax.set_title("r = %.3f, p = %.4f " % (r, p), fontsize = 8)
-    if p < 0.05:
-        plt.setp(title_obj, color='r')
+def plot_example_sessions(result_path = "..\\results\\model_comparison\\", combine_prefix = 'model_comparison_15_', 
+                          group_results_name = 'group_results.npz', session_of_interest = [['FOR05', 33]]):
+    #%%
+    from utils.plot_fitting import plot_model_comparison_predictive_choice_prob
+    
+    sns.set()
+    
+    data = np.load(result_path + group_results_name, allow_pickle=True)
+    group_results = data.f.group_results.item()
+    results_all_mice = group_results['results_all_mice'] 
+    
+    for soi in session_of_interest:
+        mouse, session = soi
+        data = np.load(result_path + combine_prefix + mouse + '.npz', allow_pickle=True)
+        data = data.f.results_each_mice.item()
+        this_entry = results_all_mice[(results_all_mice.mice == mouse) & (results_all_mice.session_number == session)]
+        
+        session_idx = this_entry.session_idx.values[0] - 1
+        this_class = data['model_comparison_session_wise'][session_idx]
+        
+        # -- Recovery some essentials 
+        this_class.plot_predictive = [1,2,3]
+        this_class.p_reward = data['model_comparison_grand'].p_reward[:, data['model_comparison_grand'].session_num == session]
+        
+        # -- Show and plot fitting results
+        this_class.show()
+        this_class.plot()
+        
+        # -- Plot session
+        plot_model_comparison_predictive_choice_prob(this_class, smooth_factor = 1)
+        fig = plt.gcf()
+        fig.text(0.05,0.94,'Mouse = %s, Session_number = %g (idx = %g), Foraging eff. = %g%%' % (mouse, session, session_idx, 
+                                                                                               this_entry.foraging_efficiency.iloc[0] * 100),fontsize = 13)
+        
+        # Runlength analysis
+        plot_runlength_Lau2005(this_class.fit_choice_history, this_class.p_reward)
+        
+    
+def plot_runlength_Lau2005(choice_history, p_reward, block_parts = [0.5,0.5], min_trial = 50):
+    '''
+    Runlength analysis in Fig.5, Lau2005
+    '''
+    #%%
+    fig = plt.figure(figsize=(9, 8), dpi = 150)
+    gs = GridSpec(3, 3, hspace = .6, wspace = 0.5, 
+                  left = 0.15, right = 0.95, bottom = 0.05, top = 0.95)
+
+    # == Grand runlength (the old one) ==
+    ax = fig.add_subplot(gs[0,0]) 
+    temp = np.array([[-999]]) # -999 is to capture the first and the last stay
+    changeover_position = np.where(np.diff(np.hstack((temp, choice_history, temp))))[1] 
+    stay_durations = np.diff(changeover_position)
+    bins = np.arange(1, np.max(stay_durations)+1) - 0.5
+    sns.distplot(stay_durations, bins = bins, norm_hist = False, ax = ax)
+    plt.xlabel('Runlength (grand)')
+    plt.xlim(0.5,max(plt.xlim()))
+    plt.xticks(np.r_[1,5:np.max(stay_durations):5])
+    
+    # == Lau2005 style (try to find any clue of optimality) == 
+    # Locate block switch
+    p_reward_ratio = p_reward[1]/p_reward[0] # R/L
+    block_starts = np.where(np.diff(np.hstack((-999, p_reward_ratio, 999))))[0]
+    
+    # Block length distribution
+    ax = fig.add_subplot(gs[0,1])
+    sns.distplot(np.diff(block_starts), ax = ax, bins = 20)
+    plt.xlabel('Session length')
+    
+    run_length_Lau = pd.DataFrame()
+
+    # For each block
+    for bb in range(len(block_starts)-1):
+        select_this_block = range(block_starts[bb],block_starts[bb+1])
+        this_block_choice = choice_history[0, select_this_block]
+        # print(len(this_session_choice))
+        this_block_p_base_ratio = p_reward_ratio[select_this_block][0]
+        
+        # Flip choices such that 1 = Best arm, 0 = Worst arm
+        if this_block_p_base_ratio < 1: # if Best arm = Left
+            this_block_choice = 1 - this_block_choice
             
+        #!!! Define block partitions (TBD. I just use all block right now)
+        
+        # Get runlength for the best (rich) and the worst (lean) arm
+        # These two magic lines below are correct, believe it or not :)
+        this_runlength_best =  np.diff(np.where(np.hstack((999,np.diff(np.where(this_block_choice==1)[0]),999))>1))[0]
+        this_runlength_worst = np.diff(np.where(np.hstack((999,np.diff(np.where(this_block_choice==0)[0]),999))>1))[0]
+        # assert(np.sum(this_runlength_best) == np.sum(this_block_choice == 1))
+        # assert(np.sum(this_runlength_worst) == np.sum(this_block_choice == 0))
+        
+        # Some facts
+        this_choice_ratio = np.sum(this_block_choice == 1) / np.sum(this_block_choice == 0)
+        if this_block_p_base_ratio == 1:
+            this_m_star = 1
+        else:
+            p_best = max(p_reward[:,select_this_block[0]])
+            p_worst = min(p_reward[:,select_this_block[0]])
+            this_m_star = np.floor(np.log(1-p_best)/np.log(1-p_worst)) # Ideal-p-hat-greed
+        
+        df_this = pd.Series(dict(m_star = this_m_star,
+                                 p_base_ratio = this_block_p_base_ratio,
+                                 choice_ratio = this_choice_ratio,
+                                 mean_runlength_best = np.mean(this_runlength_best),
+                                 mean_runlength_worst = np.mean(this_runlength_worst), 
+                                 trial_num = len(this_block_choice)))
+        
+        run_length_Lau = run_length_Lau.append(df_this, ignore_index=True)
+        
+    # --- Plotting ---
+    ax = fig.add_subplot(gs[1,0]) 
+    
+    plt.plot(run_length_Lau.choice_ratio, run_length_Lau.mean_runlength_best, 'go', label = 'Rich')
+    plt.plot(run_length_Lau.choice_ratio, run_length_Lau.mean_runlength_worst, 'rx', label = 'Lean')
+    ax.axhline(1, c = 'k', ls = '--', lw = 0.5)
+    ax.axvline(1, c = 'k', ls = '--', lw = 0.5)
+    # ax.set_xscale('log')
+    # ax.set_xticks([1,2,4,8,16])
+    # ax.set_xticklabels([1,2,4,8,16])
+    # ax.set_yscale('log')
+    # ax.set_yticks([1,2,4,8,16])
+    # ax.set_yticklabels([1,2,4,8,16])
+    ax.axis('equal')
+   
+    plt.xlabel('Choice ratio (rich / lean arm)')
+    plt.ylabel('Mean runlength')
+    plt.legend(bbox_to_anchor=(0,1.02,1,0.2), loc='lower center', ncol = 2)
+
+    ax = fig.add_subplot(gs[1,1]) 
+    
+    x = run_length_Lau.m_star
+    y = run_length_Lau.mean_runlength_best
+    (r, p) = pearsonr(x, y)
+    sns.regplot(x=x, y=y, ax = ax)
+    plt.annotate( 'r = %.3g\np = %.3g'%(r,p), xy=(0, 0.8), xycoords=ax.transAxes, fontsize = 9)
+    plt.plot([1, max(plt.xlim())],[1, max(plt.ylim())], 'k--', lw = 0.5)
+    plt.xlabel('Optimal rich runlength')
+    plt.ylabel('Mean rich runlength')
+
+    ax = fig.add_subplot(gs[1,2]) 
+    x = run_length_Lau.m_star
+    y = run_length_Lau.choice_ratio
+    (r, p) = pearsonr(x, y)
+    sns.regplot(x=x, y=y, ax = ax)
+    plt.annotate( 'r = %.3g\np = %.3g'%(r,p), xy=(0, 0.8), xycoords=ax.transAxes, fontsize = 9)
+    plt.plot([1, max(plt.xlim())],[1, max(plt.ylim())], 'k--', lw = 0.5)
+    plt.xlabel('Optimal rich runlength')
+    plt.ylabel('Choice ratio (rich / lean arm)')
+
+    plt.show()
+    
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    

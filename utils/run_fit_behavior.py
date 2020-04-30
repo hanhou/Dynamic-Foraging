@@ -3,7 +3,7 @@
 Created on Wed Apr 15 21:33:33 2020
 
 @author: Han
-"""
+# """
 
 import numpy as np
 import multiprocessing as mp
@@ -13,7 +13,7 @@ from tqdm import tqdm
 import pandas as pd
 
 from models.bandit_model_comparison import BanditModelComparison
-from utils.plot_mice import plot_each_mice, plot_group_results
+from utils.plot_mice import *
 
 def fit_each_mice(data, if_session_wise = False, if_verbose = True, file_name = '', pool = '', models = None, use_trials = None):
     choice = data.f.choice
@@ -209,6 +209,7 @@ def process_each_mice(data, file, if_plot_each_mice):
     group_result['session_number'] = np.unique(data['model_comparison_grand'].session_num)
     group_result['session_best'] = np.zeros(n_session).astype(int)
     group_result['prediction_accuracy_NONCV'] = np.zeros(n_session)
+    group_result['prediction_accuracy_Sugrue_NONCV'] = np.zeros(n_session)
     group_result['foraging_efficiency'] = np.zeros(n_session)
     group_result['raw_data'] = data
     group_result['file'] = file
@@ -223,6 +224,11 @@ def process_each_mice(data, file, if_plot_each_mice):
         this_predictive_choice_prob =  this_mc.results_raw[group_result['session_best'][ss] - 1].predictive_choice_prob
         this_predictive_choice = np.argmax(this_predictive_choice_prob, axis = 0)
         group_result['prediction_accuracy_NONCV'][ss] = np.sum(this_predictive_choice == this_mc.fit_choice_history) / this_mc.n_trials
+
+        # Prediction accuracy of Sugrue (Marton's question)
+        this_predictive_choice_prob =  this_mc.results_raw[3].predictive_choice_prob
+        this_predictive_choice = np.argmax(this_predictive_choice_prob, axis = 0)
+        group_result['prediction_accuracy_Sugrue_NONCV'][ss] = np.sum(this_predictive_choice == this_mc.fit_choice_history) / this_mc.n_trials
 
         # Calculate foraging efficiency
         p_reward_this = data['model_comparison_grand'].p_reward[:, data['model_comparison_grand'].session_num == group_result['session_number'][ss]]
@@ -323,6 +329,9 @@ def process_all_mice(result_path = "..\\results\\model_comparison\\", combine_pr
                                  })
         df_this['prediction_accuracy_NONCV'] = group_result_this['prediction_accuracy_NONCV']
         df_this['prediction_accuracy_bias_only'] = group_result_this['prediction_accuracy_bias_only']
+        
+        df_this['prediction_accuracy_Sugrue_NONCV'] = group_result_this['prediction_accuracy_Sugrue_NONCV']
+        
         df_this['foraging_efficiency'] = group_result_this['foraging_efficiency']
         df_this['n_trials'] = group_result_this['n_trials'][0]
         df_this = pd.concat([df_this, pd.DataFrame(group_result_this['fitted_paras'].T, columns = group_result_this['fitted_para_names'])], axis = 1)
@@ -365,9 +374,11 @@ if __name__ == '__main__':
     # combine_group_results()
     
     # --- Plot all results ---
-    # process_all_mice(result_path = "..\\results\\model_comparison\\", combine_prefix = 'model_comparison_15_', 
-    #                   group_results_name_to_save = 'temp.npz', if_plot_each_mice = False)
-    plot_group_results(group_results_name = 'temp.npz', average_session_number_range = [0,20])
+    # process_all_mice(result_path = "..\\results\\model_comparison\\", combine_prefix = 'model_comparison_15_', group_results_name_to_save = 'temp.npz', if_plot_each_mice = False)
+    # plot_group_results(group_results_name = 'temp.npz', average_session_number_range = [0,20])
+    
+    # --- Example sessions ---
+    plot_example_sessions(group_results_name = 'temp.npz', session_of_interest = [['FOR05', 33]])
     
     # pool.close()   # Just a good practice
     # pool.join()

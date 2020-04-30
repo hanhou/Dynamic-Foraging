@@ -207,12 +207,10 @@ def plot_LL_surface(forager, LLsurfaces, CI_cutoff_LPTs, para_names, para_2ds, p
     
     plt.show()
     
-def plot_session_lightweight(fake_data, fitted_data = None):
+def plot_session_lightweight(fake_data, smooth_factor, fitted_data = None):
     # sns.reset_orig()
 
     choice_history, reward_history, p_reward = fake_data
-    
-    smooth_factor = 5
     
     # == Fetch data ==
     n_trials = np.shape(choice_history)[1]
@@ -256,7 +254,7 @@ def plot_session_lightweight(fake_data, fitted_data = None):
     
     return ax
     
-def plot_model_comparison_predictive_choice_prob(model_comparison):
+def plot_model_comparison_predictive_choice_prob(model_comparison, smooth_factor = 5):
     # sns.reset_orig()
     
     choice_history, reward_history, p_reward, trial_numbers = model_comparison.fit_choice_history, model_comparison.fit_reward_history, model_comparison.p_reward, model_comparison.trial_numbers
@@ -265,7 +263,7 @@ def plot_model_comparison_predictive_choice_prob(model_comparison):
         
     n_trials = np.shape(choice_history)[1]
 
-    ax = plot_session_lightweight([choice_history, reward_history, p_reward])
+    ax = plot_session_lightweight([choice_history, reward_history, p_reward], smooth_factor = smooth_factor)
     # Predictive choice prob
     for bb in model_comparison.plot_predictive:
         bb = bb - 1
