@@ -11,6 +11,9 @@ import time
 import sys, os
 from tqdm import tqdm
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 
 from models.bandit_model_comparison import BanditModelComparison
 from utils.plot_mice import *
@@ -358,6 +361,90 @@ def process_all_mice(result_path = "..\\results\\model_comparison\\", combine_pr
     print('Group results saved: %s!' %(result_path + group_results_name_to_save))
         
 
+def analyze_runlength(result_path = "..\\results\\model_comparison\\", combine_prefix = 'model_comparison_15_', 
+                          group_results_name = 'group_results.npz', mice_of_interest = ['FOR05', 'FOR06'], 
+                          efficiency_partitions = [30, 30],  block_partitions = [70, 70], if_first_plot = True):
+    sns.set()
+    
+    mean_runlength_Bernoulli = runlength_Bernoulli()
+
+    # Load dataframe
+    data = np.load(result_path + group_results_name, allow_pickle=True)
+    group_results = data.f.group_results.item()
+    results_all_mice = group_results['results_all_mice'] 
+    
+    for mouse in mice_of_interest:
+        
+        # Load raw data
+        data_raw = np.load(result_path + combine_prefix + mouse + '.npz', allow_pickle=True)
+        data_raw = data_raw.f.results_each_mice.item()
+        
+        df_this = results_all_mice[results_all_mice.mice == mouse].copy()
+        df_this[['foraging_efficiency', 'prediction_accuracy_NONCV', 'prediction_accuracy_bias_only', 'prediction_accuracy_Sugrue_NONCV']] *= 100
+
+        efficiency_thres = np.percentile(df_this.foraging_efficiency, [100-efficiency_partitions[0], efficiency_partitions[1]])
+
+        #%% Plot foraging histogram 
+        if if_first_plot: 
+            g = sns.jointplot(x="prediction_accuracy_NONCV", y="foraging_efficiency", data = df_this.sort_values(by = 'session_number'), 
+                              kind="reg", color="b", marginal_kws = {'bins':20,'color':'k'}, joint_kws = {'marker':'', 'color':'k'})
+            
+            palette = sns.color_palette("RdYlGn", len(df_this))
+            
+            g.plot_joint(plt.scatter, color = palette, sizes = df_this.n_trials**2 / 3000, alpha = 0.7)
+            ax = plt.gca()
+            ax.axvline(50, c='k', ls='--')
+            ax.axhline(100, c='k', ls='--')
+            
+            ax.axhline(efficiency_thres[1], c='r', ls='-.', lw = 2)        
+            ax.axhline(efficiency_thres[0], c='g', ls='-.', lw = 2)
+            plt.gcf().text(0.01, 0.95, mouse)
+
+        #%% Get grand runlength (Lau)
+        good_session_idxs = df_this[df_this.foraging_efficiency >= efficiency_thres[0]].session_idx
+        bad_session_idxs = df_this[df_this.foraging_efficiency <= efficiency_thres[1]].session_idx
+        
+        grand_session_idxs = [good_session_idxs, bad_session_idxs]
+        grand_session_idxs_markers = [mouse + ' best %g%% sessions (n = %g)' % (efficiency_partitions[0], len(good_session_idxs)), 
+                                      mouse + ' worst %g%% sessions (n = %g)' % (efficiency_partitions[1], len(bad_session_idxs))]
+        
+        for this_session_idxs, this_marker in zip(grand_session_idxs, grand_session_idxs_markers):
+            
+            df_run_length_Lau_all = [pd.DataFrame(), pd.DataFrame()] # First and last trials in each block
+            
+            for this_idx in this_session_idxs:
+                #%%
+                this_class = data_raw['model_comparison_session_wise'][this_idx - 1]
+                this_session_num = df_this[df_this.session_idx == this_idx].session_number.values
+                
+                p_reward = data_raw['model_comparison_grand'].p_reward[:, data_raw['model_comparison_grand'].session_num == this_session_num]
+                
+                # Runlength analysis
+                this_df_run_length_Lau = analyze_runlength_Lau2005(this_class.fit_choice_history, p_reward, block_partitions = block_partitions)
+                
+                for i in [0,1]:
+                    df_run_length_Lau_all[i] = df_run_length_Lau_all[i].append(this_df_run_length_Lau[i])
+                
+            fig = plot_runlength_Lau2005(df_run_length_Lau_all, block_partitions, mean_runlength_Bernoulli)
+            fig.text(0.1, 0.92, this_marker + ', mean foraging eff. = %g%%, %g blocks' %\
+                           (np.mean(df_this.foraging_efficiency[this_session_idxs - 1]), len(df_run_length_Lau_all[0])), fontsize = 15)
+            plt.show()
+            
+def runlength_Bernoulli():
+    X = np.linspace(1,16,50)
+    mean_runlength_Bernoulli = np.zeros([3,len(X)])
+    n = np.r_[1:100]
+    
+    mean_runlength_Bernoulli[2,:] = X
+    
+    for i, x in enumerate(X):
+        p = x/(x+1)
+        mean_runlength_Bernoulli[0,i] = np.sum(n * ((1-p)**(n-1)) * p)  # Lean
+        mean_runlength_Bernoulli[1,i] = np.sum(n * (p**(n-1)) * (1-p))  # Rich
+    
+    return mean_runlength_Bernoulli
+                    
+#%%        
 if __name__ == '__main__':
     
     n_worker = 8
@@ -378,7 +465,9 @@ if __name__ == '__main__':
     # plot_group_results(group_results_name = 'temp.npz', average_session_number_range = [0,20])
     
     # --- Example sessions ---
-    plot_example_sessions(group_results_name = 'temp.npz', session_of_interest = [['FOR05', 33]])
+    # plot_example_sessions(group_results_name = 'temp.npz', session_of_interest = [['FOR05', 33]])
     
+    # analyze_runlength(mice_of_interest = ['FOR05', 'FOR06'], efficiency_partitions = [20, 20], block_partitions = [30, 30])
+    analyze_runlength(efficiency_partitions = [20, 20], block_partitions = [50, 50], if_first_plot = False)
     # pool.close()   # Just a good practice
     # pool.join()
