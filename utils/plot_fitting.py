@@ -301,7 +301,7 @@ def plot_model_comparison_result(model_comparison):
     results['para_notation_with_best_fit'] = para_notation_with_best_fit
         
     fig = plt.figure(figsize=(12, 8), dpi = 150)
-    gs = GridSpec(1, 4, wspace = 0.1, bottom = 0.1, top = 0.85, left = 0.23, right = 0.95)
+    gs = GridSpec(1, 5, wspace = 0.1, bottom = 0.1, top = 0.85, left = 0.23, right = 0.95)
     
     
     # -- 1. LPT -- 
@@ -354,7 +354,24 @@ def plot_model_comparison_result(model_comparison):
     plt.axvline(1, color='k', linestyle='--')
     s.set_ylabel('')
     s.set_yticklabels('')
+    
+    # -- 5. Prediction accuracy --
+    
+    prediction_accuracy_NONCV = np.zeros(len(results))
+    
+    for rr, raw in enumerate(model_comparison.results_raw):
+        this_predictive_choice_prob = raw.predictive_choice_prob
+        this_predictive_choice = np.argmax(this_predictive_choice_prob, axis = 0)
+        prediction_accuracy_NONCV[rr] = np.sum(this_predictive_choice == model_comparison.fit_choice_history) / model_comparison.n_trials
+        
+    results['prediction_accuracy_NONCV'] = prediction_accuracy_NONCV * 100
 
+    ax = fig.add_subplot(gs[0, 4])
+    s = sns.barplot(x = 'prediction_accuracy_NONCV', y = 'para_notation_with_best_fit', data = results, color = 'grey')
+    plt.axvline(50, color='k', linestyle='--')
+    ax.set_xlim(min(50,np.min(np.min(model_comparison.results[['prediction_accuracy_NONCV']]))) - 5)
+    ax.set_ylabel('')
+    ax.set_xlabel('Prediction_accuracy_NONCV')
     
     return
 

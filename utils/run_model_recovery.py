@@ -15,7 +15,7 @@ import sys
 from models.bandit_model import BanditModel
 from models.bandit_model_comparison import BanditModelComparison, MODELS
 from models.fitting_functions import fit_bandit, negLL_func
-from utils.plot_fitting import plot_para_recovery, plot_LL_surface, plot_confusion_matrix, plot_session_lightweight
+from utils.plot_fitting import *
    
 def fit_para_recovery(forager, para_names, para_bounds, true_paras = None, n_models = 10, n_trials = 1000, 
                       para_scales = None, para_color_code = None, para_2ds = [[0,1]], fit_method = 'DE', DE_pop_size = 16, n_x0s = 1, pool = '', **kwargs):
@@ -522,6 +522,21 @@ if __name__ == '__main__':
     # model_comparison.fit(pool = pool, plot_predictive=[1,2,3])
     # model_comparison.show()
     # model_comparison.plot()
+    
+    choice_history, reward_history, p_reward = generate_fake_data('IdealpHatGreedy', [],[], n_trials = 1000)  # Almost Hattori et al.
+    model_comparison = BanditModelComparison(choice_history, reward_history, p_reward, models = [
+                # No bias (1-8)
+                ['Hattori2019', ['learn_rate_rew', 'learn_rate_unrew', 'forget_rate', 'softmax_temperature'],[0, 0, -1, 1e-2],[1, 1, 1, 15]],
+                
+                # With bias (9-15)
+                ['Hattori2019', ['learn_rate_rew', 'learn_rate_unrew', 'forget_rate', 'softmax_temperature', 'biasL'],[0, 0, -1, 1e-2, -5],[1, 1, 1, 15, 5]],
+              ]
+    )
+    model_comparison.fit(pool = pool, plot_predictive=[1,2,3])  # Plot predictive traces for the 1st, 2nd, and 3rd models
+    model_comparison.plot()
+    model_comparison.show()
+
+    plot_model_comparison_predictive_choice_prob(model_comparison, smooth_factor = 1)
 
     # # # ----------------------- Confusion Matrix ----------------------------------
     # compute_confusion_matrix(models = [2,3], n_runs = 20, n_trials = 1000, pool = pool)
@@ -583,8 +598,8 @@ if __name__ == '__main__':
     # compute_confusion_matrix(models = models, n_runs = 100, n_trials = 500, pool = pool, 
     #                          save_file = 'confusion_results_4_100_1000_bias_test.p')
     
-    confusion_results = pickle.load(open("..\\results\\confusion_results_4_100_1000_bias_test.p", "rb"))
-    plot_confusion_matrix(confusion_results)
+    # confusion_results = pickle.load(open("..\\results\\confusion_results_4_100_1000_bias_test.p", "rb"))
+    # plot_confusion_matrix(confusion_results)
     
     #%%
     pool.close()   # Just a good practice

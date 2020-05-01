@@ -500,3 +500,9 @@ if __name__ == '__main__':
     
     # pool.close()   # Just a good practice
     # pool.join()
+    
+    # Load dataframe
+    # data = np.load("..\\results\\model_comparison\\group_results.npz", allow_pickle=True)
+    # group_results = data.f.group_results.item()
+    # results_all_mice = group_results['results_all_mice'] 
+ 

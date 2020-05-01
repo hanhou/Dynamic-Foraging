@@ -331,7 +331,8 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\", group_re
     x="mice"
     y="value"
     hue = 'models'
-    hh = sns.violinplot(x=x, y=y, hue = hue, data = prediction_accuracies, inner="box")    
+    hh = sns.violinplot(x=x, y=y, hue = hue, data = prediction_accuracies, inner="box", hue_order = ['Bias only','Hattori 2019'],
+                        palette = sns.color_palette(['lightgray', 'r']))    
     
     ax.set_ylabel('Hattori pred. acc.% (nonCVed)')
     plt.xticks(rotation=45, horizontalalignment='right')
@@ -391,7 +392,7 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\", group_re
     # 1> Prediction accuracy
     ax = fig.add_subplot(gs[0,0:2])  
     hh = sns.barplot(x = 'models', y = 'value', data = prediction_accuracies, order = ['Bias only', 'Hattori 2019'], 
-                     capsize=.1, palette = sns.color_palette(['lightgray', 'darkviolet']))
+                     capsize=.1, palette = sns.color_palette(['lightgray', 'r']))
     plt.axhline(50, c = 'k', ls = '--')
     
     add_stat_annotation(hh, data=prediction_accuracies, x = 'models', y = 'value', box_pairs=[['Bias only', 'Hattori 2019']],
