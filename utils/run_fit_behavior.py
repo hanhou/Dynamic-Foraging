@@ -17,7 +17,7 @@ from scipy.stats import pearsonr
 
 
 from models.bandit_model_comparison import BanditModelComparison
-from utils.plot_mice import plot_each_mice, analyze_runlength_Lau2005, plot_runlength_Lau2005, plot_example_sessions
+from utils.plot_mice import plot_each_mice, analyze_runlength_Lau2005, plot_runlength_Lau2005, plot_example_sessions, plot_group_results
 
 def fit_each_mice(data, if_session_wise = False, if_verbose = True, file_name = '', pool = '', models = None, use_trials = None):
     choice = data.f.choice
@@ -217,6 +217,7 @@ def process_each_mice(data, file, if_plot_each_mice, if_hattori_Fig1I):
     group_result['foraging_efficiency'] = np.zeros(n_session)
     group_result['raw_data'] = data
     group_result['file'] = file
+    group_result['para_notation'] = grand_result['para_notation']
     
     group_result['xlabel'] = []
     for ss,this_mc in enumerate(sessionwise_result):
@@ -309,6 +310,8 @@ def process_all_mice(result_path = "..\\results\\model_comparison\\", combine_pr
     listOfFiles = os.listdir(result_path)
     
     results_all_mice = pd.DataFrame()
+    df_raw_LPT_AICs = pd.DataFrame()
+    
     n_mice = 0
     
     for file in listOfFiles:
@@ -324,6 +327,9 @@ def process_all_mice(result_path = "..\\results\\model_comparison\\", combine_pr
         
         if combine_prefix not in file: continue # Pass this file
         
+        mice_name = file.replace(combine_prefix,'').replace('.npz','')
+        
+        # == df_1. Statistics ==
         # print(file)
         n_mice += 1
         data = np.load(result_path + file, allow_pickle=True)
@@ -332,7 +338,7 @@ def process_all_mice(result_path = "..\\results\\model_comparison\\", combine_pr
         if_hattori_Fig1I = combine_prefix == 'model_comparison_15_'
         
         group_result_this = process_each_mice(data, file, if_plot_each_mice = if_plot_each_mice, if_hattori_Fig1I = if_hattori_Fig1I)
-        df_this = pd.DataFrame({'mice': file.replace(combine_prefix,'').replace('.npz',''),
+        df_this = pd.DataFrame({'mice': mice_name,
                                 'session_idx': np.arange(len(group_result_this['session_number'])) + 1,
                                 'session_number': group_result_this['session_number'],
                                  })
@@ -356,10 +362,20 @@ def process_all_mice(result_path = "..\\results\\model_comparison\\", combine_pr
         # Save dataframe of this mice into a HUGE dataframe
         results_all_mice = results_all_mice.append(df_this)
         
+        # == df_2. Raw_AIC ==
+        df_this = pd.DataFrame({'mice': mice_name,
+                                'session_idx': np.arange(len(group_result_this['session_number'])) + 1,
+                                'session_number': group_result_this['session_number'],
+                                 })
+        df_this = pd.concat([df_this, pd.DataFrame(group_result_this['LPT_AIC'].T, columns = group_result_this['para_notation'])], axis = 1)
+        df_raw_LPT_AICs = df_raw_LPT_AICs.append(df_this)
+        
     # Add some more stuffs for convenience
-    group_results = {'results_all_mice': results_all_mice}    
+    group_results = {'results_all_mice': results_all_mice, 'raw_LPT_AICs': df_raw_LPT_AICs}    
     if if_hattori_Fig1I:
         group_results['delta_AIC_para_notation'] = group_result_this['delta_AIC_para_notation']
+        
+    group_results['para_notation'] = group_result_this['para_notation']
     group_results['fitted_para_names'] = group_result_this['fitted_para_names']
     group_results['n_mice'] = n_mice 
     group_results['if_hattori_Fig1I'] = if_hattori_Fig1I
@@ -499,12 +515,15 @@ if __name__ == '__main__':
     
     # --- Plot all results ---
     
-    process_all_mice(result_path = "..\\results\\model_comparison\\", combine_prefix = 'model_comparison_', 
-                 group_results_name_to_save = 'group_results_all_with_bias.npz', if_plot_each_mice = True)
+    # process_all_mice(result_path = "..\\results\\model_comparison\\w_wo_bias_15\\", combine_prefix = 'model_comparison_15_', 
+    #               group_results_name_to_save = 'group_results.npz', if_plot_each_mice = False)
     
-    # process_all_mice(result_path = "..\\results\\model_comparison\\", combine_prefix = 'model_comparison_15_', group_results_name_to_save = 'temp.npz', if_plot_each_mice = False)
-    # plot_group_results(group_results_name = 'temp.npz', average_session_number_range = [0,20])
-    
+    # plot_group_results(result_path = "..\\results\\model_comparison\\w_wo_bias_15\\", group_results_name = 'group_results.npz',
+    #                     average_session_number_range = [0,20])
+
+    plot_group_results(result_path = "..\\results\\model_comparison\\w_bias_8\\", group_results_name = 'group_results_all_with_bias.npz',
+                        average_session_number_range = [0,20])
+                       
     # --- Example sessions ---
     # plot_example_sessions(group_results_name = 'temp.npz', session_of_interest = [['FOR05', 33]])
     
@@ -519,5 +538,4 @@ if __name__ == '__main__':
     # Load dataframe
     # data = np.load("..\\results\\model_comparison\\group_results.npz", allow_pickle=True)
     # group_results = data.f.group_results.item()
-    # results_all_mice = group_results['results_all_mice'] 
- 
+    # results_all_mice = group_results['results_all_mice']

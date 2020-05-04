@@ -214,7 +214,7 @@ def plot_each_mice(group_result, if_hattori_Fig1I):
     return
 
 
-def plot_group_results(result_path = "..\\results\\model_comparison\\", group_results_name = 'group_results.npz',
+def plot_group_results(result_path = "..\\results\\model_comparison\\w_bias_8\\", group_results_name = 'group_results_all_with_bias.npz',
                        average_session_number_range = None):
     #%%
     sns.set()
@@ -223,6 +223,7 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\", group_re
     data = np.load(result_path + group_results_name, allow_pickle=True)
     group_results = data.f.group_results.item()
     results_all_mice = group_results['results_all_mice'] 
+    raw_LPT_AICs = group_results['raw_LPT_AICs'] 
     
     if_hattori_Fig1I = group_results['if_hattori_Fig1I']
 
@@ -275,6 +276,32 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\", group_re
     else:
         print('No Fig.1I of Hattori2019')
     
+    # -- 1.2 rawAIC, all models --
+    fig = plt.figure(figsize=(10, 5), dpi = 150)
+    ax = fig.subplots() 
+    
+    plt.axhline(0.5, c = 'k', ls = '--')
+    
+    for n_m, var in enumerate(group_results['para_notation']):
+        means = raw_LPT_AICs.groupby('session_number')[var].mean()
+        errs = raw_LPT_AICs.groupby('session_number')[var].sem()
+        ax.errorbar(means.index + 0.07*n_m - 0.04, means, yerr=errs, label = var, linewidth = 0.7, marker = 'o', alpha = 0.7)
+
+    ax.set_xlabel('Session number (actual)')
+    ax.set_ylabel('LPT_AIC')
+    plt.xticks(rotation=60, horizontalalignment='right')
+
+    # n_mice_per_session = results_all_mice.session_number.value_counts().sort_index()
+    # ax.plot(means.index, n_mice_per_session.values * max(plt.ylim()) / max(n_mice_per_session.values) * 0.9, 
+    #         'ks-', label = 'max = %g mice' % group_results['n_mice'])
+
+    if average_session_number_range is not None:
+        patch = Rectangle((average_session_number_range[0], min(plt.ylim())), np.diff(np.array(average_session_number_range)), np.diff(np.array(plt.ylim())),
+                          color = 'gray', linewidth = 1, fill= True, alpha = 0.2)
+        ax.add_artist(patch)
+
+    ax.legend() 
+
     # -- 1.5 Foraging efficiency, aligned to session_number --
     fig = plt.figure(figsize=(10, 5), dpi = 150)
     ax = fig.subplots() 
