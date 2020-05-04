@@ -197,7 +197,7 @@ def get_p_hat_greedy(p_reward):
     
     return p_star_aver
 
-def process_each_mice(data, file, if_plot_each_mice):
+def process_each_mice(data, file, if_plot_each_mice, if_hattori_Fig1I):
 
     # === 1.1 Overall result ===
     grand_result = data['model_comparison_grand'].results
@@ -256,10 +256,12 @@ def process_each_mice(data, file, if_plot_each_mice):
         group_result[pp] = np.zeros((n_models, n_session))
         for ss,this_mc in enumerate(sessionwise_result):
             group_result[pp][:, ss] = this_mc.results[pp]
-            
-    standardRL_idx = 12  # RW1972-softmax-noBias (0 of Fig.1I of Hattori 2019)    
-    group_result['delta_AIC'] = group_result['AIC'] - group_result['AIC'][standardRL_idx - 1]
-    group_result['delta_AIC_grand'] = grand_result['AIC'] -  grand_result['AIC'][standardRL_idx]
+    
+    if if_hattori_Fig1I:
+        standardRL_idx = 12  # RW1972-softmax-noBias (0 of Fig.1I of Hattori 2019)    
+        group_result['delta_AIC'] = group_result['AIC'] - group_result['AIC'][standardRL_idx - 1]
+        group_result['delta_AIC_grand'] = grand_result['AIC'] -  grand_result['AIC'][standardRL_idx]
+        
     group_result['LPT_AIC_grand']  = grand_result['LPT_AIC']
     group_result['fitted_paras_grand'] = grand_result['para_fitted'].iloc[overall_best-1]
     
@@ -267,10 +269,11 @@ def process_each_mice(data, file, if_plot_each_mice):
     data['model_comparison_grand'].plot_predictive = [1,2,3]
             
     # -- 2.1 deltaAIC relative to RW1972-softmax-noBias (Fig.1I of Hattori 2019) --        
-    plot_models = np.array([13, 6, 15, 8])
-    group_result['delta_AIC'] = group_result['delta_AIC'][plot_models - 1,:]
-    group_result['delta_AIC_para_notation'] = grand_result['para_notation'].iloc[plot_models-1]
-    group_result['delta_AIC_grand'] = group_result['delta_AIC_grand'][plot_models - 1]
+    if if_hattori_Fig1I:
+        plot_models = np.array([13, 6, 15, 8])
+        group_result['delta_AIC'] = group_result['delta_AIC'][plot_models - 1,:]
+        group_result['delta_AIC_para_notation'] = grand_result['para_notation'].iloc[plot_models-1]
+        group_result['delta_AIC_grand'] = group_result['delta_AIC_grand'][plot_models - 1]
     
     # -- 3. Fitted paras of the overall best model --
     fitted_para_names = np.array(grand_result['para_notation'].iloc[overall_best-1].split(','))
@@ -294,7 +297,7 @@ def process_each_mice(data, file, if_plot_each_mice):
                                                           data['model_comparison_grand'].n_trials 
 
     if if_plot_each_mice:
-        plot_each_mice(group_result)
+        plot_each_mice(group_result, if_hattori_Fig1I)
     
     return group_result
 
@@ -326,7 +329,9 @@ def process_all_mice(result_path = "..\\results\\model_comparison\\", combine_pr
         data = np.load(result_path + file, allow_pickle=True)
         data = data.f.results_each_mice.item()
         
-        group_result_this = process_each_mice(data, file, if_plot_each_mice = if_plot_each_mice)
+        if_hattori_Fig1I = combine_prefix == 'model_comparison_15_'
+        
+        group_result_this = process_each_mice(data, file, if_plot_each_mice = if_plot_each_mice, if_hattori_Fig1I = if_hattori_Fig1I)
         df_this = pd.DataFrame({'mice': file.replace(combine_prefix,'').replace('.npz',''),
                                 'session_idx': np.arange(len(group_result_this['session_number'])) + 1,
                                 'session_number': group_result_this['session_number'],
@@ -339,7 +344,9 @@ def process_all_mice(result_path = "..\\results\\model_comparison\\", combine_pr
         df_this['foraging_efficiency'] = group_result_this['foraging_efficiency']
         df_this['n_trials'] = group_result_this['n_trials'][0]
         df_this = pd.concat([df_this, pd.DataFrame(group_result_this['fitted_paras'].T, columns = group_result_this['fitted_para_names'])], axis = 1)
-        df_this = pd.concat([df_this, pd.DataFrame(group_result_this['delta_AIC'].T, columns = group_result_this['delta_AIC_para_notation'])], axis = 1)
+        
+        if if_hattori_Fig1I:
+            df_this = pd.concat([df_this, pd.DataFrame(group_result_this['delta_AIC'].T, columns = group_result_this['delta_AIC_para_notation'])], axis = 1)
         
         # Turn mine definition of bias (outside softmax) into Hattori's definition (inside softmax) ??? 
         # But I think they actually used my definition? Otherwise their biases are huge (beta * beta_deltaQ is much larger than beta)...
@@ -350,10 +357,12 @@ def process_all_mice(result_path = "..\\results\\model_comparison\\", combine_pr
         results_all_mice = results_all_mice.append(df_this)
         
     # Add some more stuffs for convenience
-    group_results = {'results_all_mice': results_all_mice}     
-    group_results['delta_AIC_para_notation'] = group_result_this['delta_AIC_para_notation']
+    group_results = {'results_all_mice': results_all_mice}    
+    if if_hattori_Fig1I:
+        group_results['delta_AIC_para_notation'] = group_result_this['delta_AIC_para_notation']
     group_results['fitted_para_names'] = group_result_this['fitted_para_names']
     group_results['n_mice'] = n_mice 
+    group_results['if_hattori_Fig1I'] = if_hattori_Fig1I
     
     # Save group results to file
     np.savez_compressed(result_path + group_results_name_to_save, group_results = group_results)
@@ -485,15 +494,21 @@ if __name__ == '__main__':
     
     # --- Combine different runs ---
     # combine_group_results()
+    # combine_group_results(raw_path = "..\\export\\", result_path = "..\\results\\model_comparison\\",
+    #                       combine_prefix = ['model_comparison_'], save_prefix = 'model_comparison_with_bias')
     
     # --- Plot all results ---
+    
+    process_all_mice(result_path = "..\\results\\model_comparison\\", combine_prefix = 'model_comparison_', 
+                 group_results_name_to_save = 'group_results_all_with_bias.npz', if_plot_each_mice = True)
+    
     # process_all_mice(result_path = "..\\results\\model_comparison\\", combine_prefix = 'model_comparison_15_', group_results_name_to_save = 'temp.npz', if_plot_each_mice = False)
     # plot_group_results(group_results_name = 'temp.npz', average_session_number_range = [0,20])
     
     # --- Example sessions ---
     # plot_example_sessions(group_results_name = 'temp.npz', session_of_interest = [['FOR05', 33]])
     
-    analyze_runlength(mice_of_interest = ['FOR05', 'FOR06'], efficiency_partitions = [20, 20], block_partitions = [30, 30])
+    # analyze_runlength(mice_of_interest = ['FOR05', 'FOR06'], efficiency_partitions = [20, 20], block_partitions = [30, 30])
     # analyze_runlength(efficiency_partitions = [20, 20], block_partitions = [50, 50], if_first_plot = False)
     
     # analyze_runlength_of_models()
