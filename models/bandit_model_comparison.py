@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import time
 
-from models.fitting_functions import fit_bandit
+from models.fitting_functions import fit_bandit, cross_validate_bandit
 from utils.plot_fitting import plot_model_comparison_predictive_choice_prob, plot_model_comparison_result
 from IPython.display import display
 
@@ -159,6 +159,51 @@ class BanditModelComparison:
             self.plot_predictive_choice()
         return
     
+    def cross_validate(self, k_fold = 2, fit_method = 'DE', fit_settings = {'DE_pop_size': 16}, pool = '', if_verbose = True):
+        
+        self.prediction_accuracy_CV = pd.DataFrame()
+        
+        if if_verbose: print('=== Cross validation ===\nMethods = %s, %s, pool = %s' % (fit_method, fit_settings, pool!=''))
+        
+        for mm, model in enumerate(self.models):
+            # == Get settings for this model ==
+            forager, fit_names, fit_lb, fit_ub = model
+            fit_bounds = [fit_lb, fit_ub]
+            
+            para_notation = ''
+            Km = 0
+            
+            for name, lb, ub in zip(fit_names, fit_lb, fit_ub):
+                # == Generate notation ==
+                if lb < ub:
+                    para_notation += PARA_NOTATIONS[name] + ', '
+                    Km += 1
+            
+            para_notation = para_notation[:-2]
+            
+            # == Do fitting here ==
+            #  Km = np.sum(np.diff(np.array(fit_bounds),axis=0)>0)
+            
+            if if_verbose: print('Model %g/%g: %15s, Km = %g ...'%(mm+1, len(self.models), forager, Km), end = '')
+            start = time.time()
+                
+            prediction_accuracy_test, prediction_accuracy_fit, prediction_accuracy_test_bias_only= cross_validate_bandit(forager, fit_names, fit_bounds, 
+                                                                                      self.fit_choice_history, self.fit_reward_history, self.session_num, 
+                                                                                      k_fold = k_fold, **fit_settings, pool = pool, if_verbose = if_verbose) #plot_predictive is not None)
+            
+            if if_verbose: print('  \n%g-fold CV: Test acc.= %s, Fit acc. = %s (done in %.3g secs)' % (k_fold, prediction_accuracy_test, prediction_accuracy_fit, time.time()-start) )
+            
+            self.prediction_accuracy_CV = pd.concat([self.prediction_accuracy_CV, 
+                                                     pd.DataFrame({'model#': mm,
+                                                                   'forager': forager,
+                                                                   'Km': Km,
+                                                                   'para_notation': para_notation,
+                                                                   'prediction_accuracy_test': prediction_accuracy_test, 
+                                                                   'prediction_accuracy_fit': prediction_accuracy_fit,
+                                                                   'prediction_accuracy_test_bias_only': prediction_accuracy_test_bias_only})])
+            
+        return
+
     def plot_predictive_choice(self):
         plot_model_comparison_predictive_choice_prob(self)
 

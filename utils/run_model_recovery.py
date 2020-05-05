@@ -523,20 +523,35 @@ if __name__ == '__main__':
     # model_comparison.show()
     # model_comparison.plot()
     
-    choice_history, reward_history, p_reward = generate_fake_data('IdealpHatGreedy', [],[], n_trials = 1000)  # Almost Hattori et al.
-    model_comparison = BanditModelComparison(choice_history, reward_history, p_reward, models = [
-                # No bias (1-8)
-                ['Hattori2019', ['learn_rate_rew', 'learn_rate_unrew', 'forget_rate', 'softmax_temperature'],[0, 0, -1, 1e-2],[1, 1, 1, 15]],
+    # choice_history, reward_history, p_reward = generate_fake_data('IdealpHatGreedy', [],[], n_trials = 1000)  # Almost Hattori et al.
+    # model_comparison = BanditModelComparison(choice_history, reward_history, p_reward, models = [
+    #             # No bias (1-8)
+    #             ['Hattori2019', ['learn_rate_rew', 'learn_rate_unrew', 'forget_rate', 'softmax_temperature'],[0, 0, -1, 1e-2],[1, 1, 1, 15]],
                 
-                # With bias (9-15)
-                ['Hattori2019', ['learn_rate_rew', 'learn_rate_unrew', 'forget_rate', 'softmax_temperature', 'biasL'],[0, 0, -1, 1e-2, -5],[1, 1, 1, 15, 5]],
-              ]
-    )
-    model_comparison.fit(pool = pool, plot_predictive=[1,2,3])  # Plot predictive traces for the 1st, 2nd, and 3rd models
-    model_comparison.plot()
-    model_comparison.show()
+    #             # With bias (9-15)
+    #             ['Hattori2019', ['learn_rate_rew', 'learn_rate_unrew', 'forget_rate', 'softmax_temperature', 'biasL'],[0, 0, -1, 1e-2, -5],[1, 1, 1, 15, 5]],
+    #           ]
+    # )
+    # model_comparison.fit(pool = pool, plot_predictive=[1,2,3])  # Plot predictive traces for the 1st, 2nd, and 3rd models
+    # model_comparison.plot()
+    # model_comparison.show()
 
-    plot_model_comparison_predictive_choice_prob(model_comparison, smooth_factor = 1)
+    # plot_model_comparison_predictive_choice_prob(model_comparison, smooth_factor = 1)
+    
+    ## ----
+    # choice_history, reward_history, p_reward = generate_fake_data('IdealpHatGreedy', [],[], n_trials = 1000)  # Almost Hattori et al.
+    # model_comparison = BanditModelComparison(choice_history, reward_history, p_reward, models = [
+    #             # No bias (1-8)
+    #             ['Hattori2019', ['learn_rate_rew', 'learn_rate_unrew', 'forget_rate', 'softmax_temperature'],[0, 0, -1, 1e-2],[1, 1, 1, 15]],
+                
+    #             # With bias (9-15)
+    #             ['Hattori2019', ['learn_rate_rew', 'learn_rate_unrew', 'forget_rate', 'softmax_temperature', 'biasL'],[0, 0, -1, 1e-2, -5],[1, 1, 1, 15, 5]],
+    #           ]
+    # )
+    # # model_comparison.fit(pool = pool, plot_predictive=[1,2,3])  # Plot predictive traces for the 1st, 2nd, and 3rd models
+    # model_comparison.cross_validate(pool = pool, k_fold = 2)
+    # display(model_comparison.prediction_accuracy_CV)
+    
 
     # # # ----------------------- Confusion Matrix ----------------------------------
     # compute_confusion_matrix(models = [2,3], n_runs = 20, n_trials = 1000, pool = pool)

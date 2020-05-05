@@ -16,7 +16,7 @@ def negLL_func(fit_value, *argss):
     Compute negative likelihood (Core func)
     '''
     # Arguments interpretation
-    forager, fit_names, choice_history, reward_history, session_num, para_fixed = argss
+    forager, fit_names, choice_history, reward_history, session_num, para_fixed, fit_set = argss
     
     kwargs_all = {'forager': forager, **para_fixed}  # **kargs includes all other fixed parameters
     for (nn, vv) in zip(fit_names, fit_value):
@@ -32,7 +32,7 @@ def negLL_func(fit_value, *argss):
         session_num = np.zeros_like(choice_history)[0]  # Regard as one session
     
     unique_session = np.unique(session_num)
-    negLL = 0
+    likelihood_all_trial = []
     
     # -- For each session --
     for ss in unique_session:
@@ -52,10 +52,16 @@ def negLL_func(fit_value, *argss):
         likelihood_each_trial[(likelihood_each_trial <= 0) & (likelihood_each_trial > -1e-5)] = 1e-16  # To avoid infinity, which makes the number of zero likelihoods informative!
         likelihood_each_trial[likelihood_each_trial > 1] = 1
         
-        negLL_this = - sum(np.log(likelihood_each_trial))  
-        negLL += negLL_this
-        
+        # Cache likelihoods
+        likelihood_all_trial.extend(likelihood_each_trial)
     
+    likelihood_all_trial = np.array(likelihood_all_trial)
+    
+    if fit_set == []: # Use all trials
+        negLL = - sum(np.log(likelihood_all_trial))
+    else:   # Only return likelihoods in the fit_set
+        negLL = - sum(np.log(likelihood_all_trial[fit_set]))
+        
     # print(np.round(fit_value,4), negLL, '\n')
     # if np.any(likelihood_each_trial < 0):
     #     print(predictive_choice_prob)
@@ -83,7 +89,7 @@ def fit_each_init(forager, fit_names, fit_bounds, choice_history, reward_history
     # Append the initial point
     if callback != None: callback_history(x0)
         
-    fitting_result = optimize.minimize(negLL_func, x0, args = (forager, fit_names, choice_history, reward_history, session_num, {}), method = fit_method,
+    fitting_result = optimize.minimize(negLL_func, x0, args = (forager, fit_names, choice_history, reward_history, session_num, {}, []), method = fit_method,
                                        bounds = optimize.Bounds(fit_bounds[0], fit_bounds[1]), callback = callback, )
     return fitting_result
 
@@ -104,7 +110,7 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, s
     if fit_method == 'DE':
         
         # Use DE's own parallel method
-        fitting_result = optimize.differential_evolution(func = negLL_func, args = (forager, fit_names, choice_history, reward_history, session_num, {}),
+        fitting_result = optimize.differential_evolution(func = negLL_func, args = (forager, fit_names, choice_history, reward_history, session_num, {}, []),
                                                          bounds = optimize.Bounds(fit_bounds[0], fit_bounds[1]), 
                                                          mutation=(0.5, 1), recombination = 0.7, popsize = DE_pop_size, strategy = 'best1bin', 
                                                          disp = False, 
@@ -133,7 +139,6 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, s
                 fitting_parallel_results.append(rr.get())
         else:
             # Serial
-            
             for nn in range(n_x0s):
                 # We can have multiple histories only in serial mode
                 if if_history: fit_history = []  # Clear this history
@@ -206,6 +211,82 @@ def fit_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, s
         
 
     return fitting_result
+            
+
+import random
+
+def cross_validate_bandit(forager, fit_names, fit_bounds, choice_history, reward_history, session_num = None, k_fold = 2, 
+                          DE_pop_size = 16, pool = '', if_verbose = True):
+    '''
+    k-fold cross-validation
+    '''
+    
+    # Split the data into k_fold parts
+    n_trials = np.shape(choice_history)[1]
+    trial_numbers_shuffled = np.arange(n_trials)
+    random.shuffle(trial_numbers_shuffled)
+    
+    prediction_accuracy_test = []
+    prediction_accuracy_fit = []
+    prediction_accuracy_test_bias_only = []
+    
+    for kk in range(k_fold):
+        
+        test_begin = int(kk * np.floor(n_trials/k_fold))
+        test_end = int((n_trials) if (kk == k_fold - 1) else (kk+1) * np.floor(n_trials/k_fold))
+        test_set_this = trial_numbers_shuffled[test_begin:test_end]
+        fit_set_this = np.hstack((trial_numbers_shuffled[:test_begin], trial_numbers_shuffled[test_end:]))
+        
+        # == Fit data using fit_set_this ==
+        if if_verbose: print('%g/%g...'%(kk+1, k_fold), end = '')
+        fitting_result = optimize.differential_evolution(func = negLL_func, args = (forager, fit_names, choice_history, reward_history, session_num, {}, fit_set_this),
+                                                         bounds = optimize.Bounds(fit_bounds[0], fit_bounds[1]), 
+                                                         mutation=(0.5, 1), recombination = 0.7, popsize = DE_pop_size, strategy = 'best1bin', 
+                                                         disp = False, 
+                                                         workers = 1 if pool == '' else int(mp.cpu_count()),   # For DE, use pool to control if_parallel, although we don't use pool for DE
+                                                         updating = 'immediate' if pool == '' else 'deferred',
+                                                         callback = None,)
+            
+        # == Rerun predictive choice sequence and get the prediction accuracy of the test_set_this ==
+        kwargs_all = {}
+        for (nn, vv) in zip(fit_names, fitting_result.x):  # Use the fitted data
+            kwargs_all = {**kwargs_all, nn:vv}
+        
+        # Handle data from different sessions
+        if session_num is None:
+            session_num = np.zeros_like(choice_history)[0]  # Regard as one session
+        
+        unique_session = np.unique(session_num)
+        predictive_choice_prob = []
+        fitting_result.trial_numbers = []
+        
+        # -- For each session --
+        for ss in unique_session:
+            # Data in this session
+            choice_this = choice_history[:, session_num == ss]
+            reward_this = reward_history[:, session_num == ss]
+            
+            # Run PREDICTIVE simulation    
+            bandit = BanditModel(forager = forager, **kwargs_all, fit_choice_history = choice_this, fit_reward_history = reward_this)  # Into the fitting mode
+            bandit.simulate()
+            predictive_choice_prob.extend(bandit.predictive_choice_prob)
+            
+        # Get prediction accuracy of the test_set and fitting_set
+        predictive_choice_prob = np.array(predictive_choice_prob)
+        predictive_choice = np.argmax(predictive_choice_prob, axis = 0)
+        prediction_correct = predictive_choice == choice_history[0]
+        
+        # Also return cross-validated prediction_accuracy_bias (Maybe this is why Hattori's bias_only is low? -- Not exactly...)
+        if 'biasL' in kwargs_all:
+            bias_this = kwargs_all['biasL']
+            prediction_correct_bias_only = int(bias_this <= 0) == choice_history[0] # If bias_this < 0, bias predicts all rightward choices
+        
+        prediction_accuracy_test.append(sum(prediction_correct[test_set_this]) / len(test_set_this))
+        prediction_accuracy_fit.append(sum(prediction_correct[fit_set_this]) / len(fit_set_this))
+        
+        prediction_accuracy_test_bias_only.append(sum(prediction_correct_bias_only[test_set_this]) / len(test_set_this))
+
+    return prediction_accuracy_test, prediction_accuracy_fit, prediction_accuracy_test_bias_only
             
 
 

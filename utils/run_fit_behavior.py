@@ -15,11 +15,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import pearsonr
 
-
 from models.bandit_model_comparison import BanditModelComparison
 from utils.plot_mice import plot_each_mice, analyze_runlength_Lau2005, plot_runlength_Lau2005, plot_example_sessions, plot_group_results
 
-def fit_each_mice(data, if_session_wise = False, if_verbose = True, file_name = '', pool = '', models = None, use_trials = None):
+def fit_each_mice(data, if_session_wise = False, if_verbose = True, file_name = '', pool = '', models = None):
     choice = data.f.choice
     reward = data.f.reward
     p1 = data.f.p1
@@ -57,10 +56,6 @@ def fit_each_mice(data, if_session_wise = False, if_verbose = True, file_name = 
         for ss in tqdm(unique_session, desc = 'Session-wise', total = len(unique_session)):
             choice_history_this = choice_history[:, session_num == ss]
             reward_history_this = reward_history[:, session_num == ss]
-
-            if use_trials is not None:
-                choice_history_this = choice_history_this[:, use_trials]
-                reward_history_this = reward_history_this[:, use_trials]
                 
             model_comparison_this = BanditModelComparison(choice_history_this, reward_history_this, models = models)
             model_comparison_this.fit(pool = pool, plot_predictive = None, if_verbose = False) # Plot predictive traces for the 1st, 2nd, and 3rd models
@@ -69,12 +64,6 @@ def fit_each_mice(data, if_session_wise = False, if_verbose = True, file_name = 
         results_each_mice['model_comparison_session_wise'] = model_comparison_session_wise
     
     # -- Model comparison for all trials --
-    # For debugging    
-    if use_trials is not None:
-        choice_history = choice_history[:, use_trials]
-        reward_history = reward_history[:, use_trials]
-        p_reward = p_reward[:,use_trials]
-        session_num = session_num[use_trials]
     
     print('Pooling all sessions: ', end='')
     start = time.time()
@@ -214,6 +203,14 @@ def process_each_mice(data, file, if_plot_each_mice, if_hattori_Fig1I):
     group_result['session_best'] = np.zeros(n_session).astype(int)
     group_result['prediction_accuracy_NONCV'] = np.zeros(n_session)
     group_result['prediction_accuracy_Sugrue_NONCV'] = np.zeros(n_session)
+    
+    if_CVed = 'prediction_accuracy_CV' in data['model_comparison_session_wise'][0].__dict__
+    if if_CVed:
+        group_result['k_fold'] = max(data['model_comparison_session_wise'][0].prediction_accuracy_CV.index) + 1
+        group_result['prediction_accuracy_CV_fit'] = np.zeros(n_session)
+        group_result['prediction_accuracy_CV_test'] = np.zeros(n_session)
+        group_result['prediction_accuracy_CV_test_bias_only'] = np.zeros(n_session)
+    
     group_result['foraging_efficiency'] = np.zeros(n_session)
     group_result['raw_data'] = data
     group_result['file'] = file
@@ -239,6 +236,12 @@ def process_each_mice(data, file, if_plot_each_mice, if_hattori_Fig1I):
         p_reward_this = data['model_comparison_grand'].p_reward[:, data['model_comparison_grand'].session_num == group_result['session_number'][ss]]
         reward_rate_p_hat_greedy = get_p_hat_greedy(p_reward_this)
         group_result['foraging_efficiency'][ss] = (np.sum(this_mc.fit_reward_history)/group_result['n_trials'][0,ss]) / reward_rate_p_hat_greedy
+        
+        # Cross-validation accuracy
+        if if_CVed:
+            group_result['prediction_accuracy_CV_fit'][ss] =  this_mc.prediction_accuracy_CV.prediction_accuracy_fit.mean()
+            group_result['prediction_accuracy_CV_test'][ss] = this_mc.prediction_accuracy_CV.prediction_accuracy_test.mean()
+            group_result['prediction_accuracy_CV_test_bias_only'][ss] = this_mc.prediction_accuracy_CV.prediction_accuracy_test_bias_only.mean()
 
     # Grand stuffs
     this_predictive_choice_prob_grand =  data['model_comparison_grand'].results_raw[overall_best - 1].predictive_choice_prob
@@ -347,6 +350,11 @@ def process_all_mice(result_path = "..\\results\\model_comparison\\", combine_pr
         
         df_this['prediction_accuracy_Sugrue_NONCV'] = group_result_this['prediction_accuracy_Sugrue_NONCV']
         
+        if 'prediction_accuracy_CV_fit' in group_result_this:
+            df_this['prediction_accuracy_CV_fit'] = group_result_this['prediction_accuracy_CV_fit']
+            df_this['prediction_accuracy_CV_test'] = group_result_this['prediction_accuracy_CV_test']
+            df_this['prediction_accuracy_CV_test_bias_only'] = group_result_this['prediction_accuracy_CV_test_bias_only']
+        
         df_this['foraging_efficiency'] = group_result_this['foraging_efficiency']
         df_this['n_trials'] = group_result_this['n_trials'][0]
         df_this = pd.concat([df_this, pd.DataFrame(group_result_this['fitted_paras'].T, columns = group_result_this['fitted_para_names'])], axis = 1)
@@ -374,6 +382,9 @@ def process_all_mice(result_path = "..\\results\\model_comparison\\", combine_pr
     group_results = {'results_all_mice': results_all_mice, 'raw_LPT_AICs': df_raw_LPT_AICs}    
     if if_hattori_Fig1I:
         group_results['delta_AIC_para_notation'] = group_result_this['delta_AIC_para_notation']
+        
+    if 'prediction_accuracy_CV_fit' in group_result_this:
+        group_results['k_fold'] = group_result_this['k_fold']
         
     group_results['para_notation'] = group_result_this['para_notation']
     group_results['fitted_para_names'] = group_result_this['fitted_para_names']
@@ -494,12 +505,45 @@ def analyze_runlength_of_models(block_partitions = [50,50]):   # Runlength analy
     plot_runlength_Lau2005(run_length_Lau, block_partitions)
     plt.gcf().text(0.02,0.92,'Ideal-$\\hat{p}$-greedy, foraging eff. = %g%%'%foraging_efficiency)
   
-                    
+    
+def patch_cross_validation(raw_path = '..\\export\\', result_to_patch = "..\\results\\model_comparison\\model_comparison_",
+                           cross_validation_model_num = [15], pool = ''):
+    
+    for r, _, f in os.walk(raw_path):
+        for mouse in f:
+            print('=== Patch cross validation: Mice %s ===' % mouse)
+            sys.stdout.flush()
+            
+            # Load data already in model_comparison_*.npz
+            result_this = result_to_patch + mouse
+            data = np.load(result_this, allow_pickle=True)
+            
+            results_each_mice = data.f.results_each_mice.item()
+            model_comparison_session_wise = results_each_mice['model_comparison_session_wise']
+            
+            for result_each_session in tqdm(model_comparison_session_wise, desc = 'CV for each session', total = len(model_comparison_session_wise)):
+                
+                # Cross-validation
+                choice_history_this = result_each_session.fit_choice_history
+                reward_history_this = result_each_session.fit_reward_history
+                CV_this = BanditModelComparison(choice_history_this, reward_history_this, models = cross_validation_model_num)
+                CV_this.cross_validate(pool = pool, k_fold = 2, if_verbose = False)
+                
+                # Update model_comparison_results
+                # Since result_each_session is a "reference", this line automatically update the original results_each_mice
+                result_each_session.prediction_accuracy_CV = CV_this.prediction_accuracy_CV
+                
+            # I only patch cross validation for each session, not grand fitting. So it's enough.
+            np.savez_compressed( result_to_patch + 'CV_patched_' + mouse, results_each_mice = results_each_mice)
+            print('CV_patched!')
+            
+    return                 
+                
 #%%        
 if __name__ == '__main__':
     
     n_worker = 8
-    # pool = mp.Pool(processes = n_worker)
+    pool = mp.Pool(processes = n_worker)
     
     # ---
     # data = np.load("..\\export\\FOR01.npz")
@@ -517,12 +561,19 @@ if __name__ == '__main__':
     
     # process_all_mice(result_path = "..\\results\\model_comparison\\w_wo_bias_15\\", combine_prefix = 'model_comparison_15_', 
     #               group_results_name_to_save = 'group_results.npz', if_plot_each_mice = False)
-    
+
     # plot_group_results(result_path = "..\\results\\model_comparison\\w_wo_bias_15\\", group_results_name = 'group_results.npz',
     #                     average_session_number_range = [0,20])
 
-    plot_group_results(result_path = "..\\results\\model_comparison\\w_bias_8\\", group_results_name = 'group_results_all_with_bias.npz',
-                        average_session_number_range = [0,20])
+    process_all_mice(result_path = "..\\results\\model_comparison\\w_bias_8\\", combine_prefix = 'model_comparison_CV_patched_', 
+                  group_results_name_to_save = 'group_results_CV_patched.npz', if_plot_each_mice = False)
+    
+    
+    # plot_group_results(result_path = "..\\results\\model_comparison\\", group_results_name = 'group_results_CV_patched.npz',
+    #                     average_session_number_range = [0,20])
+    
+    # plot_group_results(result_path = "..\\results\\model_comparison\\w_bias_8\\", group_results_name = 'group_results_8_CV.npz',
+    #                     average_session_number_range = [0,20])
                        
     # --- Example sessions ---
     # plot_example_sessions(group_results_name = 'temp.npz', session_of_interest = [['FOR05', 33]])
@@ -532,10 +583,14 @@ if __name__ == '__main__':
     
     # analyze_runlength_of_models()
     
-    # pool.close()   # Just a good practice
-    # pool.join()
-    
     # Load dataframe
     # data = np.load("..\\results\\model_comparison\\group_results.npz", allow_pickle=True)
     # group_results = data.f.group_results.item()
     # results_all_mice = group_results['results_all_mice']
+    
+    # --- Cross validation patch ---
+    # patch_cross_validation(pool = pool)
+    
+    
+    pool.close()   # Just a good practice
+    pool.join()

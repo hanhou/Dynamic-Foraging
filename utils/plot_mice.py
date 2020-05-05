@@ -36,7 +36,8 @@ def plot_each_mice(group_result, if_hattori_Fig1I):
     overall_best = np.where(grand_result['best_model_AIC'])[0][0] + 1
     session_best_matched = group_result['session_best'] == overall_best
     
-
+    if_CVed  = 'k_fold' in group_result
+    
     # Update notations
     if 'para_notation_with_best_fit' in grand_result:
         model_notations = grand_result['para_notation_with_best_fit']
@@ -45,7 +46,6 @@ def plot_each_mice(group_result, if_hattori_Fig1I):
         for i, row in grand_result.iterrows():
             model_notations.append('('+str(i)+') '+row.para_notation + '\n' + str(np.round(row.para_fitted,2)))
 
-    
     fitted_para_names = np.array(grand_result['para_notation'].iloc[overall_best-1].split(','))
 
     #%%
@@ -117,12 +117,23 @@ def plot_each_mice(group_result, if_hattori_Fig1I):
     # sns.pointplot(data = group_result['LPT_AIC'][overall_best-1,:], ax = ax_grand, color = 'b', ci = 68)
     # ax_grand.plot(-1, group_result['LPT_AIC_grand'][overall_best-1], marker = 's', markersize = 13, color = 'b')
     
+    if not if_CVed:
+        hattori_col_name = 'prediction_accuracy_NONCV'
+        hattori_label = 'Pred. acc. best model noCV'
+        bias_col_name = 'prediction_accuracy_bias_only'
+        bias_label = 'Pred. acc. bias only noCV'
+    else:
+        hattori_col_name = 'prediction_accuracy_CV_test'
+        hattori_label = 'Pred. acc. best model %g-CV' % group_result['k_fold']
+        bias_col_name = 'prediction_accuracy_CV_test_bias_only'
+        bias_label = 'Pred. acc. bias only %g-CV' % group_result['k_fold']
+    
     # Prediction accuracy NONCV
-    sns.pointplot(data = group_result['prediction_accuracy_NONCV'], ax = ax_grand, color = 'black', ci = 68)
+    sns.pointplot(data = group_result[hattori_col_name], ax = ax_grand, color = 'black', ci = 68)
     ax_grand.plot(-1, group_result['prediction_accuracy_NONCV_grand'], marker = 's', markersize = 13, color = 'black')
     
     # Prediction accuracy bias only
-    sns.pointplot(data = group_result['prediction_accuracy_bias_only'], ax = ax_grand, color = 'gray', ci = 68)
+    sns.pointplot(data = group_result[bias_col_name], ax = ax_grand, color = 'gray', ci = 68)
     ax_grand.plot(-1, group_result['prediction_accuracy_bias_only_grand'], marker = 's', markersize = 13, color = 'gray')
     
     # Foraging efficiency
@@ -142,15 +153,15 @@ def plot_each_mice(group_result, if_hattori_Fig1I):
     #             facecolors='none', edgecolors = 'b', s = marker_sizes, alpha = 0.7)
 
     # Prediction accuracy NONCV
-    y = group_result['prediction_accuracy_NONCV']
-    plt.plot(x, y, 'k',label = 'prediction accuracy of the best model', linewidth = 0.7)
+    y = group_result[hattori_col_name]
+    plt.plot(x, y, 'k',label = hattori_label, linewidth = 0.7)
     plt.scatter(x[session_best_matched], y[session_best_matched], color = 'k', s = marker_sizes, alpha = 0.9, label = 'session = Overall best')
     plt.scatter(x[np.logical_not(session_best_matched)], y[np.logical_not(session_best_matched)], 
                 facecolors='none', edgecolors = 'k', s = marker_sizes, alpha = 0.7, label = 'session $\\neq$ Overall best')
     
     # Prediction accuracy bias only
-    y = group_result['prediction_accuracy_bias_only']
-    plt.plot(x, y, 'gray', ls = '--', label = 'prediction accuracy of bias only', linewidth = 0.7)
+    y = group_result[bias_col_name]
+    plt.plot(x, y, 'gray', ls = '--', label = bias_label, linewidth = 0.7)
     plt.scatter(x[session_best_matched], y[session_best_matched], color = 'gray', s = marker_sizes, alpha = 0.9)
     plt.scatter(x[np.logical_not(session_best_matched)], y[np.logical_not(session_best_matched)], 
                 facecolors='none', edgecolors = 'gray', s = marker_sizes, alpha = 0.7)
@@ -228,7 +239,12 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\w_bias_8\\"
     if_hattori_Fig1I = group_results['if_hattori_Fig1I']
 
     # to %
-    results_all_mice[['foraging_efficiency', 'prediction_accuracy_NONCV', 'prediction_accuracy_bias_only', 'prediction_accuracy_Sugrue_NONCV']] *= 100
+    # results_all_mice[['foraging_efficiency', 'prediction_accuracy_NONCV', 'prediction_accuracy_bias_only', 'prediction_accuracy_Sugrue_NONCV']] *= 100
+    results_all_mice.update(results_all_mice.filter(regex='prediction_accuracy|efficiency') * 100) 
+
+    if_CVed  = 'k_fold' in group_results
+    if if_CVed:
+        CV_k_fold = group_results['k_fold']
     
     if average_session_number_range is None:
         average_session_number_range = [0,np.inf]
@@ -367,22 +383,33 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\w_bias_8\\"
     ax = fig.subplots() 
     plt.axhline(50, c = 'k', ls = '--')
     
-    prediction_accuracies = results_all_mice_session_filtered[['mice','prediction_accuracy_NONCV', 'prediction_accuracy_bias_only']]
-    prediction_accuracies = prediction_accuracies.rename(columns={"prediction_accuracy_NONCV": "Hattori 2019", "prediction_accuracy_bias_only": "Bias only"})
-    prediction_accuracies = pd.DataFrame.melt(prediction_accuracies, id_vars = 'mice', var_name = 'models', value_name= 'value')
+    if not if_CVed:  # No CVed data
+        hattori_col_name = 'prediction_accuracy_NONCV'
+        hattori_label = "Hattori (noCV)" 
+        bias_label = "Bias only (noCV)"
+        prediction_accuracies = results_all_mice_session_filtered[['mice', hattori_col_name, 'prediction_accuracy_bias_only']]
+        prediction_accuracies = prediction_accuracies.rename(columns={"prediction_accuracy_NONCV": hattori_label, "prediction_accuracy_bias_only": bias_label})
+        prediction_accuracies = pd.DataFrame.melt(prediction_accuracies, id_vars = 'mice', var_name = 'models', value_name= 'value')
+    else:
+        hattori_col_name = 'prediction_accuracy_CV_test'
+        hattori_label = "Hattori acc (%g-CV)" % CV_k_fold
+        bias_label = "Bias only (%g-CV)" % CV_k_fold
+        prediction_accuracies = results_all_mice_session_filtered[['mice', hattori_col_name, 'prediction_accuracy_CV_test_bias_only']]
+        prediction_accuracies = prediction_accuracies.rename(columns={"prediction_accuracy_CV_test": hattori_label, "prediction_accuracy_CV_test_bias_only": bias_label})
+        prediction_accuracies = pd.DataFrame.melt(prediction_accuracies, id_vars = 'mice', var_name = 'models', value_name= 'value')
 
     x="mice"
     y="value"
     hue = 'models'
-    hh = sns.violinplot(x=x, y=y, hue = hue, data = prediction_accuracies, inner="box", hue_order = ['Bias only','Hattori 2019'],
+    hh = sns.violinplot(x=x, y=y, hue = hue, data = prediction_accuracies, inner="box", hue_order = [bias_label, hattori_label],
                         palette = sns.color_palette(['lightgray', 'r']))    
     
-    ax.set_ylabel('Hattori pred. acc.% (nonCVed)')
+    ax.set_ylabel(hattori_label)
     plt.xticks(rotation=45, horizontalalignment='right')
     ax.set_xlabel('')
     
     # Add Wilcoxon test
-    box_pairs= [((s, "Hattori 2019"), (s, "Bias only")) for s in prediction_accuracies.mice.unique()]
+    box_pairs= [((s, hattori_label), (s, bias_label)) for s in prediction_accuracies.mice.unique()]
     
     add_stat_annotation(hh, data=prediction_accuracies, x=x, y=y, hue=hue, box_pairs=box_pairs,
                         test='Wilcoxon', loc='inside', verbose=0, line_offset_to_box=0.2)
@@ -434,14 +461,14 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\w_bias_8\\"
     
     # 1> Prediction accuracy
     ax = fig.add_subplot(gs[0,0:2])  
-    hh = sns.barplot(x = 'models', y = 'value', data = prediction_accuracies, order = ['Bias only', 'Hattori 2019'], 
+    hh = sns.barplot(x = 'models', y = 'value', data = prediction_accuracies, order = [bias_label, hattori_label], 
                      capsize=.1, palette = sns.color_palette(['lightgray', 'r']))
     plt.axhline(50, c = 'k', ls = '--')
     
-    add_stat_annotation(hh, data=prediction_accuracies, x = 'models', y = 'value', box_pairs=[['Bias only', 'Hattori 2019']],
+    add_stat_annotation(hh, data=prediction_accuracies, x = 'models', y = 'value', box_pairs=[[bias_label, hattori_label]],
                         test='Wilcoxon', loc='inside', verbose=0, line_offset_to_box=0)
     ax.set_xlabel('')
-    ax.set_ylabel('Hattori pred. acc. % (not CV-ed)')
+    ax.set_ylabel(hattori_label)
     ax.set_title('n = %g sessions'%len(prediction_accuracies))
     
     # 2> Step sizes 
@@ -491,10 +518,10 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\w_bias_8\\"
     ax.set_ylim([-2,2])
     
     #%% 5> Correlations
-    # - All paras, session filtered -
-    data = results_all_mice_session_filtered[['session_number','prediction_accuracy_NONCV', 'prediction_accuracy_Sugrue_NONCV', 'foraging_efficiency',
+    # - 1. All paras, session filtered -
+    data = results_all_mice_session_filtered[['session_number', hattori_col_name, 'prediction_accuracy_Sugrue_NONCV', 'foraging_efficiency',
                            '$\\alpha_{rew}$', ' $\\alpha_{unr}$', ' $\\delta$', ' $\\sigma$', ' $b_L$',]]
-    data = data.rename(columns = {'session_number':'session #', 'prediction_accuracy_NONCV': 'pred. accu.', 'prediction_accuracy_Sugrue_NONCV': 'pred. accu. Sugrue',
+    data = data.rename(columns = {'session_number':'session #', hattori_col_name: hattori_label, 'prediction_accuracy_Sugrue_NONCV': 'pred. accu. Sugrue',
                  'foraging_efficiency': 'foraging eff.'})
     
     hh = sns.pairplot( data = data,
@@ -503,10 +530,28 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\w_bias_8\\"
     hh.map_lower(corrfunc)
     plt.tight_layout()
     
+    # - 2. Compare cross-validation versus non-cross-validation -
+    if if_CVed:
+        
+        def plot_diag(x,y, **kargs):
+            plt.plot([50, 100],[50, 100],'k--')
+        
+        data = results_all_mice_session_filtered[['prediction_accuracy_NONCV', 'prediction_accuracy_CV_test',
+                                                  'prediction_accuracy_bias_only', 'prediction_accuracy_CV_test_bias_only' ]]
+        data = data.rename(columns = {'prediction_accuracy_NONCV': 'Hattori non-CV', 'prediction_accuracy_CV_test': 'Hattori %g-CV' % CV_k_fold, 
+                                      'prediction_accuracy_bias_only': 'Bias only non-CV', 'prediction_accuracy_CV_test_bias_only': 'Bias only %g-CV' % CV_k_fold})
+        
+        hh = sns.pairplot( data = data,
+                     kind="reg", height = 1.5, corner = True, plot_kws = {'scatter_kws': dict(s=5, color='gray'), 'line_kws': dict(color='k')})
+        
+        hh.map_lower(plot_diag)
+        plt.tight_layout()
+
+    
     #%% - Foraging Efficiency VS Prediction Accuracy (all sessions included) -
     # > All mice
     data = results_all_mice[['session_number','mice',
-                             'prediction_accuracy_NONCV', 'prediction_accuracy_Sugrue_NONCV', 'foraging_efficiency', 'n_trials']].copy()
+                             hattori_col_name, 'prediction_accuracy_Sugrue_NONCV', 'foraging_efficiency', 'n_trials']].copy()
     
     # palette = sns.color_palette("coolwarm",len(results_all_mice['session_number'].unique()))
     palette_all = sns.color_palette("RdYlGn", max(results_all_mice['session_number'].unique()))
@@ -516,7 +561,7 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\w_bias_8\\"
         palette.append(palette_all[s-1])
     
     # Hattori prediction accuracy
-    x, y = ["prediction_accuracy_NONCV","foraging_efficiency"]
+    x, y = [hattori_col_name, "foraging_efficiency"]
     hh = sns.relplot(x=x, y=y, hue="session_number", size="n_trials",
             sizes=(40, 400), alpha=.5, palette = palette, height=6, data=data, legend = False)
     
@@ -529,7 +574,7 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\w_bias_8\\"
     sns.regplot(x=x, y=y, ax = hh.ax, data=data,
                 scatter = False, label='r = %.3g\np = %.3g'%(r,p), color = 'k')
     
-    plt.xlabel('Hattori pred. acc. %')
+    plt.xlabel(hattori_label)
     plt.ylabel('Foraging efficiency %')
     
     plt.legend()            
@@ -550,7 +595,7 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\w_bias_8\\"
     sns.regplot(x=x, y=y, ax = hh.ax, data=data,
                 scatter = False, label='r = %.3g\np = %.3g'%(r,p), color = 'k')
     
-    plt.xlabel('Sugrue pred. acc. %')
+    plt.xlabel('Sugrue pred. acc. (noCVed)%')
     plt.ylabel('Foraging efficiency %')
     
     plt.legend()            
@@ -566,7 +611,7 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\w_bias_8\\"
     for mm, mouse in enumerate(data.mice.unique()):
         ax = fig.add_subplot(gs[mm]) 
         
-        x = data[data.mice == mouse].prediction_accuracy_NONCV
+        x = data[data.mice == mouse][hattori_col_name]
         y = data[data.mice == mouse].foraging_efficiency
         (r, p) = pearsonr(x, y)
         
@@ -576,7 +621,7 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\w_bias_8\\"
         for s in np.sort(results_all_mice[data.mice == mouse]['session_number'].unique()):
             palette.append(palette_all[s-1])
 
-        sns.scatterplot(x = 'prediction_accuracy_NONCV',y = 'foraging_efficiency', data = data[data.mice == mouse], 
+        sns.scatterplot(x = hattori_col_name,y = 'foraging_efficiency', data = data[data.mice == mouse], 
                         hue = 'session_number', size = 'n_trials', 
                         sizes = (20,100), alpha = 0.8, palette=palette, ax = ax, legend = False)
 
@@ -597,7 +642,7 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\w_bias_8\\"
             plt.xlabel('')
             plt.ylabel('')
         else:
-            plt.xlabel('Hattori pred. acc. %')
+            plt.xlabel(hattori_label)
             plt.ylabel('Foraging efficiency %')
         
         plt.xlim([48,100])
@@ -605,7 +650,7 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\w_bias_8\\"
         plt.axvline(50, c = 'k', ls = '--', lw = 1)
         plt.title(mouse)
 
-    # hh = sns.relplot(x="prediction_accuracy_NONCV", y="foraging_efficiency", hue = "session_number", col="mice", size="n_trials",
+    # hh = sns.relplot(x=hattori_col_name, y="foraging_efficiency", hue = "session_number", col="mice", size="n_trials",
     #         sizes=(40, 400), alpha=.5, palette = palette, data=data, legend = False, col_wrap = 4, height=3, aspect=1)
     # plt.tight_layout()
     plt.show()
