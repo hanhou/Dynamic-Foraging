@@ -449,6 +449,10 @@ def para_optimize(forager, n_reps_per_iter = 200, opti_names = '', bounds = '', 
         elif forager == 'Hattori2019':
             opti_names = ['step_size_unrew', 'step_size_rew', 'forget_rate', 'softmax_temperature']
             bounds = optimize.Bounds([0.01,0.01, 0, 0.1],[0.5, 0.5, 0.5, 1])
+            
+        elif forager == 'PatternMelioration':
+            opti_names = ['step_sizes', 'pattern_meliorate_threshold']
+            bounds = optimize.Bounds([0.01, 0.01],[1, 1])
         
         
     # Parameter optimization with DE    
@@ -627,7 +631,9 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # bandit = Bandit(forager = 'IdealpHatOptimal')
     # bandit = Bandit(forager = 'pMatching')
     # bandit = Bandit(forager = 'AmB1', m_AmB1=5)
-    # run_sessions_parallel(bandit, n_reps = 200, pool = pool)
+    
+    # bandit = Bandit(forager = 'PatternMelioration', step_sizes = 0.86, pattern_meliorate_threshold = 0.11, block_size_mean = 500, n_trials = global_n_trials)
+    # run_sessions_parallel(bandit, n_reps = 100, pool = pool)
 
     #%% =============================================================================
     #     Parameter scan (1-D or 2-D)
@@ -659,7 +665,13 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     #                 'taus': taus,
     #                 }
     # results_para_scan = para_scan('Corrado2005', para_to_scan, w_taus = [0.33, 0.67],  epsilon = 0, n_reps = 100, pool = pool)
-       
+ 
+    # --PatternMelioration in 2D
+    para_to_scan = {'step_sizes': np.power(10, np.linspace(-2,0,15)),
+                    'pattern_meliorate_threshold': np.power(10, np.linspace(-2,0,15)),
+                    }
+    results_para_scan = para_scan('PatternMelioration', para_to_scan, n_reps = 50, pool = pool)
+      
         
     #%% =============================================================================
     #   Automatic Parameter Optimization for Performance
@@ -676,6 +688,11 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # RL-like
     # opti_para = para_optimize('Bari2019', n_reps_per_iter = 200, pool = pool)  # 83.7% @ [0.37058271, 0.07003851, 0.27212561]
     # opti_para = para_optimize('Hattori2019', n_reps_per_iter = 200, pool = pool)  # 83.7% @ [0.39740558, 0.22740528, 0.11980517, 0.33762251] 
+
+    # PatternMelioration 
+    # opti_para = para_optimize('PatternMelioration', n_reps_per_iter = 100, pool = pool)    
+    # [0.75390183, 0.67403303] for block-model-free;  
+    # [0.86710063, 0.11670503] 94.4% for block-model-based-reset;
 
     # =============================================================================
     #   For higher total reward prob (sum = 0.8)
@@ -702,51 +719,52 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # RL-like
     # opti_para = para_optimize('Bari2019', n_reps_per_iter = 200, p_reward_pairs = [[0.45, 0]], pool = pool)  # 77.3% [0.40388374, 0.19951699, 0.22852593]
         
-        
+    
+       
 
         
     #%% ===========================================================================
     #   Model Competition (1-d slice across the global optimum of each model)
     # =============================================================================
     
-    model_compet_settings = [
+    # model_compet_settings = [
         
-        {'forager': 'LossCounting', 
-          'para_to_scan': {'loss_count_threshold_mean': np.hstack([0.37879938,np.power(2,np.linspace(0,6,13))])}, 
-          'para_to_fix': {'loss_count_threshold_std': 0.18915971}}, 
+    #     {'forager': 'LossCounting', 
+    #       'para_to_scan': {'loss_count_threshold_mean': np.hstack([0.37879938,np.power(2,np.linspace(0,6,13))])}, 
+    #       'para_to_fix': {'loss_count_threshold_std': 0.18915971}}, 
                
-        # {'forager': 'Sugrue2004', 
-        #  'para_to_scan': {'taus': np.hstack([9.88406144, np.power(2, np.linspace(0,8,15))])},
-        #  'para_to_fix':  {'epsilon': 0.313648}},
+    #     # {'forager': 'Sugrue2004', 
+    #     #  'para_to_scan': {'taus': np.hstack([9.88406144, np.power(2, np.linspace(0,8,15))])},
+    #     #  'para_to_fix':  {'epsilon': 0.313648}},
         
-        # {'forager': 'Sugrue2004', 
-        #   'para_to_scan': {'epsilon': np.hstack([0.313648, np.linspace(0,1,20)])},
-        #   'para_to_fix':  {'taus': 9.88406144}},
+    #     # {'forager': 'Sugrue2004', 
+    #     #   'para_to_scan': {'epsilon': np.hstack([0.313648, np.linspace(0,1,20)])},
+    #     #   'para_to_fix':  {'taus': 9.88406144}},
          
-        # {'forager': 'Corrado2005', 
-        #  'para_to_scan': {'w_taus': [[1-w_slow, w_slow] for w_slow in np.hstack([0.04822465, np.linspace(0,1,15)])]}, 
-        #  'para_to_fix':  {'taus':  [6.17853872, 30.31342409], 'softmax_temperature':  0.18704151}},
+    #     # {'forager': 'Corrado2005', 
+    #     #  'para_to_scan': {'w_taus': [[1-w_slow, w_slow] for w_slow in np.hstack([0.04822465, np.linspace(0,1,15)])]}, 
+    #     #  'para_to_fix':  {'taus':  [6.17853872, 30.31342409], 'softmax_temperature':  0.18704151}},
         
-        # {'forager': 'Corrado2005', 
-        #   'para_to_scan': {'softmax_temperature': np.hstack([0.18704151, np.power(10, np.linspace(-1.5,0,15))])}, 
-        #   'para_to_fix':  {'taus':  [6.17853872, 30.31342409], 'w_taus': [1-0.04822465, 0.04822465]}},
+    #     # {'forager': 'Corrado2005', 
+    #     #   'para_to_scan': {'softmax_temperature': np.hstack([0.18704151, np.power(10, np.linspace(-1.5,0,15))])}, 
+    #     #   'para_to_fix':  {'taus':  [6.17853872, 30.31342409], 'w_taus': [1-0.04822465, 0.04822465]}},
          
-        # {'forager': 'Bari2019', 
-        #   'para_to_scan': {'step_sizes': np.hstack([0.37058271, np.power(10, np.linspace(-2,0,15))])}, 
-        #   'para_to_fix':  {'forget_rate': 0.07003851, 'softmax_temperature': 0.27212561}},
+    #     # {'forager': 'Bari2019', 
+    #     #   'para_to_scan': {'step_sizes': np.hstack([0.37058271, np.power(10, np.linspace(-2,0,15))])}, 
+    #     #   'para_to_fix':  {'forget_rate': 0.07003851, 'softmax_temperature': 0.27212561}},
 
-        # {'forager': 'Bari2019', 
-        #   'para_to_scan': {'softmax_temperature': np.hstack([0.27212561, np.power(10, np.linspace(-1.5,0,20))])}, 
-        #   'para_to_fix':  {'forget_rate': 0.07003851, 'step_sizes': 0.37058271}},
+    #     # {'forager': 'Bari2019', 
+    #     #   'para_to_scan': {'softmax_temperature': np.hstack([0.27212561, np.power(10, np.linspace(-1.5,0,20))])}, 
+    #     #   'para_to_fix':  {'forget_rate': 0.07003851, 'step_sizes': 0.37058271}},
 
          
-        {'forager': 'Hattori2019', 
-          'para_to_scan': {'softmax_temperature': np.hstack([0.33762251, np.power(10, np.linspace(-1.5,0,15))])}, 
-          'para_to_fix':  {'forget_rate':  0.11980517, 'step_sizes': [0.39740558, 0.22740528]}},
+    #     {'forager': 'Hattori2019', 
+    #       'para_to_scan': {'softmax_temperature': np.hstack([0.33762251, np.power(10, np.linspace(-1.5,0,15))])}, 
+    #       'para_to_fix':  {'forget_rate':  0.11980517, 'step_sizes': [0.39740558, 0.22740528]}},
         
-        ]
+    #     ]
 
-    model_compet(model_compet_settings, if_baited = True, n_reps = 100, pool = pool) 
+    # model_compet(model_compet_settings, if_baited = True, n_reps = 100, pool = pool) 
         
        
         

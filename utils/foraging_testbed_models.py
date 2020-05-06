@@ -29,7 +29,8 @@
 #       2). 'Bari2019':        return/income  ->   exp filter (both forgetting)   -> softmax     -> epsilon-Poisson (epsilon = 0 in their paper, no necessary)
 #       3). 'Hattori2019':     return/income  ->   exp filter (choice-dependent forgetting, reward-dependent step_size)  -> softmax  -> epsilon-Poisson (epsilon = 0 in their paper; no necessary)
 #
-#   
+#   4. Model-based (Pattern + Melioration)
+# 
 # = About epsilon (the probability of making a random choice on each trial):
 #  - Epsilon is a simple way of encouraging exploration. There is virtually no cost -- just be lazy. (see Sutton&Barto's RL book, p.28)
 #  - 'Sugrue 2004' and 'Iigaya2019' needs explicit exploration, because they use fractional income (could incorrectly converge to 1, resulting in making the same choice forever). 
@@ -60,8 +61,7 @@ import numpy as np
 LEFT = 0
 RIGHT = 1
 
-global_block_size_mean = 80
-global_block_size_sd = 20
+
 
 def softmax(x,softmax_temperature):
     max_temp = np.max(x/softmax_temperature)
@@ -82,6 +82,8 @@ class Bandit:
     # @step_size: constant step size for updating estimations
     
     def __init__(self, forager = 'SuttonBartoRLBook', k_arm = 2, n_trials = 1000, if_baited = True, if_para_optim = False,
+                 block_size_mean = 80, block_size_sd = 20, 
+                 
                  epsilon = 0,          # Essential for 'SuttonBartoRLBook', 'Sugrue 2004', 'Iigaya2019'. See notes above.
                  random_before_total_reward = 0, # Not needed by default. See notes above
                  softmax_temperature = np.nan,   # For 'Bari2019', 'Hattori2019','Corrado2005'
@@ -89,7 +91,7 @@ class Bandit:
                  taus = 20,        # For 'Sugrue2004' (only one tau is needed), 'Corrado2005', 'Iigaya2019'. Could be any number of taus, e.g., [2,15]
                  w_taus = 1,       # For 'Sugrue2004' (w_tau = 1), 'Corrado2005', 'Iigaya2019'.              Could be any number of taus, e.g., [0.3, 0.7]
                  
-                 step_sizes = 0.1,      # For 'SuttonBartoRLBook'， 'Bari2019'， 'Hattori2019' (step_sizes = [unrewarded step_size, rewarded step_size]).
+                 step_sizes = 0.1,      # For 'SuttonBartoRLBook'， 'Bari2019'， 'Hattori2019' (step_sizes = [unrewarded step_size, rewarded step_size]); 'PatternMelioration'
                  forget_rate = 0,      # For 'SuttonBartoRLBook' (= 0)， 'Bari2019' (= 1-Zeta)， 'Hattori2019' ( = unchosen_forget_rate).
                  
                  loss_count_threshold_mean = 3,   # For 'LossCounting' [from Shahidi 2019]
@@ -100,8 +102,12 @@ class Bandit:
                  p_reward_pairs = None,  # Full control of reward prob
                  
                  m_AmB1 = 1,  # For choice pattern {AmB1}
+                 
+                 pattern_meliorate_threshold = 0.1,
                  ):     
-
+        self.block_size_mean = block_size_mean
+        self.block_size_sd = block_size_sd
+        
         self.forager = forager
         self.k = k_arm
         self.n_trials = n_trials
@@ -117,6 +123,8 @@ class Bandit:
         self.p_reward_sum = p_reward_sum
         self.p_reward_pairs = p_reward_pairs
         self.m_AmB1 = m_AmB1
+        
+        self.pattern_meliorate_threshold = pattern_meliorate_threshold
             
         if forager == 'Sugrue2004':
             self.taus = [taus]
@@ -127,7 +135,8 @@ class Bandit:
 
         
         # Turn step_size and forget_rate into reward- and choice- dependent, respectively. (for 'Hattori2019')
-        if forager == 'SuttonBartoRLBook':
+        if forager in ['SuttonBartoRLBook', 'PatternMelioration']:
+            # 'PatternMelioration' = 'SuttonBartoRLBook'(i.e. RW1972) here because it needs to compute the average RETURN.
             self.step_sizes = [step_sizes] * 2  # Replication
             self.forget_rates = [0, 0]   # Override
         elif forager == 'Bari2019':
@@ -149,7 +158,7 @@ class Bandit:
         self.reward_history = np.zeros([self.k, self.n_trials])    # Reward history, separated for each port (Corrado Newsome 2005)
         
         # Generate baiting prob in block structure
-        self.generate_p_reward()
+        self.generate_p_reward(self.block_size_mean, self.block_size_sd)
         
         # Prepare reward for the first trial
         # For example, [0,1] represents there is reward baited at the RIGHT but not LEFT port.
@@ -186,11 +195,17 @@ class Bandit:
             self.loss_count = np.zeros([1, self.n_trials]) 
             self.loss_threshold_this = np.random.normal(self.loss_count_threshold_mean, self.loss_count_threshold_std)
 
+        elif self.forager == 'PatternMelioration':  # Only for k = 2 now
+            self.description = 'PatternMelioration, step_sizes = %s (tau_eff = %s), pattern_meliorate_threshold = %g' % \
+                               (np.round(np.array(self.step_sizes),3), np.round(1/np.array(self.step_sizes),3), self.pattern_meliorate_threshold)
+
+            self.pattern_now = np.array([1, 1])  # E.g.: [1,1]: LRLRLR, [1,2]: RRLRRLRRL, [2,1]: LLRLLRLLR
+            self.run_length_now = np.array([0, 0]) 
+                              
         else:
             self.description = self.forager
             
-    def generate_p_reward(self, block_size_base = global_block_size_mean, 
-                                block_size_sd = global_block_size_sd,
+    def generate_p_reward(self, block_size_base = 80, block_size_sd = 20,
                                 p_reward_pairs = [[.4,.05],[.3857,.0643],[.3375,.1125],[.225,.225]],  # (Bari-Cohen 2019)  
                          ):  
         
@@ -391,7 +406,49 @@ class Bandit:
             
         elif self.forager == 'IdealpGreedy':
             choice = np.random.choice(np.where(self.p_reward[:,self.time] == self.p_reward[:,self.time].max())[0])
+            
+        elif self.forager == 'PatternMelioration':
+            rich_now = np.argmax(self.pattern_now)
+            lean_now = 1 - rich_now
+            
+            if self.run_length_now[rich_now] < self.pattern_now[rich_now]:     # If rich side is not finished
+                choice = rich_now  # Make decision
+                self.run_length_now[rich_now] += 1 # Update counter
                 
+            elif self.run_length_now[lean_now] < self.pattern_now[lean_now]:   # If rich has been just finished, run the lean side
+                # assert(self.pattern_now[lean_now] == 1)  # Only 1 trial for sure
+                choice = lean_now
+                self.run_length_now[lean_now] += 1 # Update counter
+                
+            else:                                                              # Otherwise, this pattern has been finished
+                # Update the next pattern
+                if np.abs(np.diff(self.q_estimation[:, self.time])) >= self.pattern_meliorate_threshold: # Probability of update pattern = Step function
+                    rich_Q = np.argmax(self.q_estimation[:, self.time])  # Better side indicated by Q
+                    
+                    if np.all(self.pattern_now == 1):  # Already in {1,1}
+                        self.pattern_now[rich_Q] += 1
+                    else:  # Only modify rich side
+                    
+                        # -- Block-state enables fast switch
+                        if rich_Q == rich_now:
+                            self.pattern_now[rich_now] += 1 
+                        else:  # Maybe this is a block switch, let's try to make some large modification
+                            # self.pattern_now[rich_now] -= 1  
+                            # self.pattern_now = np.flipud(self.pattern_now)  # Flip
+                            self.pattern_now = np.array([1,1])  # Reset
+                            self.q_estimation[:, self.time] = 0
+                                        
+                        # -- Not aware of block structure
+                        # pattern_step = 1 if (rich_Q == rich_now) else -1   # If the sign of diff_Q is aligned with rich_pattern, then add 1
+                        # self.pattern_now[rich_now] += pattern_step                        
+                
+                self.run_length_now = np.array([0,0])  # Reset counter
+                
+                # Make the first trial for the next pattern
+                rich_now = np.argmax(self.pattern_now) # Use the new pattern
+                choice = rich_now
+                self.run_length_now[rich_now] += 1 # Update counter
+            
         else:
             if np.random.rand() < self.epsilon or np.sum(self.reward_history) < self.random_before_total_reward: 
                 # Forced exploration with the prob. of epsilon (to avoid AlwaysLEFT/RIGHT in Sugrue2004...)
@@ -467,12 +524,14 @@ class Bandit:
                 else:
                     self.loss_count[0, self.time] = self.loss_count[0, self.time - 1] + 1
                 
-        elif self.forager in ['SuttonBartoRLBook', 'Bari2019', 'Hattori2019']:    
+        elif self.forager in ['SuttonBartoRLBook', 'Bari2019', 'Hattori2019', 'PatternMelioration']:    
             # Local return
             # Note 1: These three foragers only differ in how they handle step size and forget rate.
             # Note 2: It's "return" rather than "income" because the unchosen Q is not updated (when forget_rate = 0 in SuttonBartoRLBook)
             # Note 3: However, if forget_rate > 0, the unchosen one is also updated, and thus it's somewhere between "return" and "income".
             #         In fact, when step_size = forget_rate, the unchosen Q is updated by exactly the same rule as chosen Q, so it becomes exactly "income"
+            
+            # 'PatternMelioration' = 'SuttonBartoRLBook'(i.e. RW1972) here because it needs to compute the average RETURN.
             
             # Reward-dependent step size ('Hattori2019')
             if reward:   
