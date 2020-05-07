@@ -103,8 +103,11 @@ class Bandit:
                  
                  m_AmB1 = 1,  # For choice pattern {AmB1}
                  
-                 pattern_meliorate_threshold = 0.1,
+                 pattern_meliorate_threshold = np.nan,
+                 pattern_meliorate_softmax_temp = np.nan,
+                 pattern_meliorate_softmax_max_step = np.nan,
                  ):     
+        
         self.block_size_mean = block_size_mean
         self.block_size_sd = block_size_sd
         
@@ -125,6 +128,8 @@ class Bandit:
         self.m_AmB1 = m_AmB1
         
         self.pattern_meliorate_threshold = pattern_meliorate_threshold
+        self.pattern_meliorate_softmax_temp = pattern_meliorate_softmax_temp
+        self.pattern_meliorate_softmax_max_step = pattern_meliorate_softmax_max_step
             
         if forager == 'Sugrue2004':
             self.taus = [taus]
@@ -135,7 +140,7 @@ class Bandit:
 
         
         # Turn step_size and forget_rate into reward- and choice- dependent, respectively. (for 'Hattori2019')
-        if forager in ['SuttonBartoRLBook', 'PatternMelioration']:
+        if forager in ['SuttonBartoRLBook', 'PatternMelioration', 'PatternMelioration_softmax']:
             # 'PatternMelioration' = 'SuttonBartoRLBook'(i.e. RW1972) here because it needs to compute the average RETURN.
             self.step_sizes = [step_sizes] * 2  # Replication
             self.forget_rates = [0, 0]   # Override
@@ -195,9 +200,10 @@ class Bandit:
             self.loss_count = np.zeros([1, self.n_trials]) 
             self.loss_threshold_this = np.random.normal(self.loss_count_threshold_mean, self.loss_count_threshold_std)
 
-        elif self.forager == 'PatternMelioration':  # Only for k = 2 now
-            self.description = 'PatternMelioration, step_sizes = %s (tau_eff = %s), pattern_meliorate_threshold = %g' % \
-                               (np.round(np.array(self.step_sizes),3), np.round(1/np.array(self.step_sizes),3), self.pattern_meliorate_threshold)
+        elif 'PatternMelioration' in self.forager:  # Only for k = 2 now
+            self.description = '%s, step_sizes = %s (tau_eff = %s), pattern_meliorate_threshold = %g, soft_temp = %g' % \
+                               (self.forager, np.round(np.array(self.step_sizes),3), np.round(1/np.array(self.step_sizes),3), 
+                                self.pattern_meliorate_threshold, self.pattern_meliorate_softmax_temp)
 
             self.pattern_now = np.array([1, 1])  # E.g.: [1,1]: LRLRLR, [1,2]: RRLRRLRRL, [2,1]: LLRLLRLLR
             self.run_length_now = np.array([0, 0]) 
@@ -407,7 +413,7 @@ class Bandit:
         elif self.forager == 'IdealpGreedy':
             choice = np.random.choice(np.where(self.p_reward[:,self.time] == self.p_reward[:,self.time].max())[0])
             
-        elif self.forager == 'PatternMelioration':
+        elif 'PatternMelioration' in self.forager:
             rich_now = np.argmax(self.pattern_now)
             lean_now = 1 - rich_now
             
@@ -421,36 +427,54 @@ class Bandit:
                 self.run_length_now[lean_now] += 1 # Update counter
                 
             else:                                                              # Otherwise, this pattern has been finished
-                # Update the next pattern
-                if np.abs(np.diff(self.q_estimation[:, self.time])) >= self.pattern_meliorate_threshold: # Probability of update pattern = Step function
-                    rich_Q = np.argmax(self.q_estimation[:, self.time])  # Better side indicated by Q
-                    
-                    if np.all(self.pattern_now == 1):  # Already in {1,1}
-                        self.pattern_now[rich_Q] += 1
-                    else:  # Only modify rich side
-                        # -- Estimate p_base by Q (no block structure, direct estimation) --  Doesn't work... Sampling the lean side is not efficient
-                        # p_base_est_rich = self.q_estimation[rich_now, self.time]
-                        # p_base_est_lean = self.q_estimation[lean_now, self.time] / self.pattern_now[rich_Q]
-                    
-                        # [m, n], _ = self.get_IdealpHatGreedy_strategy([p_base_est_rich, p_base_est_lean])
-                        # m = min(m,15)
+                if self.forager == 'PatternMelioration':
+                    # Update the next pattern
+                    if np.abs(np.diff(self.q_estimation[:, self.time])) >= self.pattern_meliorate_threshold: # Probability of update pattern = Step function
+                        rich_Q = np.argmax(self.q_estimation[:, self.time])  # Better side indicated by Q
                         
-                        # if p_base_est_rich > p_base_est_lean:  # Don't change side
-                        #     self.pattern_now[[rich_now, lean_now]] = [m, 1]
-                        # else:
-                        #     self.pattern_now[[rich_now, lean_now]] = [1, m]  # Switch side immediately
+                        if np.all(self.pattern_now == 1):  # Already in {1,1}
+                            self.pattern_now[rich_Q] += 1
+                        else:  # Only modify rich side
+                            # -- Estimate p_base by Q (no block structure, direct estimation) --  Doesn't work... Sampling the lean side is not efficient
+                            # p_base_est_rich = self.q_estimation[rich_now, self.time]
+                            # p_base_est_lean = self.q_estimation[lean_now, self.time] / self.pattern_now[rich_Q]
                         
-                        # -- Block-state enables fast switch
-                        if rich_Q == rich_now:
-                            self.pattern_now[rich_now] += 1 
-                        else:  # Maybe this is a block switch, let's try to make some large modification
-                            # self.pattern_now = np.flipud(self.pattern_now)  # Flip
-                            self.pattern_now = np.array([1,1])  # Reset
-                            self.q_estimation[:, self.time] = 0
-                                        
-                        # -- Not aware of block structure
-                        # pattern_step = 1 if (rich_Q == rich_now) else -1   # If the sign of diff_Q is aligned with rich_pattern, then add 1
-                        # self.pattern_now[rich_now] += pattern_step                        
+                            # [m, n], _ = self.get_IdealpHatGreedy_strategy([p_base_est_rich, p_base_est_lean])
+                            # m = min(m,15)
+                            
+                            # if p_base_est_rich > p_base_est_lean:  # Don't change side
+                            #     self.pattern_now[[rich_now, lean_now]] = [m, 1]
+                            # else:
+                            #     self.pattern_now[[rich_now, lean_now]] = [1, m]  # Switch side immediately
+                            
+                            # -- Block-state enables fast switch
+                            if rich_Q == rich_now:
+                                self.pattern_now[rich_now] += 1 
+                            else:  # Maybe this is a block switch, let's try to make some large modification
+                                # self.pattern_now = np.flipud(self.pattern_now)  # Flip
+                                self.pattern_now = np.array([1,1])  # Reset
+                                self.q_estimation[:, self.time] = 0
+                                            
+                            # -- Not aware of block structure
+                            # pattern_step = 1 if (rich_Q == rich_now) else -1   # If the sign of diff_Q is aligned with rich_pattern, then add 1
+                            # self.pattern_now[rich_now] += pattern_step                        
+                
+                elif self.forager == 'PatternMelioration_softmax':
+                    # -- Update_step \propto sigmoid --
+                    # deltaQ = self.q_estimation[rich_now, self.time] - self.q_estimation[lean_now, self.time]
+                    # update_step = int(self.pattern_meliorate_softmax_max_step * 2 * (1 / (1 + np.exp(- deltaQ / self.pattern_meliorate_softmax_temp)) - 0.5))  # Max = 10
+                    # self.pattern_now[rich_now] += update_step
+                    # if self.pattern_now[rich_now] < 1: 
+                    #     self.pattern_now[lean_now] = 2 - self.pattern_now[rich_now]
+                    #     self.pattern_now[rich_now] = 1
+                    
+                    # -- Softmax -> get p -> use {floor(p/(1-p)), 1} --
+                    choice_p = softmax(self.q_estimation[:, self.time], self.pattern_meliorate_softmax_temp)
+                    rich_Q = np.argmax(choice_p)
+                    m_est = np.floor(choice_p[rich_Q] / choice_p[1-rich_Q])
+                    m_est = np.min([m_est, 10])
+                    self.pattern_now[[rich_Q, 1-rich_Q]] = [m_est, 1]                    
+                    
                 
                 self.run_length_now = np.array([0,0])  # Reset counter
                 
@@ -458,7 +482,7 @@ class Bandit:
                 rich_now = np.argmax(self.pattern_now) # Use the new pattern
                 choice = rich_now
                 self.run_length_now[rich_now] += 1 # Update counter
-            
+                
         else:
             if np.random.rand() < self.epsilon or np.sum(self.reward_history) < self.random_before_total_reward: 
                 # Forced exploration with the prob. of epsilon (to avoid AlwaysLEFT/RIGHT in Sugrue2004...)
@@ -534,7 +558,7 @@ class Bandit:
                 else:
                     self.loss_count[0, self.time] = self.loss_count[0, self.time - 1] + 1
                 
-        elif self.forager in ['SuttonBartoRLBook', 'Bari2019', 'Hattori2019', 'PatternMelioration']:    
+        elif self.forager in ['SuttonBartoRLBook', 'Bari2019', 'Hattori2019'] or 'PatternMelioration' in self.forager:
             # Local return
             # Note 1: These three foragers only differ in how they handle step size and forget rate.
             # Note 2: It's "return" rather than "income" because the unchosen Q is not updated (when forget_rate = 0 in SuttonBartoRLBook)

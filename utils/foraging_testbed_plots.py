@@ -45,7 +45,7 @@ def get_baseline(if_baited, p_reward_sum, p_reward_pairs):
 
 def plot_one_session(bandit, fig, plottype='2lickport'):
     
-    if bandit.forager in ['IdealpHatOptimal', 'IdealpHatGreedy', 'PatternMelioration']:
+    if bandit.forager in ['IdealpHatOptimal', 'IdealpHatGreedy'] or 'PatternMelioration' in bandit.forager:
         smooth_factor = 1
     else:
         smooth_factor = 5
@@ -80,7 +80,7 @@ def plot_one_session(bandit, fig, plottype='2lickport'):
     if bandit.forager in ['LossCounting']:
         ax.plot(bandit.loss_count[0,:] / 10, color='Blue', label = 'loss count')
 
-    elif bandit.forager == 'PatternMelioration':
+    elif 'PatternMelioration' in bandit.forager:
         ax.plot(moving_average(bandit.q_estimation[RIGHT,:], 1), 'g-', label = 'Q_R')
         ax.plot(moving_average(bandit.q_estimation[LEFT,:], 1), 'g--', label = 'Q_L')
         

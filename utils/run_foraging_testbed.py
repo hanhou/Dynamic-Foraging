@@ -453,7 +453,14 @@ def para_optimize(forager, n_reps_per_iter = 200, opti_names = '', bounds = '', 
         elif forager == 'PatternMelioration':
             opti_names = ['step_sizes', 'pattern_meliorate_threshold']
             bounds = optimize.Bounds([0.01, 0.01],[1, 1])
-        
+
+        # elif forager == 'PatternMelioration_softmax':
+        #     opti_names = ['step_sizes', 'pattern_meliorate_softmax_temp', 'pattern_meliorate_softmax_max_step']
+        #     bounds = optimize.Bounds([0.01, 0.01, 1],[1, 1, 10])
+
+        elif forager == 'PatternMelioration_softmax':
+            opti_names = ['step_sizes', 'pattern_meliorate_softmax_temp']
+            bounds = optimize.Bounds([0.01, 0.01],[1, 1])
         
     # Parameter optimization with DE    
     opti_para = optimize.differential_evolution(func = score_func, args = (forager, opti_names, n_reps_per_iter, if_baited, p_reward_sum, p_reward_pairs, pool), bounds = bounds, 
@@ -632,7 +639,12 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # bandit = Bandit(forager = 'pMatching')
     # bandit = Bandit(forager = 'AmB1', m_AmB1=5)
     
-    bandit = Bandit(forager = 'PatternMelioration', step_sizes = 0.2, pattern_meliorate_threshold = 0.1, block_size_mean = 80, n_trials = global_n_trials)
+    # bandit = Bandit(forager = 'PatternMelioration', step_sizes = 0.2, pattern_meliorate_threshold = 0.1, block_size_mean = 80, n_trials = global_n_trials)
+    # results_all_sessions = run_sessions_parallel(bandit, n_reps = 500, pool = pool)
+
+    bandit = Bandit(forager = 'PatternMelioration_softmax', step_sizes = 0.1477, pattern_meliorate_softmax_temp = 0.1781, 
+                    # pattern_meliorate_softmax_max_step = 4.6,
+                    block_size_mean = 80, n_trials = global_n_trials)
     results_all_sessions = run_sessions_parallel(bandit, n_reps = 500, pool = pool)
 
     # === Runlength analysis for PatternMelioration ===
@@ -698,6 +710,15 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     #                 }
     # results_para_scan = para_scan('PatternMelioration', para_to_scan, n_reps = 50, pool = pool)
       
+
+    # --PatternMelioration_softmax in 2D
+    # para_to_scan = {'step_sizes': np.power(10, np.linspace(-1,0,10)),
+    #                 'pattern_meliorate_softmax_temp': np.power(10, np.linspace(-1,0,10)),
+    #                 }
+    # results_para_scan = para_scan('PatternMelioration_softmax', para_to_scan, n_reps = 50, 
+    #                               # pattern_meliorate_softmax_max_step = 2.5,
+    #                               pool = pool)
+
         
     #%% =============================================================================
     #   Automatic Parameter Optimization for Performance
@@ -719,6 +740,12 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # opti_para = para_optimize('PatternMelioration', n_reps_per_iter = 200, pool = pool)    
     # [0.75390183, 0.67403303] for block-model-free;  
     # [0.86710063, 0.11670503] 94.4% for block-model-based-reset (reset pattern only);
+    
+    # opti_para = para_optimize('PatternMelioration_softmax', n_reps_per_iter = 200, pool = pool)
+    # [0.69983055, 0.92476905, 4.65317582]  92.1%, sigmoid --> update step
+    
+    # opti_para = para_optimize('PatternMelioration_softmax', n_reps_per_iter = 200, pool = pool)
+    #  [0.1477 0.1781]         softmax --> p --> m = floor(p/(1-p))
 
     # =============================================================================
     #   For higher total reward prob (sum = 0.8)
