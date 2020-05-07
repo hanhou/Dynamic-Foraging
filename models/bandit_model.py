@@ -87,8 +87,9 @@ class BanditModel:
                  w_tau1 = None,      
                  
                  # For 'RW1972_epsi','RW1972_softmax','Bari2019', 'Hattori2019'
-                 learn_rate_rew = None,     
-                 learn_rate_unrew = None,
+                 learn_rate = None, # For RW and Bari
+                 learn_rate_rew = None,     # For Hattori
+                 learn_rate_unrew = None,     # For Hattori
                  forget_rate = None,   # 'RW1972_xxx' (= 0)， 'Bari2019' (= 1-Zeta)， 'Hattori2019' ( = unchosen_forget_rate).
                  
                  # For 'LossCounting' [from Shahidi 2019]
@@ -161,13 +162,13 @@ class BanditModel:
                 self.w_taus = [w_tau1, 1 - w_tau1]
                 
         elif 'RW1972' in forager:
-            assert all(x is not None for x in (learn_rate_rew,))
-            self.learn_rates = [learn_rate_rew, learn_rate_rew]    # RW1972 has the same learning rate for rewarded / unrewarded trials
+            assert all(x is not None for x in (learn_rate,))
+            self.learn_rates = [learn_rate, learn_rate]    # RW1972 has the same learning rate for rewarded / unrewarded trials
             self.forget_rates = [0, 0]   # RW1972 does not forget
         
         elif forager == 'Bari2019':
-            assert all(x is not None for x in (learn_rate_rew, forget_rate))
-            self.learn_rates = [learn_rate_rew, learn_rate_rew]   # Bari2019 also has the same learning rate for rewarded / unrewarded trials
+            assert all(x is not None for x in (learn_rate, forget_rate))
+            self.learn_rates = [learn_rate, learn_rate]   # Bari2019 also has the same learning rate for rewarded / unrewarded trials
             self.forget_rates = [forget_rate, forget_rate]
             
         elif forager == 'Hattori2019':

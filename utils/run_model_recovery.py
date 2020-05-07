@@ -281,7 +281,7 @@ def generate_random_para(forager, para_name):
         return np.random.uniform(0, 5)
     if para_name in ['tau1', 'tau2']:
         return 10**np.random.uniform(0, np.log10(30)) 
-    if para_name in ['w_tau1', 'learn_rate_rew', 'learn_rate_unrew', 'forget_rate', 'epsilon']:
+    if para_name in ['w_tau1', 'learn_rate', 'learn_rate_rew', 'learn_rate_unrew', 'forget_rate', 'epsilon']:
         return np.random.uniform(0, 1)
     if para_name in 'softmax_temperature':
         return 1/np.random.exponential(10)
@@ -412,7 +412,8 @@ if __name__ == '__main__':
     # n_trials = 1000
 
     # forager = 'RW1972_epsi'
-    # para_names = ['learn_rate_rew','epsilon']
+    # # para_names = ['learn_rate_rew','epsilon']
+    # para_names = ['learn_rate','epsilon']
     # para_scales = ['linear','linear']
     # para_bounds = [[0, 0],
     #                 [1, 1]]
@@ -440,7 +441,8 @@ if __name__ == '__main__':
     # n_trials = 100
     
     # forager = 'RW1972_softmax'
-    # para_names = ['learn_rate_rew','softmax_temperature']
+    # # para_names = ['learn_rate_rew','softmax_temperature']
+    # para_names = ['learn_rate','softmax_temperature']
     # para_scales = ['linear','log']
     # para_bounds = [[0, 1e-2],
     #                 [1, 15]]
@@ -468,7 +470,8 @@ if __name__ == '__main__':
     # n_trials = 1000
 
     # forager = 'Bari2019'
-    # para_names = ['learn_rate_rew','forget_rate','softmax_temperature']
+    # # para_names = ['learn_rate_rew','forget_rate','softmax_temperature']
+    # para_names = ['learn_rate','forget_rate','softmax_temperature']
     # para_scales = ['linear','linear', 'log']
     # para_bounds = [[0, 0, 1e-2],
     #                 [1, 1, 15]]
@@ -513,15 +516,15 @@ if __name__ == '__main__':
     #                 fit_method = 'DE', n_x0s = 8, pool = pool)
     
     # # # ----------------------- Model Comparison ----------------------------------
-    # # fake_data = generate_fake_data('LossCounting', ['loss_count_threshold_mean','loss_count_threshold_std'], [10,3], n_trials = 1000)
-    # # fake_data = generate_fake_data('RW1972_softmax', ['learn_rate_rew','softmax_temperature'], [0.2,0.3])
-    # fake_data = generate_fake_data('Hattori2019', ['learn_rate_rew','learn_rate_unrew', 'forget_rate','softmax_temperature'], 
-    #                                                   [0.23392543, 0.318161268, 0.3, 0.22028081], n_trials = 100)
+    # fake_data = generate_fake_data('LossCounting', ['loss_count_threshold_mean','loss_count_threshold_std'], [10,3], n_trials = 1000)
+    # fake_data = generate_fake_data('RW1972_softmax', ['learn_rate_rew','softmax_temperature'], [0.2,0.3])
+    choice_history, reward_history, p_reward = generate_fake_data('Hattori2019', ['learn_rate_rew','learn_rate_unrew', 'forget_rate','softmax_temperature'], 
+                                                      [0.23392543, 0.318161268, 0.3, 0.22028081], n_trials = 100)
     
-    # model_comparison = BanditModelComparison(fake_data)
-    # model_comparison.fit(pool = pool, plot_predictive=[1,2,3])
-    # model_comparison.show()
-    # model_comparison.plot()
+    model_comparison = BanditModelComparison(choice_history, reward_history, p_reward)
+    model_comparison.fit(pool = pool, plot_predictive=[1,2,3])
+    model_comparison.show()
+    model_comparison.plot()
     
     # choice_history, reward_history, p_reward = generate_fake_data('IdealpHatGreedy', [],[], n_trials = 1000)  # Almost Hattori et al.
     # model_comparison = BanditModelComparison(choice_history, reward_history, p_reward, models = [
