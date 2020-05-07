@@ -501,8 +501,6 @@ def analyze_runlength_of_models(block_partitions = [50,50]):   # Runlength analy
     
     run_length_Lau = analyze_runlength_Lau2005(choice_history, p_reward, block_partitions = block_partitions)
     plot_runlength_Lau2005(run_length_Lau, block_partitions)
-    
-    plot_runlength_Lau2005(run_length_Lau, block_partitions)
     plt.gcf().text(0.02,0.92,'Ideal-$\\hat{p}$-greedy, foraging eff. = %g%%'%foraging_efficiency)
   
     

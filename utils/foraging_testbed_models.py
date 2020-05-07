@@ -428,12 +428,22 @@ class Bandit:
                     if np.all(self.pattern_now == 1):  # Already in {1,1}
                         self.pattern_now[rich_Q] += 1
                     else:  # Only modify rich side
+                        # -- Estimate p_base by Q (no block structure, direct estimation) --  Doesn't work... Sampling the lean side is not efficient
+                        # p_base_est_rich = self.q_estimation[rich_now, self.time]
+                        # p_base_est_lean = self.q_estimation[lean_now, self.time] / self.pattern_now[rich_Q]
                     
+                        # [m, n], _ = self.get_IdealpHatGreedy_strategy([p_base_est_rich, p_base_est_lean])
+                        # m = min(m,15)
+                        
+                        # if p_base_est_rich > p_base_est_lean:  # Don't change side
+                        #     self.pattern_now[[rich_now, lean_now]] = [m, 1]
+                        # else:
+                        #     self.pattern_now[[rich_now, lean_now]] = [1, m]  # Switch side immediately
+                        
                         # -- Block-state enables fast switch
                         if rich_Q == rich_now:
                             self.pattern_now[rich_now] += 1 
                         else:  # Maybe this is a block switch, let's try to make some large modification
-                            # self.pattern_now[rich_now] -= 1  
                             # self.pattern_now = np.flipud(self.pattern_now)  # Flip
                             self.pattern_now = np.array([1,1])  # Reset
                             self.q_estimation[:, self.time] = 0

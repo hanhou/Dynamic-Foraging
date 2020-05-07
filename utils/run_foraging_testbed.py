@@ -632,8 +632,34 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # bandit = Bandit(forager = 'pMatching')
     # bandit = Bandit(forager = 'AmB1', m_AmB1=5)
     
-    # bandit = Bandit(forager = 'PatternMelioration', step_sizes = 0.86, pattern_meliorate_threshold = 0.11, block_size_mean = 500, n_trials = global_n_trials)
-    # run_sessions_parallel(bandit, n_reps = 100, pool = pool)
+    bandit = Bandit(forager = 'PatternMelioration', step_sizes = 0.2, pattern_meliorate_threshold = 0.1, block_size_mean = 80, n_trials = global_n_trials)
+    results_all_sessions = run_sessions_parallel(bandit, n_reps = 500, pool = pool)
+
+    # === Runlength analysis for PatternMelioration ===
+    # from utils.run_fit_behavior import analyze_runlength_Lau2005, get_p_hat_greedy
+    # from utils.plot_mice import plot_runlength_Lau2005
+    # from utils.plot_fitting import plot_session_lightweight
+    # import matplotlib.pyplot as plt
+
+    # bandit = Bandit(forager = 'PatternMelioration', step_sizes = 0.05, pattern_meliorate_threshold = 0.5, block_size_mean = 80, n_trials = 10000)
+    # bandit.reset()
+    # for t in range(bandit.n_trials):        
+    #     # Loop: (Act --> Reward & New state)
+    #     action = bandit.act()
+    #     bandit.step(action)
+
+    # choice_history = bandit.choice_history
+    # reward_history = bandit.reward_history
+    # p_reward = bandit.p_reward
+    
+    # run_length_Lau = analyze_runlength_Lau2005(choice_history, p_reward, block_partitions = [50,50])
+    # plot_runlength_Lau2005(run_length_Lau,  [50,50])
+
+    # foraging_efficiency = np.sum(reward_history) / np.shape(reward_history)[1] / get_p_hat_greedy(p_reward) * 100
+    # plot_session_lightweight([choice_history, reward_history, p_reward], smooth_factor = 1)
+    # plt.gca().set_title('Ideal-$\\hat{p}$-greedy, foraging eff. = %g%%'%foraging_efficiency)
+    # plt.gca().set_xlim([0,200])
+    
 
     #%% =============================================================================
     #     Parameter scan (1-D or 2-D)
@@ -667,10 +693,10 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # results_para_scan = para_scan('Corrado2005', para_to_scan, w_taus = [0.33, 0.67],  epsilon = 0, n_reps = 100, pool = pool)
  
     # --PatternMelioration in 2D
-    para_to_scan = {'step_sizes': np.power(10, np.linspace(-2,0,15)),
-                    'pattern_meliorate_threshold': np.power(10, np.linspace(-2,0,15)),
-                    }
-    results_para_scan = para_scan('PatternMelioration', para_to_scan, n_reps = 50, pool = pool)
+    # para_to_scan = {'step_sizes': np.power(10, np.linspace(-2,0,10)),
+    #                 'pattern_meliorate_threshold': np.power(10, np.linspace(-2,0,10)),
+    #                 }
+    # results_para_scan = para_scan('PatternMelioration', para_to_scan, n_reps = 50, pool = pool)
       
         
     #%% =============================================================================
@@ -690,9 +716,9 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # opti_para = para_optimize('Hattori2019', n_reps_per_iter = 200, pool = pool)  # 83.7% @ [0.39740558, 0.22740528, 0.11980517, 0.33762251] 
 
     # PatternMelioration 
-    # opti_para = para_optimize('PatternMelioration', n_reps_per_iter = 100, pool = pool)    
+    # opti_para = para_optimize('PatternMelioration', n_reps_per_iter = 200, pool = pool)    
     # [0.75390183, 0.67403303] for block-model-free;  
-    # [0.86710063, 0.11670503] 94.4% for block-model-based-reset;
+    # [0.86710063, 0.11670503] 94.4% for block-model-based-reset (reset pattern only);
 
     # =============================================================================
     #   For higher total reward prob (sum = 0.8)
@@ -718,8 +744,6 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     
     # RL-like
     # opti_para = para_optimize('Bari2019', n_reps_per_iter = 200, p_reward_pairs = [[0.45, 0]], pool = pool)  # 77.3% [0.40388374, 0.19951699, 0.22852593]
-        
-    
        
 
         
