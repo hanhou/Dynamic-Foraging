@@ -57,21 +57,11 @@
 
 
 import numpy as np
+from utils.helper_func import softmax, choose_ps
 
 LEFT = 0
 RIGHT = 1
 
-
-
-def softmax(x,softmax_temperature):
-    max_temp = np.max(x/softmax_temperature)
-    
-    if np.exp(max_temp) == np.inf:  # To prevent explosion of EXP
-        greedy = np.zeros(len(x))
-        greedy[np.random.choice(np.where(x == np.max(x))[0])] = 1
-        return greedy
-    else:   # Normal softmax
-        return np.exp(x/softmax_temperature)/np.sum(np.exp(x/softmax_temperature))  # Accept np.arrays
 
 
 class Bandit:
@@ -347,13 +337,6 @@ class Bandit:
         else:
             return [self.n_trials,1], p_max   # Safe to be always on p_max side for this block
         
-    def choose_ps(self, ps):
-        '''
-        "Poisson"-choice process
-        '''
-        ps = ps/np.sum(ps)
-        return np.max(np.argwhere(np.hstack([-1e-16, np.cumsum(ps)]) < np.random.rand()))
-
     def act(self):
         # =============================================================================
         #  Update value estimation (or Poisson choice probability)
@@ -390,7 +373,7 @@ class Bandit:
             choice = self.choice_history[0, self.time]  # Already saved in the optimal sequence
             
         elif self.forager == 'pMatching':  # Probability matching of base probabilities p
-            choice = self.choose_ps(self.p_reward[:,self.time])
+            choice = choose_ps(self.p_reward[:,self.time])
             
         elif self.forager == 'LossCounting':
             if self.time == 0:
@@ -493,8 +476,8 @@ class Bandit:
                     choice = np.random.choice(np.where(self.q_estimation[:, self.time] == self.q_estimation[:, self.time].max())[0])
                     
                 elif self.forager in ['Sugrue2004', 'Corrado2005', 'Iigaya2019', 'Bari2019', 'Hattori2019' ]:   # Poisson
-                    #  choice = self.choose_ps(self.q_estimation[:,self.time])    
-                    choice = self.choose_ps(self.choice_prob[:,self.time])    
+                    #  choice = choose_ps(self.q_estimation[:,self.time])    
+                    choice = choose_ps(self.choice_prob[:,self.time])    
                 
         self.choice_history[0, self.time] = int(choice)
         
