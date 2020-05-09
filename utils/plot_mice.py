@@ -877,10 +877,13 @@ def plot_runlength_Lau2005(df_run_length_Lau, block_partitions = ['unknown', 'un
         
         sns.regplot(x=x, y=y, ax = ax)
         
-        (r, p) = pearsonr(x, y)
-        plt.annotate( 'r = %.3g\np = %.3g'%(r,p), xy=(0, 0.8), xycoords=ax.transAxes, fontsize = 9)
+        try:
+            (r, p) = pearsonr(x, y)
+            plt.annotate( 'r = %.3g\np = %.3g'%(r,p), xy=(0, 0.8), xycoords=ax.transAxes, fontsize = 9)
+        except:
+            pass
         
-        plt.plot([1, max(plt.xlim())],[1, max(plt.ylim())], 'b--', lw = 1)
+        plt.plot([1, max(plt.xlim())],[1, max(plt.xlim())], 'b--', lw = 1)
         plt.xlabel('Optimal rich runlength')
         plt.ylabel('Mean rich runlength')
     
@@ -888,10 +891,16 @@ def plot_runlength_Lau2005(df_run_length_Lau, block_partitions = ['unknown', 'un
         ax = fig.add_subplot(gs[pp,2]) 
         x = df_this_half.m_star
         y = df_this_half.choice_ratio
-        (r, p) = pearsonr(x, y)
+        
+        try:
+            (r, p) = pearsonr(x, y)
+            plt.annotate( 'r = %.3g\np = %.3g'%(r,p), xy=(0, 0.8), xycoords=ax.transAxes, fontsize = 9)
+        except:
+            pass
+        
         sns.regplot(x=x, y=y, ax = ax)
-        plt.annotate( 'r = %.3g\np = %.3g'%(r,p), xy=(0, 0.8), xycoords=ax.transAxes, fontsize = 9)
-        plt.plot([1, max(plt.xlim())],[1, max(plt.ylim())], 'b--', lw = 1)
+        
+        plt.plot([1, max(plt.xlim())],[1, max(plt.xlim())], 'b--', lw = 1)
         plt.xlabel('Optimal rich runlength')
         plt.ylabel('Choice ratio (#rich / #lean)')
 

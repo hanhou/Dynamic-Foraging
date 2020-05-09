@@ -31,6 +31,8 @@
 #
 #   4. Model-based (Pattern + Melioration)
 # 
+#   5. Full state Q-learning
+# 
 # = About epsilon (the probability of making a random choice on each trial):
 #  - Epsilon is a simple way of encouraging exploration. There is virtually no cost -- just be lazy. (see Sutton&Barto's RL book, p.28)
 #  - 'Sugrue 2004' and 'Iigaya2019' needs explicit exploration, because they use fractional income (could incorrectly converge to 1, resulting in making the same choice forever). 
@@ -57,6 +59,9 @@
 
 
 import numpy as np
+import matplotlib.pyplot as plt
+
+from models.full_state_Q import FullStateQ
 from utils.helper_func import softmax, choose_ps
 
 LEFT = 0
@@ -96,6 +101,10 @@ class Bandit:
                  pattern_meliorate_threshold = np.nan,
                  pattern_meliorate_softmax_temp = np.nan,
                  pattern_meliorate_softmax_max_step = np.nan,
+                 
+                 max_run_length = 10,   # For FullStatesQ
+                 discount_rate = 0.99,
+
                  ):     
         
         self.block_size_mean = block_size_mean
@@ -120,7 +129,10 @@ class Bandit:
         self.pattern_meliorate_threshold = pattern_meliorate_threshold
         self.pattern_meliorate_softmax_temp = pattern_meliorate_softmax_temp
         self.pattern_meliorate_softmax_max_step = pattern_meliorate_softmax_max_step
-            
+        
+        self.max_run_length = max_run_length
+        self.discount_rate = discount_rate
+        
         if forager == 'Sugrue2004':
             self.taus = [taus]
             self.w_taus = [w_taus]
@@ -128,7 +140,6 @@ class Bandit:
             self.taus = taus
             self.w_taus = w_taus
 
-        
         # Turn step_size and forget_rate into reward- and choice- dependent, respectively. (for 'Hattori2019')
         if forager in ['SuttonBartoRLBook', 'PatternMelioration', 'PatternMelioration_softmax']:
             # 'PatternMelioration' = 'SuttonBartoRLBook'(i.e. RW1972) here because it needs to compute the average RETURN.
@@ -140,6 +151,13 @@ class Bandit:
         elif forager == 'Hattori2019':
             self.step_sizes = step_sizes            # Should be [unrewarded step_size, rewarded_step_size] by itself
             self.forget_rates = [forget_rate, 0]   # Only unchosen target is forgetted
+            
+        # Define full-state Q-learning forager
+        if forager == 'FullStateQ':
+            self.full_state_Qforager = FullStateQ(K_arm = k_arm, max_run_length = max_run_length, 
+                                                 discount_rate = discount_rate, learn_rate = step_sizes, softmax_temperature = softmax_temperature)
+            self.step_sizes = step_sizes
+            # _, self.ax = plt.subplots(2,2, sharey = True)
           
     def reset(self):
         
@@ -197,7 +215,11 @@ class Bandit:
 
             self.pattern_now = np.array([1, 1])  # E.g.: [1,1]: LRLRLR, [1,2]: RRLRRLRRL, [2,1]: LLRLLRLLR
             self.run_length_now = np.array([0, 0]) 
-                              
+            
+        elif self.forager == 'FullStateQ':
+            self.description = '%s, step_size = %s, softmax_temp = %g, discount_rate = %g, max_run_length = %g' % \
+                               (self.forager, self.step_sizes, self.softmax_temperature, self.discount_rate, self.max_run_length)
+                               
         else:
             self.description = self.forager
             
@@ -466,6 +488,13 @@ class Bandit:
                 choice = rich_now
                 self.run_length_now[rich_now] += 1 # Update counter
                 
+        elif self.forager == 'FullStateQ':
+            if self.time == 0:
+                choice = self.full_state_Qforager.current_state.which[0]
+            else:
+                choice = self.full_state_Qforager.act()  # All magics are in the Class definition
+            # print('\nTime = ', self.time, ': ', choice, end='')
+                
         else:
             if np.random.rand() < self.epsilon or np.sum(self.reward_history) < self.random_before_total_reward: 
                 # Forced exploration with the prob. of epsilon (to avoid AlwaysLEFT/RIGHT in Sugrue2004...)
@@ -602,6 +631,13 @@ class Bandit:
             # 2. Poisson choice probability = Softmaxed local income (Note: Equivalent to "difference + sigmoid" in [Corrado etal 2005], for 2lp case)
             # self.q_estimation[:, self.time] = softmax(local_income, self.softmax_temperature)
             self.choice_prob[:, self.time] = softmax(local_income, self.softmax_temperature)
+            
+        elif self.forager == 'FullStateQ':
+            # print(', rew = ', reward)
+            self.full_state_Qforager.update_Q(reward)  # All magics are in the Class definition
+            
+            if 'ax' in self.__dict__ and self.time == self.n_trials - 1:
+                self.full_state_Qforager.plot_V(self.ax)
             
         return reward
   

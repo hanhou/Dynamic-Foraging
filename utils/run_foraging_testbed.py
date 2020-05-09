@@ -461,6 +461,10 @@ def para_optimize(forager, n_reps_per_iter = 200, opti_names = '', bounds = '', 
         elif forager == 'PatternMelioration_softmax':
             opti_names = ['step_sizes', 'pattern_meliorate_softmax_temp']
             bounds = optimize.Bounds([0.01, 0.01],[1, 1])
+            
+        elif forager == 'FullStateQ':
+            opti_names = ['step_sizes', 'softmax_temperature', 'discount_rate', 'max_run_length']
+            bounds = optimize.Bounds([0.01, 0.01, 0, 2],[1, 1, 1, 15])
         
     # Parameter optimization with DE    
     opti_para = optimize.differential_evolution(func = score_func, args = (forager, opti_names, n_reps_per_iter, if_baited, p_reward_sum, p_reward_pairs, pool), bounds = bounds, 
@@ -642,10 +646,17 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # bandit = Bandit(forager = 'PatternMelioration', step_sizes = 0.2, pattern_meliorate_threshold = 0.1, block_size_mean = 80, n_trials = global_n_trials)
     # results_all_sessions = run_sessions_parallel(bandit, n_reps = 500, pool = pool)
 
-    bandit = Bandit(forager = 'PatternMelioration_softmax', step_sizes = 0.1477, pattern_meliorate_softmax_temp = 0.1781, 
-                    # pattern_meliorate_softmax_max_step = 4.6,
-                    block_size_mean = 80, n_trials = global_n_trials)
-    results_all_sessions = run_sessions_parallel(bandit, n_reps = 500, pool = pool)
+    # bandit = Bandit(forager = 'PatternMelioration_softmax', step_sizes = 0.1477, pattern_meliorate_softmax_temp = 0.1781, 
+    #                 # pattern_meliorate_softmax_max_step = 4.6,
+    #                 block_size_mean = 80, n_trials = global_n_trials)
+    
+    
+    # bandit = Bandit(forager = 'FullStateQ', block_size_mean = 500, n_trials = 1000,
+    #                 step_sizes = 0.1, softmax_temperature = 0.8, discount_rate = 0.3, max_run_length = 15)
+    
+    # results_all_sessions = run_sessions_parallel(bandit, n_reps = 1, pool = '')  # For debugging, use this.
+    
+    # results_all_sessions = run_sessions_parallel(bandit, n_reps = 300, pool = pool)
 
     # === Runlength analysis for PatternMelioration ===
     # from utils.run_fit_behavior import analyze_runlength_Lau2005, get_p_hat_greedy
@@ -653,7 +664,7 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # from utils.plot_fitting import plot_session_lightweight
     # import matplotlib.pyplot as plt
 
-    # bandit = Bandit(forager = 'PatternMelioration', step_sizes = 0.05, pattern_meliorate_threshold = 0.5, block_size_mean = 80, n_trials = 10000)
+    # # # bandit = Bandit(forager = 'PatternMelioration', step_sizes = 0.05, pattern_meliorate_threshold = 0.5, block_size_mean = 80, n_trials = 10000)
     # bandit.reset()
     # for t in range(bandit.n_trials):        
     #     # Loop: (Act --> Reward & New state)
@@ -718,8 +729,15 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # results_para_scan = para_scan('PatternMelioration_softmax', para_to_scan, n_reps = 50, 
     #                               # pattern_meliorate_softmax_max_step = 2.5,
     #                               pool = pool)
-
-        
+           
+    # --PatternMelioration_softmax in 2D
+    para_to_scan = {'step_sizes': np.power(10, np.linspace(-1,0,10)),
+                    'softmax_temperature': np.power(10, np.linspace(-1,0,10)),
+                    }
+    results_para_scan = para_scan('FullStateQ', para_to_scan, n_reps = 50, 
+                                  discount_rate = 0.11788019, max_run_length = 12.8567, 
+                                  pool = pool)
+    
     #%% =============================================================================
     #   Automatic Parameter Optimization for Performance
     # =============================================================================
@@ -746,6 +764,9 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     
     # opti_para = para_optimize('PatternMelioration_softmax', n_reps_per_iter = 200, pool = pool)
     #  [0.1477 0.1781]         softmax --> p --> m = floor(p/(1-p))
+
+    # opti_para = para_optimize('FullStateQ', n_reps_per_iter = 200, pool =  pool)
+    # [ 0.50085521,  0.08830155,  0.11788019, 12.85673119]
 
     # =============================================================================
     #   For higher total reward prob (sum = 0.8)
