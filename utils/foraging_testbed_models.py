@@ -77,7 +77,7 @@ class Bandit:
     # @step_size: constant step size for updating estimations
     
     def __init__(self, forager = 'SuttonBartoRLBook', k_arm = 2, n_trials = 1000, if_baited = True, if_para_optim = False,
-                 block_size_mean = 80, block_size_sd = 20, 
+                 block_size_mean = 80, block_size_sd = 20, if_varying_amplitude = False,
                  
                  epsilon = 0,          # Essential for 'SuttonBartoRLBook', 'Sugrue 2004', 'Iigaya2019'. See notes above.
                  random_before_total_reward = 0, # Not needed by default. See notes above
@@ -110,6 +110,7 @@ class Bandit:
         
         self.block_size_mean = block_size_mean
         self.block_size_sd = block_size_sd
+        self.if_varying_amplitude = if_varying_amplitude
         
         self.forager = forager
         self.k = k_arm
@@ -155,11 +156,18 @@ class Bandit:
             self.forget_rates = [forget_rate, 0]   # Only unchosen target is forgetted
             
         # Define full-state Q-learning forager
-        if forager == 'FullStateQ':
-            self.full_state_Qforager = FullStateQ(K_arm = k_arm, max_run_length = max_run_length, 
-                                                 discount_rate = discount_rate, learn_rate = step_sizes, 
-                                                 softmax_temperature = softmax_temperature, epsilon = epsilon)
+        if 'FullState' in forager:
+            if forager == 'FullStateQ_epsilon':
+                self.full_state_Qforager = FullStateQ(K_arm = k_arm, max_run_length = max_run_length, 
+                                                     discount_rate = discount_rate, learn_rate = step_sizes, 
+                                                     epsilon = epsilon)
+            elif forager == 'FullStateQ_softmax':
+                self.full_state_Qforager = FullStateQ(K_arm = k_arm, max_run_length = max_run_length, 
+                                                     discount_rate = discount_rate, learn_rate = step_sizes, 
+                                                     softmax_temperature = softmax_temperature)
+                
             self.step_sizes = step_sizes
+            
             if if_plot_Q:
                 _, self.ax = plt.subplots(2,2, sharey=True, figsize=[12,8]);
           
@@ -178,9 +186,13 @@ class Bandit:
         self.generate_p_reward(self.block_size_mean, self.block_size_sd)
         
         # Prepare reward for the first trial
-        # For example, [0,1] represents there is reward baited at the RIGHT but not LEFT port.
-        self.reward_available = np.zeros([self.k, self.n_trials])    # Reward history, separated for each port (Corrado Newsome 2005)
-        self.reward_available[:,0] = (np.random.uniform(0,1,self.k) < self.p_reward[:, self.time]).astype(int)
+        if not self.if_varying_amplitude:  # Varying reward prob.
+            # For example, [0,1] represents there is reward baited at the RIGHT but not LEFT port.
+            self.reward_available = np.zeros([self.k, self.n_trials])    # Reward history, separated for each port (Corrado Newsome 2005)
+            self.reward_available[:,0] = (np.random.uniform(0,1,self.k) < self.p_reward[:, self.time]).astype(int)
+        else:   # Varying amplitude (use p_reward as the proxy)
+            self.reward_available = np.zeros([self.k, self.n_trials])    
+            self.reward_available[:,0] = self.p_reward[:, 0]  #The amount of reward
         
         # Forager-specific
         if self.forager in ['SuttonBartoRLBook', 'Bari2019', 'Hattori2019']:
@@ -220,9 +232,9 @@ class Bandit:
             self.pattern_now = np.array([1, 1])  # E.g.: [1,1]: LRLRLR, [1,2]: RRLRRLRRL, [2,1]: LLRLLRLLR
             self.run_length_now = np.array([0, 0]) 
             
-        elif self.forager == 'FullStateQ':
-            self.description = '%s, step_size = %s, softmax_temp = %g, discount_rate = %g, max_run_length = %g' % \
-                               (self.forager, self.step_sizes, self.softmax_temperature, self.discount_rate, self.max_run_length)
+        elif 'FullState' in self.forager:
+            self.description = '%s, step_size = %s, softmax_temp = %g, epsilon = %g, discount_rate = %g, max_run_length = %g' % \
+                               (self.forager, self.step_sizes, self.softmax_temperature, self.epsilon, self.discount_rate, self.max_run_length)
                                
         else:
             self.description = self.forager
@@ -492,7 +504,7 @@ class Bandit:
                 choice = rich_now
                 self.run_length_now[rich_now] += 1 # Update counter
                 
-        elif self.forager == 'FullStateQ':
+        elif 'FullState' in self.forager:
             if self.time == 0:
                 choice = self.full_state_Qforager.current_state.which[0]
             else:
@@ -521,10 +533,11 @@ class Bandit:
         # =============================================================================
         #  Generate reward and make the state transition (i.e., prepare reward for the next trial) --
         # =============================================================================
+        
+        # These four lines work for both varying reward probability and amplitude
         reward = self.reward_available[choice, self.time]    
         self.reward_history[choice, self.time] = reward   # Note that according to Sutton & Barto's convention,
                                                           # this update should belong to time t+1, but here I use t for simplicity.
-        
         reward_available_after_choice = self.reward_available[:, self.time].copy()  # An intermediate reward status. Note the .copy()!
         reward_available_after_choice [choice] = 0   # The reward is depleted at the chosen lick port.
         
@@ -532,9 +545,15 @@ class Bandit:
         if self.time == self.n_trials: 
             return;   # Session terminates
         
-        # For the next reward status, the "or" statement ensures the baiting property, gated by self.if_baited.
-        self.reward_available[:, self.time] = np.logical_or(  reward_available_after_choice * self.if_baited,    
-                                           np.random.uniform(0,1,self.k) < self.p_reward[:,self.time]).astype(int)  
+        if not self.if_varying_amplitude:  # Varying reward prob.
+            # For the next reward status, the "or" statement ensures the baiting property, gated by self.if_baited.
+            self.reward_available[:, self.time] = np.logical_or( reward_available_after_choice * self.if_baited,    
+                                               np.random.uniform(0,1,self.k) < self.p_reward[:,self.time]).astype(int)  
+        else:    # Varying reward amplitude
+            # For the chosen side AND the unchosen side: 
+            # amplitude = 1 - (1 - amp)^(time from last chose)  ==>  next_amp = 1 - (1 - previous_amp) * (1 - p_reward)
+            self.reward_available[:, self.time] = 1 - (1 - reward_available_after_choice) * (1 - self.p_reward[:,self.time])
+        
             
         # =============================================================================
         #  Update value estimation (or Poisson choice probability)
@@ -636,7 +655,7 @@ class Bandit:
             # self.q_estimation[:, self.time] = softmax(local_income, self.softmax_temperature)
             self.choice_prob[:, self.time] = softmax(local_income, self.softmax_temperature)
             
-        elif self.forager == 'FullStateQ':
+        elif 'FullState' in self.forager:
             # print(', rew = ', reward)
             self.full_state_Qforager.update_Q(reward)  # All magics are in the Class definition
             

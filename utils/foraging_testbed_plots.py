@@ -48,15 +48,13 @@ def plot_one_session(bandit, fig, plottype='2lickport'):
     if bandit.forager in ['IdealpHatOptimal', 'IdealpHatGreedy', 'FullStateQ'] or 'PatternMelioration' in bandit.forager:
         smooth_factor = 1
     else:
-        smooth_factor = 5
+        smooth_factor = 1
+        # smooth_factor = 5
     
     # == Fetch data ==
     n_trials = bandit.n_trials
     choice_history = bandit.choice_history
     reward_history = bandit.reward_history
-                                      
-    rewarded_trials = np.any(reward_history, axis = 0)
-    unrewarded_trials = np.logical_not(rewarded_trials)
     
     # == Choice trace ==
     if fig == '':
@@ -65,13 +63,21 @@ def plot_one_session(bandit, fig, plottype='2lickport'):
     gs = GridSpec(2,3, top = 0.85)        
     ax = fig.add_subplot(gs[0,0:2])
 
-    # Rewarded trials
-    ax.plot(np.nonzero(rewarded_trials)[0], 0.5 + (choice_history[0,rewarded_trials]-0.5) * 1.4, 
-            'k|',color='black',markersize=20, markeredgewidth=2)
-
-    # Unrewarded trials
-    ax.plot(np.nonzero(unrewarded_trials)[0], 0.5 + (choice_history[0,unrewarded_trials] - 0.5) * 1.4, 
-            '|',color='gray', markersize=10, markeredgewidth=1)
+    if not bandit.if_varying_amplitude:
+                                      
+        rewarded_trials = np.any(reward_history, axis = 0)
+        unrewarded_trials = np.logical_not(rewarded_trials)
+        
+        # Rewarded trials
+        ax.plot(np.nonzero(rewarded_trials)[0], 0.5 + (choice_history[0,rewarded_trials]-0.5) * 1.4, 
+                'k|',color='black',markersize=20, markeredgewidth=2)
+        # Unrewarded trials
+        ax.plot(np.nonzero(unrewarded_trials)[0], 0.5 + (choice_history[0,unrewarded_trials] - 0.5) * 1.4, 
+                '|',color='gray', markersize=10, markeredgewidth=1)
+    else:  # Varying amplitude
+        ax.scatter(np.arange(0, n_trials), 0.5 + (choice_history[0,:]-0.5) * 1.4, s = 500 * np.sum(reward_history, axis=0),
+                marker = '|', color='black')        
+        
     
     # Base probability
     ax.plot(np.arange(0, n_trials), bandit.p_reward_fraction, color='DarkOrange', label = 'base rew. prob.')
@@ -84,11 +90,10 @@ def plot_one_session(bandit, fig, plottype='2lickport'):
         ax.plot(moving_average(bandit.q_estimation[RIGHT,:], 1), 'g-', label = 'Q_R')
         ax.plot(moving_average(bandit.q_estimation[LEFT,:], 1), 'g--', label = 'Q_L')
         
-    elif bandit.forager not in ['Random', 'IdealpHatOptimal', 'IdealpHatGreedy', 'pMatching', 'AlwaysLEFT', 'IdealpGreedy', 'SuttonBartoRLBook','AmB1', 'FullStateQ']:
+    elif bandit.forager not in ['Random', 'IdealpHatOptimal', 'IdealpHatGreedy', 'pMatching', 'AlwaysLEFT', 
+                                'IdealpGreedy', 'SuttonBartoRLBook','AmB1'] and 'FullState' not in bandit.forager:
         ax.plot(moving_average(bandit.choice_prob[RIGHT,:], 1), color='Green', label = 'choice prob.')
 
-
-        
     # Smoothed choice history
     ax.plot(moving_average(choice_history, smooth_factor) , color='black', label = 'choice (smooth = %g)' % smooth_factor)
         

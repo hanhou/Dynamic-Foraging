@@ -17,8 +17,8 @@ class FullStateQ():
                  discount_rate = 0.99,
                  
                  learn_rate = 0.1,
-                 softmax_temperature = 0.1, 
-                 epsilon = 0.1,
+                 softmax_temperature = None, 
+                 epsilon = None,
                  ):
         
         self.learn_rate = learn_rate
@@ -53,8 +53,12 @@ class FullStateQ():
                 if r < max_run_length-1: self.states[k, r].add_next_states([self.states[k, r+1]])  # Stay is always the last index
                 
     def act(self):   # State transition
-        next_state_idx = self.current_state.act_softmax(self.softmax_temperature)  # Next state index!!
-        # next_state_idx = self.current_state.act_epsilon(self.epsilon)  # Next state index!!
+        if self.softmax_temperature is not None:
+            next_state_idx = self.current_state.act_softmax(self.softmax_temperature)  # Next state index!!
+        elif self.epsilon is not None:
+            next_state_idx = self.current_state.act_epsilon(self.epsilon)  # Next state index!!
+        else:
+            raise ValueError('Both softmax_temp and epsilon are missing!')
         
         self.backup_SA = [self.current_state, next_state_idx]     # For one-step backup in Q-learning
         self.current_state = self.current_state.next_states[next_state_idx]
@@ -64,7 +68,8 @@ class FullStateQ():
     def update_Q(self, reward):    # Q-learning (off-policy TD-0 bootstrap)
         max_next_SAvalue_for_backup_state = np.max(self.current_state.Q)  # This makes it off-policy
         last_state, last_choice = self.backup_SA
-        last_state.Q[last_choice] += self.learn_rate * (reward + self.discount_rate * max_next_SAvalue_for_backup_state - last_state.Q[last_choice])  # Q-learning
+        last_state.Q[last_choice] += self.learn_rate * (reward + self.discount_rate * max_next_SAvalue_for_backup_state 
+                                                        - last_state.Q[last_choice])  # Q-learning
 
         # print('Last: ', last_state.which, '(updated); This: ', self.current_state.which)
         # print('----------------------------------')
@@ -85,8 +90,9 @@ class FullStateQ():
                 ax[c, d].set_title(direction[d] + ', ' + decision[c])
                 ax[c, d].axhline(y=0)
             
-        plt.ylim([-1,1])
-        plt.annotate( '%s --> %s\nt = %g, reward = %g' % (self.backup_SA[0].which, self.current_state.which, time, reward), xy=(0, 0.8), fontsize = 9)
+        # plt.ylim([-1,1])
+        plt.annotate( '%s --> %s\nt = %g, reward = %g' % (self.backup_SA[0].which, self.current_state.which, time, reward), 
+                     xy=(-.5 , max(plt.ylim())), fontsize = 9)
         plt.gcf().canvas.draw()
         plt.waitforbuttonpress()
         # plt.pause(0.1)
