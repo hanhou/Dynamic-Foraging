@@ -775,7 +775,18 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # ['step_sizes', 'softmax_temperature', 'discount_rate', 'max_run_length']
     # [ 0.50085521,  0.08830155,  0.11788019, 12.85673119]
 
-    opti_para = para_optimize('FullStateQ_epsilon', if_varying_amplitude = True, n_reps_per_iter = 200, pool =  pool)
+    # --- FullStateQ (softmax/epsilon, varying prob/amp) ---
+    # opti_para = para_optimize('FullStateQ_epsilon', if_varying_amplitude = False, n_reps_per_iter = 200, pool =  pool)
+    #  array([ 0.48177689,  0.23038624,  0.11548774, 17.10885802])  ==> 89.7%
+    #  ['step_sizes', 'epsilon', 'discount_rate', 'max_run_length']
+    # opti_para = para_optimize('FullStateQ_epsilon', if_varying_amplitude = True, n_reps_per_iter = 200, pool =  pool)
+    #  array([0.95998725, 0.23536354, 0.33502606, 4.73707523])   ==> 94.1%
+
+    # opti_para = para_optimize('FullStateQ_softmax', if_varying_amplitude = False, n_reps_per_iter = 200, pool =  pool)
+    #  ['step_sizes', 'softmax_temperature', 'discount_rate', 'max_run_length']
+    #  array([ 0.79645452,  0.09857429,  0.05792011, 11.14677311])   ==> 91.7%
+    # opti_para = para_optimize('FullStateQ_softmax', if_varying_amplitude = True, n_reps_per_iter = 200, pool =  pool)
+    #  array([0.92794971, 0.08407503, 0.05293809, 3.92812548])   ==> 95.4%
 
     # =============================================================================
     #   For higher total reward prob (sum = 0.8)
