@@ -104,6 +104,7 @@ class Bandit:
                  
                  max_run_length = 10,   # For FullStatesQ
                  discount_rate = 0.99,
+                 if_plot_Q = False,
 
                  ):     
         
@@ -132,6 +133,7 @@ class Bandit:
         
         self.max_run_length = max_run_length
         self.discount_rate = discount_rate
+        self.if_plot_Q = if_plot_Q
         
         if forager == 'Sugrue2004':
             self.taus = [taus]
@@ -155,9 +157,11 @@ class Bandit:
         # Define full-state Q-learning forager
         if forager == 'FullStateQ':
             self.full_state_Qforager = FullStateQ(K_arm = k_arm, max_run_length = max_run_length, 
-                                                 discount_rate = discount_rate, learn_rate = step_sizes, softmax_temperature = softmax_temperature)
+                                                 discount_rate = discount_rate, learn_rate = step_sizes, 
+                                                 softmax_temperature = softmax_temperature, epsilon = epsilon)
             self.step_sizes = step_sizes
-            # _, self.ax = plt.subplots(2,2, sharey = True)
+            if if_plot_Q:
+                _, self.ax = plt.subplots(2,2, sharey=True, figsize=[12,8]);
           
     def reset(self):
         
@@ -636,9 +640,18 @@ class Bandit:
             # print(', rew = ', reward)
             self.full_state_Qforager.update_Q(reward)  # All magics are in the Class definition
             
-            if 'ax' in self.__dict__ and self.time == self.n_trials - 1:
-                self.full_state_Qforager.plot_V(self.ax)
+            if self.if_plot_Q:
+                self.full_state_Qforager.plot_V(self.ax, self.time, reward);
             
         return reward
   
+    def simulate(self):
+        # =============================================================================
+        # Simulate one session
+        # =============================================================================
+        self.reset()
+        
+        for t in range(self.n_trials):        
+            action = self.act()
+            self.step(action)
  

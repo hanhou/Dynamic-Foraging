@@ -331,6 +331,10 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
     results_all_sessions['p_reward_sum'] = bandits_all_sessions[0].p_reward_sum
     results_all_sessions['p_reward_pairs'] = bandits_all_sessions[0].p_reward_pairs
     
+    # For runlength_anlaysis_Lau
+    results_all_sessions['choice_history'] = np.hstack([bb.choice_history for bb in bandits_all_sessions])
+    results_all_sessions['p_reward'] = np.hstack([bb.p_reward for bb in bandits_all_sessions])
+    
     # If not in para_scan, plot summary statistics over repeated sessions for the SAME bandit
     if if_plot and not (para_scan or para_optim):
         results_all_sessions['n_trials'] = n_reps * bandit[0].n_trials
@@ -651,38 +655,28 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     #                 block_size_mean = 80, n_trials = global_n_trials)
     
     
-    # bandit = Bandit(forager = 'FullStateQ', block_size_mean = 500, n_trials = 1000,
-    #                 step_sizes = 0.1, softmax_temperature = 0.8, discount_rate = 0.3, max_run_length = 15)
+    # bandit = Bandit(forager = 'FullStateQ', block_size_mean = 1000, n_trials = 1000, if_baited = True, p_reward_pairs = [[0.4, 0.05]], 
+    #                 step_sizes = 0.06, discount_rate = 0.99, max_run_length = 10, softmax_temperature = 0.1, # epsilon = 0.2,
+    #                 if_plot_Q = False, )
     
-    # results_all_sessions = run_sessions_parallel(bandit, n_reps = 1, pool = '')  # For debugging, use this.
+    # # bandit.simulate()
     
-    # results_all_sessions = run_sessions_parallel(bandit, n_reps = 300, pool = pool)
-
-    # === Runlength analysis for PatternMelioration ===
-    # from utils.run_fit_behavior import analyze_runlength_Lau2005, get_p_hat_greedy
-    # from utils.plot_mice import plot_runlength_Lau2005
-    # from utils.plot_fitting import plot_session_lightweight
-    # import matplotlib.pyplot as plt
-
-    # # # bandit = Bandit(forager = 'PatternMelioration', step_sizes = 0.05, pattern_meliorate_threshold = 0.5, block_size_mean = 80, n_trials = 10000)
-    # bandit.reset()
-    # for t in range(bandit.n_trials):        
-    #     # Loop: (Act --> Reward & New state)
-    #     action = bandit.act()
-    #     bandit.step(action)
-
-    # choice_history = bandit.choice_history
-    # reward_history = bandit.reward_history
-    # p_reward = bandit.p_reward
+    # # results_all_sessions = run_sessions_parallel(bandit, n_reps = 1, pool = '')  # For debugging, use this.
     
-    # run_length_Lau = analyze_runlength_Lau2005(choice_history, p_reward, block_partitions = [50,50])
-    # plot_runlength_Lau2005(run_length_Lau,  [50,50])
+    # # ['step_sizes', 'softmax_temperature', 'discount_rate', 'max_run_length']
+    # # [ 0.50085521,  0.08830155,  0.11788019, 12.85673119]
 
-    # foraging_efficiency = np.sum(reward_history) / np.shape(reward_history)[1] / get_p_hat_greedy(p_reward) * 100
-    # plot_session_lightweight([choice_history, reward_history, p_reward], smooth_factor = 1)
-    # plt.gca().set_title('Ideal-$\\hat{p}$-greedy, foraging eff. = %g%%'%foraging_efficiency)
-    # plt.gca().set_xlim([0,200])
+
+    # results_all_sessions = run_sessions_parallel(bandit, n_reps = 50, pool = pool)
+
+    # # # === Runlength analysis for PatternMelioration ===
+    # choice_history = results_all_sessions['choice_history']
+    # p_reward = results_all_sessions['p_reward']
     
+    # from utils.plot_mice import analyze_runlength_Lau2005, plot_runlength_Lau2005
+    # run_length_Lau = analyze_runlength_Lau2005(choice_history, p_reward, block_partitions = [70,70])
+    # plot_runlength_Lau2005(run_length_Lau, [70,70])
+
 
     #%% =============================================================================
     #     Parameter scan (1-D or 2-D)
@@ -730,12 +724,12 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     #                               # pattern_meliorate_softmax_max_step = 2.5,
     #                               pool = pool)
            
-    # --PatternMelioration_softmax in 2D
-    para_to_scan = {'step_sizes': np.power(10, np.linspace(-1,0,10)),
-                    'softmax_temperature': np.power(10, np.linspace(-1,0,10)),
+    # --FullStateQ in 2D
+    para_to_scan = {'step_sizes': np.power(10, np.linspace(-1,0,15)),
+                    'softmax_temperature': np.power(10, np.linspace(-1,0,15)),
                     }
-    results_para_scan = para_scan('FullStateQ', para_to_scan, n_reps = 50, 
-                                  discount_rate = 0.11788019, max_run_length = 12.8567, 
+    results_para_scan = para_scan('FullStateQ', para_to_scan, n_reps = 100, 
+                                  max_run_length = 12.8567, discount_rate = 0.99, # softmax_temperature = 0.1,
                                   pool = pool)
     
     #%% =============================================================================
@@ -766,6 +760,7 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     #  [0.1477 0.1781]         softmax --> p --> m = floor(p/(1-p))
 
     # opti_para = para_optimize('FullStateQ', n_reps_per_iter = 200, pool =  pool)
+    # ['step_sizes', 'softmax_temperature', 'discount_rate', 'max_run_length']
     # [ 0.50085521,  0.08830155,  0.11788019, 12.85673119]
 
     # =============================================================================

@@ -829,9 +829,9 @@ def plot_runlength_Lau2005(df_run_length_Lau, block_partitions = ['unknown', 'un
     #%%
     
     # --- Plotting ---
-    fig = plt.figure(figsize=(12, 9), dpi = 150)
-    gs = GridSpec(2, 3, hspace = .3, wspace = 0.3, 
-                  left = 0.1, right = 0.95, bottom = 0.15, top = 0.85)
+    fig = plt.figure(figsize=(10, 8), dpi = 150)
+    gs = GridSpec(2, 3, hspace = 0.4, wspace = 0.3, 
+                  left = 0.1, right = 0.95, bottom = 0.10, top = 0.9)
     
     annotations = ['First %g%% trials'%block_partitions[0], 'Last %g%% trials'%block_partitions[1]]
     

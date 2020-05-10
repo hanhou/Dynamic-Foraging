@@ -84,7 +84,7 @@ def plot_one_session(bandit, fig, plottype='2lickport'):
         ax.plot(moving_average(bandit.q_estimation[RIGHT,:], 1), 'g-', label = 'Q_R')
         ax.plot(moving_average(bandit.q_estimation[LEFT,:], 1), 'g--', label = 'Q_L')
         
-    elif bandit.forager not in ['Random', 'IdealpHatOptimal', 'IdealpHatGreedy', 'pMatching', 'AlwaysLEFT', 'IdealpGreedy', 'SuttonBartoRLBook','AmB1']:
+    elif bandit.forager not in ['Random', 'IdealpHatOptimal', 'IdealpHatGreedy', 'pMatching', 'AlwaysLEFT', 'IdealpGreedy', 'SuttonBartoRLBook','AmB1', 'FullStateQ']:
         ax.plot(moving_average(bandit.choice_prob[RIGHT,:], 1), color='Green', label = 'choice prob.')
 
 

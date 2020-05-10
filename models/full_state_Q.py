@@ -18,11 +18,13 @@ class FullStateQ():
                  
                  learn_rate = 0.1,
                  softmax_temperature = 0.1, 
+                 epsilon = 0.1,
                  ):
         
         self.learn_rate = learn_rate
         self.softmax_temperature = softmax_temperature
         self.discount_rate = discount_rate
+        self.epsilon = epsilon
         
         self._init_states(max_run_length, K_arm)
         
@@ -51,13 +53,15 @@ class FullStateQ():
                 if r < max_run_length-1: self.states[k, r].add_next_states([self.states[k, r+1]])  # Stay is always the last index
                 
     def act(self):   # State transition
-        next_state_idx = self.current_state.act(self.softmax_temperature)  # Next state index!!
+        next_state_idx = self.current_state.act_softmax(self.softmax_temperature)  # Next state index!!
+        # next_state_idx = self.current_state.act_epsilon(self.epsilon)  # Next state index!!
+        
         self.backup_SA = [self.current_state, next_state_idx]     # For one-step backup in Q-learning
         self.current_state = self.current_state.next_states[next_state_idx]
         choice = self.current_state.which[0]  # Return absolute choice! (LEFT/RIGHT)
         return choice  
         
-    def update_Q(self, reward):    # The key magic of Q-learning (off-policy TD-0 bootstrap)
+    def update_Q(self, reward):    # Q-learning (off-policy TD-0 bootstrap)
         max_next_SAvalue_for_backup_state = np.max(self.current_state.Q)  # This makes it off-policy
         last_state, last_choice = self.backup_SA
         last_state.Q[last_choice] += self.learn_rate * (reward + self.discount_rate * max_next_SAvalue_for_backup_state - last_state.Q[last_choice])  # Q-learning
@@ -70,19 +74,22 @@ class FullStateQ():
         # print('Right,stay : ', [s.Q[1] for s in self.states[1,:]])
         
         
-    def plot_V(self, ax):  # Plot value functions (V(s) = max Q(s,a))
+    def plot_V(self, ax, time, reward):  # Plot value functions (V(s) = max Q(s,a))
         direction = ['LEFT', 'RIGHT']    
         decision = ['Leave', 'Stay']
         for d in [0,1]:
             for c in [0,1]:
                 p = [s.Q[c] for s in self.states[d,:]]
-                ax[d, c].cla()
-                ax[d, c].bar(np.arange(len(p)), p)
-                ax[d, c].set_title(direction[d] + ', ' + decision[c])
-        
-        plt.show()
-        plt.tight_layout()
-        # plt.pause(0.001)
+                ax[c, d].cla()
+                ax[c, d].bar(np.arange(len(p)), p)
+                ax[c, d].set_title(direction[d] + ', ' + decision[c])
+                ax[c, d].axhline(y=0)
+            
+        plt.ylim([-1,1])
+        plt.annotate( '%s --> %s\nt = %g, reward = %g' % (self.backup_SA[0].which, self.current_state.which, time, reward), xy=(0, 0.8), fontsize = 9)
+        plt.gcf().canvas.draw()
+        plt.waitforbuttonpress()
+        # plt.pause(0.1)
         
 class State():   
     
@@ -101,6 +108,14 @@ class State():
     def add_next_states(self, next_states):
         self.next_states.extend(next_states)
         
-    def act(self, softmax_temp):  # Generate the next action using softmax(Q) policy
+    def act_softmax(self, softmax_temp):  # Generate the next action using softmax(Q) policy
         next_state_idx = choose_ps(softmax(self.Q[:len(self.next_states)], softmax_temp))
+        return next_state_idx  # Return the index of the next state
+
+    def act_epsilon(self, epsilon):  # Generate the next action using epsilon-greedy (More exploratory)
+        if np.random.rand() < epsilon:
+            next_state_idx = np.random.choice(len(self.next_states))
+        else:   # Greedy
+            Q_available = self.Q[:len(self.next_states)]
+            next_state_idx = np.random.choice(np.where(Q_available == Q_available.max())[0])
         return next_state_idx  # Return the index of the next state
