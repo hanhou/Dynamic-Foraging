@@ -150,8 +150,18 @@ def plot_all_reps(results_all_reps):
                                                                 results_all_reps['n_trials'], 
                                                                 results_all_reps['p_reward_pairs'],
                                                                 ), fontsize = 15)
-    fig.text(0.05,0.91,'Efficiency +/- 95%% CI: %.3g%% +/- %.2g%% (if_baited = %s, p_reward_sum = %g)' % (results_all_reps['foraging_efficiency'][0]*100,
-                                                          results_all_reps['foraging_efficiency'][1]*100, results_all_reps['if_baited'], results_all_reps['p_reward_sum']
+    
+    if results_all_reps['if_baited']:
+        if results_all_reps['if_varying_amplitude']:
+            baiting_method = 'amp.'
+        else:
+            baiting_method = 'prob.'
+    else:
+        baiting_method = ''
+    
+    fig.text(0.05,0.91,'Efficiency +/- 95%% CI: %.3g%% +/- %.2g%% (if_baited = %s (%s), p_reward_sum = %g)' % (results_all_reps['foraging_efficiency'][0]*100,
+                                                          results_all_reps['foraging_efficiency'][1]*100, results_all_reps['if_baited'], baiting_method, 
+                                                          results_all_reps['p_reward_sum']
                                                           ), fontsize = 15)
     
     # == 1. Example Session ==

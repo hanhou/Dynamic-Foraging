@@ -59,7 +59,6 @@
 
 
 import numpy as np
-import matplotlib.pyplot as plt
 
 from models.full_state_Q import FullStateQ
 from utils.helper_func import softmax, choose_ps

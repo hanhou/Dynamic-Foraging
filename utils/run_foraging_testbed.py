@@ -328,6 +328,7 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
     results_all_sessions['n_reps'] = n_reps
     results_all_sessions['forager'] = bandits_all_sessions[0].forager
     results_all_sessions['if_baited'] = bandits_all_sessions[0].if_baited
+    results_all_sessions['if_varying_amplitude'] = bandits_all_sessions[0].if_varying_amplitude
     results_all_sessions['p_reward_sum'] = bandits_all_sessions[0].p_reward_sum
     results_all_sessions['p_reward_pairs'] = bandits_all_sessions[0].p_reward_pairs
     
@@ -494,7 +495,8 @@ def para_optimize(forager, n_reps_per_iter = 200, opti_names = '', bounds = '', 
     # Rerun using the optimized parameters
     kwargs_all = generate_kwargs(forager, opti_names, opti_para.x)
         
-    bandit = Bandit(if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs, **kwargs_all)
+    bandit = Bandit(if_baited = if_baited, p_reward_sum = p_reward_sum, 
+                    p_reward_pairs = p_reward_pairs, if_varying_amplitude = if_varying_amplitude, **kwargs_all)
     run_sessions_parallel(bandit, n_reps = 500, pool = pool)
                           
     print(opti_para)
@@ -658,7 +660,7 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # bandit = Bandit(forager = 'SuttonBartoRLBook',step_sizes = 0.1, epsilon = 0.2, n_trials = global_n_trials)
     # bandit = Bandit(forager = 'Bari2019', step_sizes = 0.28768228, forget_rate = 0.01592382, softmax_temperature = 0.37121355,  epsilon = 0, n_trials = global_n_trials)
     # bandit = Bandit(forager = 'Hattori2019', epsilon = 0,  step_sizes = [0.2, 0.1], forget_rate = 0.05, softmax_temperature = 0.4, 
-    #                 if_varying_amplitude = True, n_trials = global_n_trials)   
+    #                 if_varying_amplitude = False, n_trials = global_n_trials)   
  
     # bandit = Bandit(forager = 'IdealpHatOptimal')
     # bandit = Bandit(forager = 'pMatching')
@@ -672,19 +674,19 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     #                 # pattern_meliorate_softmax_max_step = 4.6,
     #                 if_varying_amplitude = False, block_size_mean = 80, n_trials = global_n_trials)
     
-    # == Q-learning Animation, one block, varying prob. ==
+    # #== Q-learning Animation, one block, varying prob. ==
     # bandit = Bandit(forager = 'FullStateQ_softmax', block_size_mean = 2000, n_trials = 1000, if_baited = True, p_reward_pairs = [[0.3, 0.05]], 
     #                 step_sizes = 0.2, discount_rate = 0, max_run_length = 15, softmax_temperature = 0.1, 
     #                 if_plot_Q = True, if_varying_amplitude = False)
     
     # bandit.simulate()
     
-    # == Q-learning Animation, one block, varying amp. ==
-    # bandit = Bandit(forager = 'FullStateQ_softmax', block_size_mean = 2000, n_trials = 1000, if_baited = True, p_reward_pairs = [[0.3, 0.05]], 
-    #                 step_sizes = 0.2, discount_rate = 0, max_run_length = 15, softmax_temperature = 0.1, 
-    #                 if_plot_Q = True, if_varying_amplitude = True)
+    # #== Q-learning Animation, one block, varying amp. ==
+    bandit = Bandit(forager = 'FullStateQ_softmax', block_size_mean = 2000, n_trials = 1000, if_baited = True, p_reward_pairs = [[0.3, 0.05]], 
+                    step_sizes = 0.2, discount_rate = 0, max_run_length = 15, softmax_temperature = 0.1, 
+                    if_plot_Q = True, if_varying_amplitude = True)
     
-    # bandit.simulate()
+    bandit.simulate()
     
     # # == Normal blocks, varying prob ==
     # # ['step_sizes', 'softmax_temperature', 'discount_rate', 'max_run_length']
@@ -701,7 +703,7 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # results_all_sessions = run_sessions_parallel(bandit, n_reps = 50, pool = pool)
     # results_all_sessions['bandits_all_sessions'][0].full_state_Qforager.plot_Q()
 
-    # # Runlength analysis for PatternMelioration 
+    # # Runlength analysis 
     # choice_history = results_all_sessions['choice_history']
     # p_reward = results_all_sessions['p_reward']
     
@@ -725,7 +727,7 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # results_all_sessions = run_sessions_parallel(bandit, n_reps = 50, pool = pool)
     # results_all_sessions['bandits_all_sessions'][0].full_state_Qforager.plot_Q()
 
-    # # Runlength analysis for PatternMelioration
+    # # Runlength analysis
     # choice_history = results_all_sessions['choice_history']
     # p_reward = results_all_sessions['p_reward']
     
@@ -803,7 +805,11 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     
     # RL-like
     # opti_para = para_optimize('Bari2019', n_reps_per_iter = 200, pool = pool)  # 83.7% @ [0.37058271, 0.07003851, 0.27212561]
-    # opti_para = para_optimize('Hattori2019', n_reps_per_iter = 200, pool = pool)  # 83.7% @ [0.39740558, 0.22740528, 0.11980517, 0.33762251] 
+    # opti_para = para_optimize('Hattori2019', n_reps_per_iter = 200, pool = pool)  # 90.3% @ [0.39740558, 0.22740528, 0.11980517, 0.33762251] 
+    
+    # Optimize Hattori for varying amp
+    # opti_para = para_optimize('Hattori2019', n_reps_per_iter = 200, pool = pool, if_varying_amplitude = True)  # 83.7% @ [0.06930557, 0.34428925, 0.00222624, 0.11330533] 
+    
 
     # PatternMelioration 
     # opti_para = para_optimize('PatternMelioration', n_reps_per_iter = 200, pool = pool)    
