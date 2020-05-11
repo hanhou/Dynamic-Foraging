@@ -7,6 +7,7 @@ Created on Fri May  8 22:29:03 2020
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.animation import FFMpegWriter
 
 from utils.helper_func import choose_ps, softmax
 
@@ -27,14 +28,21 @@ class FullStateQ():
         self.epsilon = epsilon
         
         self._init_states(max_run_length, K_arm)
+        self.ax = []
         
         if first_choice is None: 
             first_choice = np.random.choice(K_arm)
         self.current_state = self.states[first_choice, 0]  # Randomly initialize the first choice
         self.backup_SA = [self.current_state, -1]  # First trial is a STAY at first_choice
         
+        if self.softmax_temperature is not None:
+            self.if_softmax = True
+        elif self.epsilon is not None:
+            self.if_softmax = False
+        else:
+            raise ValueError('Both softmax_temp and epsilon are missing!')
+
     def _init_states(self, max_run_length, K_arm):
-        
         # Generate a K_arm * max_run_length numpy array of states
         max_run_length = int(np.ceil(max_run_length))
         
@@ -53,12 +61,10 @@ class FullStateQ():
                 if r < max_run_length-1: self.states[k, r].add_next_states([self.states[k, r+1]])  # Stay is always the last index
                 
     def act(self):   # State transition
-        if self.softmax_temperature is not None:
+        if self.if_softmax:
             next_state_idx = self.current_state.act_softmax(self.softmax_temperature)  # Next state index!!
-        elif self.epsilon is not None:
+        else:  # Epsilon-greedy
             next_state_idx = self.current_state.act_epsilon(self.epsilon)  # Next state index!!
-        else:
-            raise ValueError('Both softmax_temp and epsilon are missing!')
         
         self.backup_SA = [self.current_state, next_state_idx]     # For one-step backup in Q-learning
         self.current_state = self.current_state.next_states[next_state_idx]
@@ -78,24 +84,71 @@ class FullStateQ():
         # print('Left, stay : ', [s.Q[1] for s in self.states[0,:]])
         # print('Right,stay : ', [s.Q[1] for s in self.states[1,:]])
         
-        
-    def plot_V(self, ax, time, reward):  # Plot value functions (V(s) = max Q(s,a))
+    def plot_Q(self, time = np.nan, reward = np.nan, p_reward = np.nan, description = ''):  # Visualize value functions (Q(s,a))
+        # Initialization
+        if self.ax == []:   
+            # Prepare axes
+            self.fig, self.ax = plt.subplots(2,2, sharey=True, figsize=[12,8])
+            plt.subplots_adjust(hspace=0.5, top=0.85)
+            self.ax2 = self.ax.copy()
+            self.annotate = plt.gcf().text(0.05, 0.9, '', fontsize = 13)
+            for c in [0,1]:
+                for d in [0,1]:
+                    self.ax2[c, d] = self.ax[c,d].twinx()
+                    
+            # Prepare animation
+            metadata = dict(title='FullStateQ', artist='Matplotlib')
+            self.writer = FFMpegWriter(fps=25, metadata=metadata)
+            self.writer.setup(self.fig, "..\\results\\%s.mp4"%description, 150)
+            
         direction = ['LEFT', 'RIGHT']    
         decision = ['Leave', 'Stay']
+        X = np.r_[1:np.shape(self.states)[1]-0.1]  # Ignore the last run_length (Must leave)
+        
+        # -- Q values and policy --
         for d in [0,1]:
+            # Compute policy p(a|s)
+            if self.if_softmax:
+                Qs = np.array([s.Q for s in self.states[d,:-1]])
+                ps = []
+                for qq in Qs:
+                    ps.append(softmax(qq, self.softmax_temperature))    
+                ps = np.array(ps)
+                
             for c in [0,1]:
-                p = [s.Q[c] for s in self.states[d,:]]
-                ax[c, d].cla()
-                ax[c, d].bar(np.arange(len(p)), p)
-                ax[c, d].set_title(direction[d] + ', ' + decision[c])
-                ax[c, d].axhline(y=0)
+                self.ax[c, d].cla()
+                self.ax2[c, d].cla()
+                
+                self.ax[c, d].set_xticks(X)
+                self.ax[c, d].set_xlim([0, max(X)+1])
+                self.ax[c, d].set_ylim([-0.05,max(plt.ylim())])
+
+                bar_color = 'r' if c == 0 else 'g'
+
+                self.ax[c, d].bar(X, Qs[:,c], color='gray', alpha = 0.5)
+                self.ax[c, d].set_title(direction[d] + ', ' + decision[c])
+                self.ax[c, d].axhline(0, color='k', ls='--')
+                if d == 0: self.ax[c, d].set_ylabel('Q(s,a)', color='k')                
+                
+                self.ax2[c, d].plot(X, ps[:,c], bar_color+'-o')
+                if d == 1: self.ax2[c, d].set_ylabel('P(a|s)', color=bar_color)
+                self.ax2[c, d].axhline(0, color=bar_color, ls='--')
+                self.ax2[c, d].axhline(1, color=bar_color, ls='--')
+                self.ax2[c, d].set_ylim([-0.05,1.05])
+                
+        # -- This state --
+        last_state = self.backup_SA[0].which
+        current_state = self.current_state.which
+        if time > 1: self.ax2[0, last_state[0]].plot(last_state[1]+1, self.last_reward, 'go', markersize=10, alpha = 0.5)
+        self.ax2[0, current_state[0]].plot(current_state[1]+1, reward, 'go', markersize=15)
+        self.last_reward = reward
             
         # plt.ylim([-1,1])
-        plt.annotate( '%s --> %s\nt = %g, reward = %g' % (self.backup_SA[0].which, self.current_state.which, time, reward), 
-                     xy=(-.5 , max(plt.ylim())), fontsize = 9)
-        plt.gcf().canvas.draw()
-        plt.waitforbuttonpress()
-        # plt.pause(0.1)
+        self.annotate.set_text('%s\nt = %g, p_reward = %s\n%s --> %s, reward = %g\n' % (description, time, p_reward, last_state, current_state, reward))
+        # plt.gcf().canvas.draw()
+        print(time)
+        self.writer.grab_frame()
+        # return plt.waitforbuttonpress()
         
 class State():   
     
@@ -108,7 +161,7 @@ class State():
         # Which state is this?
         self.which = [_k, _run_length] # To be pricise: run_length - 1
         
-        self.Q = np.array([0.0, 0.0])   # Action values for [Leave, Stay] of this state. Initialization value could be considered as priors?
+        self.Q = np.array([.0, .0])   # Action values for [Leave, Stay] of this state. Initialization value could be considered as priors?
         self.next_states = []  # All possible next states (other instances of class State)
     
     def add_next_states(self, next_states):

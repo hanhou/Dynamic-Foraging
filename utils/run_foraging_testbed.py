@@ -331,9 +331,6 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
     results_all_sessions['p_reward_sum'] = bandits_all_sessions[0].p_reward_sum
     results_all_sessions['p_reward_pairs'] = bandits_all_sessions[0].p_reward_pairs
     
-    # For runlength_anlaysis_Lau
-    results_all_sessions['choice_history'] = np.hstack([bb.choice_history for bb in bandits_all_sessions])
-    results_all_sessions['p_reward'] = np.hstack([bb.p_reward for bb in bandits_all_sessions])
     
     # If not in para_scan, plot summary statistics over repeated sessions for the SAME bandit
     if if_plot and not (para_scan or para_optim):
@@ -341,6 +338,13 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
         results_all_sessions['n_blocks'] = n_blocks_now
         results_all_sessions['description'] = bandits_all_sessions[0].description
         results_all_sessions['example_session'] = bandits_all_sessions[0]
+        
+        # For runlength_anlaysis_Lau
+        results_all_sessions['choice_history'] = np.hstack([bb.choice_history for bb in bandits_all_sessions])
+        results_all_sessions['p_reward'] = np.hstack([bb.p_reward for bb in bandits_all_sessions])
+        
+        # For FullStateQ
+        results_all_sessions['bandits_all_sessions'] = bandits_all_sessions
         
         plot_all_reps(results_all_sessions) 
     
@@ -668,26 +672,67 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     #                 # pattern_meliorate_softmax_max_step = 4.6,
     #                 if_varying_amplitude = False, block_size_mean = 80, n_trials = global_n_trials)
     
-    # bandit = Bandit(forager = 'FullStateQ_softmax', block_size_mean = 200, n_trials = 1000, if_baited = True, p_reward_pairs = [[0.3, 0.05]], 
-    #                 step_sizes = 0.1, discount_rate = 0.6, max_run_length = 15, softmax_temperature = 0.1, 
-    #                 if_plot_Q = False, if_varying_amplitude = True )
+    # == Q-learning Animation, one block, varying prob. ==
+    # bandit = Bandit(forager = 'FullStateQ_softmax', block_size_mean = 2000, n_trials = 1000, if_baited = True, p_reward_pairs = [[0.3, 0.05]], 
+    #                 step_sizes = 0.2, discount_rate = 0, max_run_length = 15, softmax_temperature = 0.1, 
+    #                 if_plot_Q = True, if_varying_amplitude = False)
     
-    # # bandit.simulate()
+    # bandit.simulate()
     
-    # # results_all_sessions = run_sessions_parallel(bandit, n_reps = 1, pool = '')  # For debugging, use this.
+    # == Q-learning Animation, one block, varying amp. ==
+    # bandit = Bandit(forager = 'FullStateQ_softmax', block_size_mean = 2000, n_trials = 1000, if_baited = True, p_reward_pairs = [[0.3, 0.05]], 
+    #                 step_sizes = 0.2, discount_rate = 0, max_run_length = 15, softmax_temperature = 0.1, 
+    #                 if_plot_Q = True, if_varying_amplitude = True)
     
-    # # # ['step_sizes', 'softmax_temperature', 'discount_rate', 'max_run_length']
-    # # # [ 0.50085521,  0.08830155,  0.11788019, 12.85673119]
+    # bandit.simulate()
+    
+    # # == Normal blocks, varying prob ==
+    # # ['step_sizes', 'softmax_temperature', 'discount_rate', 'max_run_length']
+    # #  array([ 0.79645452,  0.09857429,  0.05792011, 11.14677311])   ==> 91.7%
+    # bandit = Bandit(forager = 'FullStateQ_softmax', block_size_mean = 80, n_trials = 1000, if_baited = True, 
+    #             step_sizes = 0.8, discount_rate = 0.05, max_run_length = 15, softmax_temperature = 0.1, 
+    #             if_plot_Q = False, if_varying_amplitude = False)
+    
+    # # # results_all_sessions = run_sessions_parallel(bandit, n_reps = 1, pool = '')  # For debugging, use this.
+    
+    # # # # ['step_sizes', 'softmax_temperature', 'discount_rate', 'max_run_length']
+    # # # # [ 0.50085521,  0.08830155,  0.11788019, 12.85673119]
 
     # results_all_sessions = run_sessions_parallel(bandit, n_reps = 50, pool = pool)
+    # results_all_sessions['bandits_all_sessions'][0].full_state_Qforager.plot_Q()
 
-    # # # # === Runlength analysis for PatternMelioration ===
+    # # Runlength analysis for PatternMelioration 
     # choice_history = results_all_sessions['choice_history']
     # p_reward = results_all_sessions['p_reward']
     
     # from utils.plot_mice import analyze_runlength_Lau2005, plot_runlength_Lau2005
     # run_length_Lau = analyze_runlength_Lau2005(choice_history, p_reward, block_partitions = [70,70])
     # plot_runlength_Lau2005(run_length_Lau, [70,70]);
+    
+
+    # # == Normal blocks, varying amp ==
+    # #  array([0.92794971, 0.08407503, 0.05293809, 3.92812548])   ==> 95.4%
+    
+    # bandit = Bandit(forager = 'FullStateQ_softmax', block_size_mean = 80, n_trials = 1000, if_baited = True,
+    #             step_sizes = 0.5, discount_rate = 0.1, max_run_length = 15, softmax_temperature = 0.1, 
+    #             if_plot_Q = False, if_varying_amplitude = True)
+    
+    # # results_all_sessions = run_sessions_parallel(bandit, n_reps = 1, pool = '')  # For debugging, use this.
+    
+    # # ['step_sizes', 'softmax_temperature', 'discount_rate', 'max_run_length']
+    # # [ 0.50085521,  0.08830155,  0.11788019, 12.85673119]
+
+    # results_all_sessions = run_sessions_parallel(bandit, n_reps = 50, pool = pool)
+    # results_all_sessions['bandits_all_sessions'][0].full_state_Qforager.plot_Q()
+
+    # # Runlength analysis for PatternMelioration
+    # choice_history = results_all_sessions['choice_history']
+    # p_reward = results_all_sessions['p_reward']
+    
+    # from utils.plot_mice import analyze_runlength_Lau2005, plot_runlength_Lau2005
+    # run_length_Lau = analyze_runlength_Lau2005(choice_history, p_reward, block_partitions = [70,70])
+    # plot_runlength_Lau2005(run_length_Lau, [70,70]);
+    
 
 
     #%% =============================================================================

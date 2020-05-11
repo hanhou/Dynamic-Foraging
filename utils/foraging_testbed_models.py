@@ -167,9 +167,6 @@ class Bandit:
                                                      softmax_temperature = softmax_temperature)
                 
             self.step_sizes = step_sizes
-            
-            if if_plot_Q:
-                _, self.ax = plt.subplots(2,2, sharey=True, figsize=[12,8]);
           
     def reset(self):
         
@@ -233,8 +230,9 @@ class Bandit:
             self.run_length_now = np.array([0, 0]) 
             
         elif 'FullState' in self.forager:
-            self.description = '%s, step_size = %s, softmax_temp = %g, epsilon = %g, discount_rate = %g, max_run_length = %g' % \
-                               (self.forager, self.step_sizes, self.softmax_temperature, self.epsilon, self.discount_rate, self.max_run_length)
+            self.description = '%s, %s, step_size = %s, softmax_temp = %g, epsilon = %g, discount_rate = %g, max_run_length = %g' % \
+                               (self.forager, 'VaryAmp.' if self.if_varying_amplitude else 'VaryProb.', 
+                                self.step_sizes, self.softmax_temperature, self.epsilon, self.discount_rate, self.max_run_length)
                                
         else:
             self.description = self.forager
@@ -660,7 +658,14 @@ class Bandit:
             self.full_state_Qforager.update_Q(reward)  # All magics are in the Class definition
             
             if self.if_plot_Q:
-                self.full_state_Qforager.plot_V(self.ax, self.time, reward);
+                # go_on = self.full_state_Qforager.plot_Q(self.time, reward, self.p_reward[:,self.time]);
+                # if not go_on:  # No longer plot
+                #     self.if_plot_Q = False
+                    
+                self.full_state_Qforager.plot_Q(self.time, reward, self.p_reward[:,self.time], self.description)
+                if self.time == self.n_trials - 1:  # The last frame, stop recording
+                    self.full_state_Qforager.writer.cleanup()    
+                    self.full_state_Qforager.writer.finish()
             
         return reward
   
