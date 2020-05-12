@@ -563,8 +563,8 @@ if __name__ == '__main__':
     # plot_group_results(result_path = "..\\results\\model_comparison\\w_wo_bias_15\\", group_results_name = 'group_results.npz',
     #                     average_session_number_range = [0,20])
 
-    process_all_mice(result_path = "..\\results\\model_comparison\\w_bias_8\\", combine_prefix = 'model_comparison_CV_patched_', 
-                  group_results_name_to_save = 'group_results_CV_patched.npz', if_plot_each_mice = False)
+    # process_all_mice(result_path = "..\\results\\model_comparison\\w_bias_8\\", combine_prefix = 'model_comparison_CV_patched_', 
+    #               group_results_name_to_save = 'group_results_CV_patched.npz', if_plot_each_mice = False)
     
     
     # plot_group_results(result_path = "..\\results\\model_comparison\\", group_results_name = 'group_results_CV_patched.npz',

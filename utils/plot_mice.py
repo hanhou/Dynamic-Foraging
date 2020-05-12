@@ -84,7 +84,8 @@ def plot_each_mice(group_result, if_hattori_Fig1I):
     
     # -- 2.1 deltaAIC relative to RW1972-softmax-noBias (Fig.1I of Hattori 2019) --        
     x = group_result['session_number']
-    marker_sizes = (group_result["n_trials"]/100 * 2)**2
+    marker_sizes = (group_result["n_trials"][0]/100 * 2)**2
+    
     
     fig = plt.figure(figsize=(15, 5), dpi = 150)
     gs = GridSpec(1, 20, wspace = 0.2, bottom = 0.15, top = 0.9, left = 0.07, right = 0.95)
@@ -100,8 +101,9 @@ def plot_each_mice(group_result, if_hattori_Fig1I):
             y = group_result['delta_AIC'][mm,:]
             ax.plot(x, y, color = cc, label = group_result['delta_AIC_para_notation'].iloc[mm], linewidth = 0.7)
             
-            ax.scatter(x[session_best_matched], y[session_best_matched], color = cc, s = marker_sizes, alpha = 0.9)
-            ax.scatter(x[np.logical_not(session_best_matched)], y[np.logical_not(session_best_matched)], facecolors='none', edgecolors = cc, s = marker_sizes, alpha = 0.7)
+            ax.scatter(x[session_best_matched], y[session_best_matched], color = cc, s = marker_sizes[session_best_matched], alpha = 0.9)
+            ax.scatter(x[np.logical_not(session_best_matched)], y[np.logical_not(session_best_matched)], facecolors='none', edgecolors = cc, 
+                       s = marker_sizes[np.logical_not(session_best_matched)], alpha = 0.7)
             
         ax.text(min(plt.xlim()),10,'(12) RW1972-noBias')
         ax.set_xlabel('Session number')
@@ -155,23 +157,23 @@ def plot_each_mice(group_result, if_hattori_Fig1I):
     # Prediction accuracy NONCV
     y = group_result[hattori_col_name]
     plt.plot(x, y, 'k',label = hattori_label, linewidth = 0.7)
-    plt.scatter(x[session_best_matched], y[session_best_matched], color = 'k', s = marker_sizes, alpha = 0.9, label = 'session = Overall best')
+    plt.scatter(x[session_best_matched], y[session_best_matched], color = 'k', s = marker_sizes[session_best_matched], alpha = 0.9, label = 'session = Overall best')
     plt.scatter(x[np.logical_not(session_best_matched)], y[np.logical_not(session_best_matched)], 
-                facecolors='none', edgecolors = 'k', s = marker_sizes, alpha = 0.7, label = 'session $\\neq$ Overall best')
+                facecolors='none', edgecolors = 'k', s = marker_sizes[np.logical_not(session_best_matched)], alpha = 0.7, label = 'session $\\neq$ Overall best')
     
     # Prediction accuracy bias only
     y = group_result[bias_col_name]
     plt.plot(x, y, 'gray', ls = '--', label = bias_label, linewidth = 0.7)
-    plt.scatter(x[session_best_matched], y[session_best_matched], color = 'gray', s = marker_sizes, alpha = 0.9)
+    plt.scatter(x[session_best_matched], y[session_best_matched], color = 'gray', s = marker_sizes[session_best_matched], alpha = 0.9)
     plt.scatter(x[np.logical_not(session_best_matched)], y[np.logical_not(session_best_matched)], 
-                facecolors='none', edgecolors = 'gray', s = marker_sizes, alpha = 0.7)
+                facecolors='none', edgecolors = 'gray', s = marker_sizes[np.logical_not(session_best_matched)], alpha = 0.7)
 
     # Foraging efficiency
     y = group_result['foraging_efficiency']
     plt.plot(x, y, 'g', ls = '-', label = 'foraging efficiency', linewidth = 0.7)
-    plt.scatter(x[session_best_matched], y[session_best_matched], color = 'g', s = marker_sizes, alpha = 0.9, marker = '^')
+    plt.scatter(x[session_best_matched], y[session_best_matched], color = 'g', s = marker_sizes[session_best_matched], alpha = 0.9, marker = '^')
     plt.scatter(x[np.logical_not(session_best_matched)], y[np.logical_not(session_best_matched)], 
-                facecolors='none', edgecolors = 'g', s = marker_sizes, alpha = 0.7, marker = '^')
+                facecolors='none', edgecolors = 'g', s = marker_sizes[np.logical_not(session_best_matched)], alpha = 0.7, marker = '^')
 
     ax_grand.set_xticks([-1,0])
     ax_grand.set_xlim([-1.5,.5])
@@ -206,9 +208,9 @@ def plot_each_mice(group_result, if_hattori_Fig1I):
         plt.plot(x.T, y.T, linewidth = 0.7)
         
         for ny, yy in enumerate(y):
-            ax.scatter(x[session_best_matched], yy[session_best_matched], s = marker_sizes, alpha = 0.9)
+            ax.scatter(x[session_best_matched], yy[session_best_matched], s = marker_sizes[session_best_matched], alpha = 0.9)
             ax.scatter(x[np.logical_not(session_best_matched)], yy[np.logical_not(session_best_matched)], 
-                        edgecolor = ppc[ny], facecolors = 'none', s = marker_sizes, alpha = 0.9)
+                        edgecolor = ppc[ny], facecolors = 'none', s = marker_sizes[np.logical_not(session_best_matched)], alpha = 0.9)
             sns.pointplot(data = yy.T, ax = ax_grand, color = ppc[ny], ci = 68, alpha = 0.8)
 
         plt.xlabel('Session number')
