@@ -43,7 +43,7 @@ def get_baseline(if_baited, p_reward_sum, p_reward_pairs):
     return random_result, ideal_result
         
 
-def plot_one_session(bandit, fig, plottype='2lickport'):
+def plot_one_session(bandit, fig='', plottype='2lickport'):
     
     if bandit.forager in ['IdealpHatOptimal', 'IdealpHatGreedy', 'FullStateQ'] or 'PatternMelioration' in bandit.forager:
         smooth_factor = 1

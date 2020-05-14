@@ -831,9 +831,9 @@ def plot_runlength_Lau2005(df_run_length_Lau, block_partitions = ['unknown', 'un
     #%%
     
     # --- Plotting ---
-    fig = plt.figure(figsize=(10, 7), dpi = 150)
-    gs = GridSpec(2, 3, hspace = 0.4, wspace = 0.3, 
-                  left = 0.1, right = 0.95, bottom = 0.10, top = 0.9)
+    fig = plt.figure(figsize=(10, 8), dpi = 150)
+    gs = GridSpec(2, 3, hspace = 0.6, wspace = 0.4, 
+                  left = 0.1, right = 0.95, bottom = 0.14, top = 0.85)
     
     annotations = ['First %g%% trials'%block_partitions[0], 'Last %g%% trials'%block_partitions[1]]
     
@@ -885,9 +885,11 @@ def plot_runlength_Lau2005(df_run_length_Lau, block_partitions = ['unknown', 'un
         except:
             pass
         
-        plt.plot([1, max(plt.xlim())],[1, max(plt.xlim())], 'b--', lw = 1)
+        plt.plot([0, 15],[0, 15], 'b--', lw = 1)
         plt.xlabel('Optimal rich runlength')
         plt.ylabel('Mean rich runlength')
+        ax.set_xlim([0,15])
+        ax.set_ylim([0,15])
     
         # == Choice ratio VS optimal rich runlength (m*) ==
         ax = fig.add_subplot(gs[pp,2]) 
@@ -902,9 +904,11 @@ def plot_runlength_Lau2005(df_run_length_Lau, block_partitions = ['unknown', 'un
         
         sns.regplot(x=x, y=y, ax = ax)
         
-        plt.plot([1, max(plt.xlim())],[1, max(plt.xlim())], 'b--', lw = 1)
+        plt.plot([0, 15],[0, 15], 'b--', lw = 1)
         plt.xlabel('Optimal rich runlength')
         plt.ylabel('Choice ratio (#rich / #lean)')
+        ax.set_xlim([0,15])
+        ax.set_ylim([0,15])
 
     return fig
 

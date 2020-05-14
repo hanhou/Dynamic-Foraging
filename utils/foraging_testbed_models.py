@@ -101,7 +101,7 @@ class Bandit:
                  pattern_meliorate_softmax_temp = np.nan,
                  pattern_meliorate_softmax_max_step = np.nan,
                  
-                 max_run_length = 10,   # For FullStatesQ
+                 max_run_length = 15,   # For FullStatesQ
                  discount_rate = 0.99,
                  if_plot_Q = False,
 

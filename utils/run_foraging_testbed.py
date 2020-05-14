@@ -19,7 +19,7 @@ import scipy.optimize as optimize
 
 # Import my own modules
 from utils.foraging_testbed_models import Bandit
-from utils.foraging_testbed_plots import plot_all_reps, plot_para_scan, plot_model_compet
+from utils.foraging_testbed_plots import plot_all_reps, plot_para_scan, plot_model_compet, plot_one_session
 
 methods = [ 
             # 'serial',
@@ -675,18 +675,20 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     #                 if_varying_amplitude = False, block_size_mean = 80, n_trials = global_n_trials)
     
     # #== Q-learning Animation, one block, varying prob. ==
-    # bandit = Bandit(forager = 'FullStateQ_softmax', block_size_mean = 2000, n_trials = 1000, if_baited = True, p_reward_pairs = [[0.3, 0.05]], 
-    #                 step_sizes = 0.2, discount_rate = 0, max_run_length = 15, softmax_temperature = 0.1, 
+    # bandit = Bandit(forager = 'FullStateQ_softmax', block_size_mean = 2000, n_trials = 1000, if_baited = True, p_reward_pairs = [[0.4, 0.05]], 
+    #                 step_sizes = 0.2, discount_rate = 0, max_run_length = 15, softmax_temperature = 0.1,  
     #                 if_plot_Q = True, if_varying_amplitude = False)
     
     # bandit.simulate()
+    # plot_one_session(bandit)
     
     # #== Q-learning Animation, one block, varying amp. ==
-    bandit = Bandit(forager = 'FullStateQ_softmax', block_size_mean = 2000, n_trials = 1000, if_baited = True, p_reward_pairs = [[0.3, 0.05]], 
+    bandit = Bandit(forager = 'FullStateQ_softmax', block_size_mean = 2000, n_trials = 1000, if_baited = True, p_reward_pairs = [[0.4, 0.05]], 
                     step_sizes = 0.2, discount_rate = 0, max_run_length = 15, softmax_temperature = 0.1, 
                     if_plot_Q = True, if_varying_amplitude = True)
     
     bandit.simulate()
+    plot_one_session(bandit)
     
     # # == Normal blocks, varying prob ==
     # # ['step_sizes', 'softmax_temperature', 'discount_rate', 'max_run_length']

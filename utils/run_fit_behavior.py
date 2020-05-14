@@ -402,12 +402,14 @@ def analyze_runlength(result_path = "..\\results\\model_comparison\\", combine_p
                           group_results_name = 'group_results.npz', mice_of_interest = ['FOR05', 'FOR06'], 
                           efficiency_partitions = [30, 30],  block_partitions = [70, 70], if_first_plot = True):
     sns.set()
-    
+
     # Load dataframe
     data = np.load(result_path + group_results_name, allow_pickle=True)
     group_results = data.f.group_results.item()
     results_all_mice = group_results['results_all_mice'] 
     
+    palette_all = sns.color_palette("RdYlGn", max(results_all_mice['session_number'].unique()))
+
     for mouse in mice_of_interest:
         
         # Load raw data
@@ -415,7 +417,7 @@ def analyze_runlength(result_path = "..\\results\\model_comparison\\", combine_p
         data_raw = data_raw.f.results_each_mice.item()
         
         df_this = results_all_mice[results_all_mice.mice == mouse].copy()
-        df_this[['foraging_efficiency', 'prediction_accuracy_NONCV', 'prediction_accuracy_bias_only', 'prediction_accuracy_Sugrue_NONCV']] *= 100
+        df_this[['foraging_efficiency', 'prediction_accuracy_CV_test', 'prediction_accuracy_bias_only']] *= 100
 
         efficiency_thres = np.percentile(df_this.foraging_efficiency, [100-efficiency_partitions[0], efficiency_partitions[1]])
 
@@ -427,12 +429,14 @@ def analyze_runlength(result_path = "..\\results\\model_comparison\\", combine_p
             y = df_this.foraging_efficiency
             (r, p) = pearsonr(x, y)
   
-            g = sns.jointplot(x="prediction_accuracy_NONCV", y="foraging_efficiency", data = df_this.sort_values(by = 'session_number'), 
+            g = sns.jointplot(x="prediction_accuracy_CV_test", y="foraging_efficiency", data = df_this.sort_values(by = 'session_number'), 
                               kind="reg", color="b", marginal_kws = {'bins':20,'color':'k'}, joint_kws = {'marker':'', 'color':'k', 
                                                                                                           'label':'r$^2$ = %.3f, p = %.3f'%(r**2,p)})
             
-            palette = sns.color_palette("RdYlGn", len(df_this))
-            
+            palette = []
+            for s in np.sort(df_this['session_number'].unique()):
+                palette.append(palette_all[s-1])
+
             g.plot_joint(plt.scatter, color = palette, sizes = df_this.n_trials**2 / 3000, alpha = 0.7)
             plt.legend()
             ax = plt.gca()
@@ -589,6 +593,16 @@ if __name__ == '__main__':
     # --- Cross validation patch ---
     # patch_cross_validation(pool = pool)
     
+    # # 
+    # analyze_runlength(result_path = "..\\results\\model_comparison\\w_wo_bias_15\\", 
+    #               combine_prefix = 'model_comparison_15_CV_patched_', group_results_name = 'group_results_15_CV.npz',
+    #               mice_of_interest = ['FOR06'], 
+    #               efficiency_partitions = [20, 20], block_partitions = [40, 40], if_first_plot = True)
+    
+    analyze_runlength(result_path = "..\\results\\model_comparison\\w_wo_bias_15\\", 
+                  combine_prefix = 'model_comparison_15_CV_patched_', group_results_name = 'group_results_15_CV.npz',
+                  mice_of_interest = ['FOR05'], 
+                  efficiency_partitions = [33, 33], block_partitions = [50, 50], if_first_plot = True)
     
     pool.close()   # Just a good practice
     pool.join()

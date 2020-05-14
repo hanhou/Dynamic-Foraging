@@ -372,7 +372,8 @@ def plot_model_comparison_result(model_comparison):
     ax.set_xlim(min(50,np.min(np.min(model_comparison.results[['prediction_accuracy_NONCV']]))) - 5)
     ax.set_ylabel('')
     ax.set_xlabel('Prediction_accuracy_NONCV')
-    
+    s.set_yticklabels('')
+
     return
 
 def plot_confusion_matrix(confusion_results, order = None):

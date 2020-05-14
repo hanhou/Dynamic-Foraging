@@ -125,7 +125,7 @@ class FullStateQ():
 
                 bar_color = 'r' if c == 0 else 'g'
 
-                self.ax[c, d].bar(X, Qs[:,c], color='gray', alpha = 0.5)
+                self.ax[c, d].bar(X, Qs[:,c], color=bar_color, alpha = 0.5)
                 self.ax[c, d].set_title(direction[d] + ', ' + decision[c])
                 self.ax[c, d].axhline(0, color='k', ls='--')
                 if d == 0: self.ax[c, d].set_ylabel('Q(s,a)', color='k')                
