@@ -417,9 +417,12 @@ def generate_kwargs(forager, opti_names, opti_value):  # Helper function for par
 def score_func(opti_value, *argss):
         
     # Arguments interpretation
-    forager, opti_names, n_reps_per_iter, if_baited, p_reward_sum, p_reward_pairs, if_varying_amplitude, pool = argss
+    forager, opti_names, n_reps_per_iter, if_baited, p_reward_sum, p_reward_pairs, if_varying_amplitude, pool, kwargs = argss
     kwargs_all = generate_kwargs(forager, opti_names, opti_value)
-        
+
+    # More keyword arguments
+    kwargs_all = {**kwargs_all, **kwargs}
+    
     # Run simulation
     bandit = Bandit(**kwargs_all, if_baited = if_baited, p_reward_sum = p_reward_sum, 
                     p_reward_pairs = p_reward_pairs, p_reward_seed_override = 20200303, 
@@ -433,7 +436,7 @@ def score_func(opti_value, *argss):
 
 
 def para_optimize(forager, n_reps_per_iter = 200, opti_names = '', bounds = '', pool = '', 
-                  if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None, if_varying_amplitude = False):
+                  if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None, if_varying_amplitude = False, **kwargs):
     
     start = time.time()
     
@@ -487,13 +490,14 @@ def para_optimize(forager, n_reps_per_iter = 200, opti_names = '', bounds = '', 
     # Parameter optimization with DE    
     opti_para = optimize.differential_evolution(func = score_func, 
                                                 args = (forager, opti_names, n_reps_per_iter, if_baited, p_reward_sum, p_reward_pairs, 
-                                                        if_varying_amplitude, pool), 
+                                                        if_varying_amplitude, pool, kwargs), 
                                                 bounds = bounds, 
                                                 workers = 1, disp=True, strategy = 'best1bin',
                                                 mutation=(0.5, 1), recombination = 0.7, popsize = 20)
 
     # Rerun using the optimized parameters
     kwargs_all = generate_kwargs(forager, opti_names, opti_para.x)
+    kwargs_all = {**kwargs_all, **kwargs}
         
     bandit = Bandit(if_baited = if_baited, p_reward_sum = p_reward_sum, 
                     p_reward_pairs = p_reward_pairs, if_varying_amplitude = if_varying_amplitude, **kwargs_all)
@@ -675,20 +679,20 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     #                 if_varying_amplitude = False, block_size_mean = 80, n_trials = global_n_trials)
     
     # #== Q-learning Animation, one block, varying prob. ==
-    # bandit = Bandit(forager = 'FullStateQ_softmax', block_size_mean = 2000, n_trials = 1000, if_baited = True, p_reward_pairs = [[0.4, 0.05]], 
-    #                 step_sizes = 0.2, discount_rate = 0, max_run_length = 15, softmax_temperature = 0.1,  
-    #                 if_plot_Q = True, if_varying_amplitude = False)
+    bandit = Bandit(forager = 'FullStateQ_softmax', block_size_mean = 2000, n_trials = 1000, if_baited = True, p_reward_pairs = [[0.4, 0.05]], 
+                    step_sizes = 0.163, discount_rate = 0, max_run_length = 15, softmax_temperature = 0.043,  
+                    if_plot_Q = True, if_record_Q = True, if_varying_amplitude = False)
     
-    # bandit.simulate()
+    bandit.simulate()
     # plot_one_session(bandit)
     
     # #== Q-learning Animation, one block, varying amp. ==
     bandit = Bandit(forager = 'FullStateQ_softmax', block_size_mean = 2000, n_trials = 1000, if_baited = True, p_reward_pairs = [[0.4, 0.05]], 
-                    step_sizes = 0.2, discount_rate = 0, max_run_length = 15, softmax_temperature = 0.1, 
-                    if_plot_Q = True, if_varying_amplitude = True)
+                    step_sizes = 0.17827392, discount_rate = 0, max_run_length = 15, softmax_temperature = 0.07996672, 
+                    if_plot_Q = True, if_record_Q = True, if_varying_amplitude = True)
     
     bandit.simulate()
-    plot_one_session(bandit)
+    # plot_one_session(bandit)
     
     # # == Normal blocks, varying prob ==
     # # ['step_sizes', 'softmax_temperature', 'discount_rate', 'max_run_length']

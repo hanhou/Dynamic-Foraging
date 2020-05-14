@@ -104,6 +104,7 @@ class Bandit:
                  max_run_length = 15,   # For FullStatesQ
                  discount_rate = 0.99,
                  if_plot_Q = False,
+                 if_record_Q = '',
 
                  ):     
         
@@ -134,6 +135,10 @@ class Bandit:
         self.max_run_length = max_run_length
         self.discount_rate = discount_rate
         self.if_plot_Q = if_plot_Q
+        if if_plot_Q and if_record_Q =='':
+            self.if_record_Q = True
+        else:
+            self.if_record_Q = if_record_Q
         
         if forager == 'Sugrue2004':
             self.taus = [taus]
@@ -159,11 +164,11 @@ class Bandit:
             if forager == 'FullStateQ_epsilon':
                 self.full_state_Qforager = FullStateQ(K_arm = k_arm, max_run_length = max_run_length, 
                                                      discount_rate = discount_rate, learn_rate = step_sizes, 
-                                                     epsilon = epsilon)
+                                                     epsilon = epsilon, if_record_Q = self.if_record_Q)
             elif forager == 'FullStateQ_softmax':
                 self.full_state_Qforager = FullStateQ(K_arm = k_arm, max_run_length = max_run_length, 
                                                      discount_rate = discount_rate, learn_rate = step_sizes, 
-                                                     softmax_temperature = softmax_temperature)
+                                                     softmax_temperature = softmax_temperature, if_record_Q = self.if_record_Q)
                 
             self.step_sizes = step_sizes
           
@@ -549,7 +554,7 @@ class Bandit:
         else:    # Varying reward amplitude
             # For the chosen side AND the unchosen side: 
             # amplitude = 1 - (1 - amp)^(time from last chose)  ==>  next_amp = 1 - (1 - previous_amp) * (1 - p_reward)
-            self.reward_available[:, self.time] = 1 - (1 - reward_available_after_choice) * (1 - self.p_reward[:,self.time])
+            self.reward_available[:, self.time] = 1 - (1 - reward_available_after_choice * self.if_baited) * (1 - self.p_reward[:,self.time])
         
             
         # =============================================================================
@@ -657,12 +662,11 @@ class Bandit:
             self.full_state_Qforager.update_Q(reward)  # All magics are in the Class definition
             
             if self.if_plot_Q:
-                # go_on = self.full_state_Qforager.plot_Q(self.time, reward, self.p_reward[:,self.time]);
-                # if not go_on:  # No longer plot
-                #     self.if_plot_Q = False
+                go_on = self.full_state_Qforager.plot_Q(self.time, reward, self.p_reward[:,self.time], self.description);
+                if not go_on:  # No longer plot
+                    self.if_plot_Q = False
                     
-                self.full_state_Qforager.plot_Q(self.time, reward, self.p_reward[:,self.time], self.description)
-                if self.time == self.n_trials - 1:  # The last frame, stop recording
+                if self.if_record_Q and self.time == self.n_trials - 1:  # The last frame, stop recording
                     self.full_state_Qforager.writer.cleanup()    
                     self.full_state_Qforager.writer.finish()
             

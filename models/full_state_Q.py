@@ -20,8 +20,10 @@ class FullStateQ():
                  learn_rate = 0.1,
                  softmax_temperature = None, 
                  epsilon = None,
+                 if_record_Q = '',
                  ):
         
+        self.if_record_Q = if_record_Q
         self.learn_rate = learn_rate
         self.softmax_temperature = softmax_temperature
         self.discount_rate = discount_rate
@@ -97,9 +99,10 @@ class FullStateQ():
                     self.ax2[c, d] = self.ax[c,d].twinx()
                     
             # Prepare animation
-            metadata = dict(title='FullStateQ', artist='Matplotlib')
-            self.writer = FFMpegWriter(fps=25, metadata=metadata)
-            self.writer.setup(self.fig, "..\\results\\%s.mp4"%description, 150)
+            if self.if_record_Q:
+                metadata = dict(title='FullStateQ', artist='Matplotlib')
+                self.writer = FFMpegWriter(fps=25, metadata=metadata)
+                self.writer.setup(self.fig, "..\\results\\%s.mp4"%description, 150)
             
         direction = ['LEFT', 'RIGHT']    
         decision = ['Leave', 'Stay']
@@ -119,7 +122,6 @@ class FullStateQ():
                 self.ax[c, d].cla()
                 self.ax2[c, d].cla()
                 
-                self.ax[c, d].set_xticks(X)
                 self.ax[c, d].set_xlim([0, max(X)+1])
                 self.ax[c, d].set_ylim([-0.05,max(plt.ylim())])
 
@@ -129,6 +131,8 @@ class FullStateQ():
                 self.ax[c, d].set_title(direction[d] + ', ' + decision[c])
                 self.ax[c, d].axhline(0, color='k', ls='--')
                 if d == 0: self.ax[c, d].set_ylabel('Q(s,a)', color='k')                
+                # self.ax[c, d].set_xticks(np.round(self.ax[c, d].get_xticks()))
+                self.ax[c, d].set_xticks(X)
                 
                 self.ax2[c, d].plot(X, ps[:,c], bar_color+'-o')
                 if d == 1: self.ax2[c, d].set_ylabel('P(a|s)', color=bar_color)
@@ -145,10 +149,13 @@ class FullStateQ():
             
         # plt.ylim([-1,1])
         self.annotate.set_text('%s\nt = %g, p_reward = %s\n%s --> %s, reward = %g\n' % (description, time, p_reward, last_state, current_state, reward))
-        # plt.gcf().canvas.draw()
-        print(time)
-        self.writer.grab_frame()
-        # return plt.waitforbuttonpress()
+        if self.if_record_Q:
+            print(time)
+            self.writer.grab_frame()
+            return True
+        else:
+            plt.gcf().canvas.draw()
+            return plt.waitforbuttonpress()
         
 class State():   
     
