@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from matplotlib.gridspec import GridSpec
+from utils.helper_func import seaborn_style
 
 plt.rcParams.update({'font.size': 13})
 

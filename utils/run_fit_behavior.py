@@ -17,6 +17,7 @@ from scipy.stats import pearsonr
 
 from models.bandit_model_comparison import BanditModelComparison
 from utils.plot_mice import plot_each_mice, analyze_runlength_Lau2005, plot_runlength_Lau2005, plot_example_sessions, plot_group_results
+from models.dynamic_learning_rate import fit_dynamic_learning_rate_session
 
 def fit_each_mice(data, if_session_wise = False, if_verbose = True, file_name = '', pool = '', models = None):
     choice = data.f.choice
@@ -506,8 +507,123 @@ def analyze_runlength_of_models(block_partitions = [50,50]):   # Runlength analy
     run_length_Lau = analyze_runlength_Lau2005(choice_history, p_reward, block_partitions = block_partitions)
     plot_runlength_Lau2005(run_length_Lau, block_partitions)
     plt.gcf().text(0.02,0.92,'Ideal-$\\hat{p}$-greedy, foraging eff. = %g%%'%foraging_efficiency)
-  
+
+#%%    
+
+
+def fit_dynamic_learning_rate_each_mice(data, if_verbose = True, file_name = '', pool = ''):
+    choice = data.f.choice
+    reward = data.f.reward
+    p1 = data.f.p1
+    p2 = data.f.p2
+    session_num = data.f.session
     
+    # -- Formating --
+    # Remove ignores
+    valid_trials = choice != 0
+    
+    choice_history = choice[valid_trials] - 1  # 1: LEFT, 2: RIGHT --> 0: LEFT, 1: RIGHT
+    reward = reward[valid_trials]
+    p_reward = np.vstack((p1[valid_trials],p2[valid_trials]))
+    session_num = session_num[valid_trials]
+    
+    n_trials = len(choice_history)
+    print('Total valid trials = %g' % n_trials)
+    sys.stdout.flush()
+    
+    reward_history = np.zeros([2,n_trials])
+    for c in (0,1):  
+        reward_history[c, choice_history == c] = (reward[choice_history == c] > 0).astype(int)
+    
+    choice_history = np.array([choice_history])
+    
+    results_each_mice = {}
+    
+    # -- Fitting for each session --
+    dynamic_learning_rate_results = []
+     
+    unique_session = np.unique(session_num)
+    
+    for ss in tqdm(unique_session, desc = 'Session-wise', total = len(unique_session)):
+        choice_history_this = choice_history[:, session_num == ss]
+        reward_history_this = reward_history[:, session_num == ss]
+            
+        dynamic_learning_rate_this = fit_dynamic_learning_rate_session(choice_history_this, reward_history_this, pool = pool)
+        dynamic_learning_rate_results.append(dynamic_learning_rate_this)
+        
+    # -- Save data aligned with block start --
+    #TODO
+            
+    results_each_mice['dynamic_learning_rate_results'] = dynamic_learning_rate_results
+
+    return results_each_mice
+
+def fit_dynamic_learning_rate_all_mice(path, save_prefix = 'dynamic_learning_rate', pool = ''):
+    # -- Find all files --
+    start_all = time.time()
+    for r, _, f in os.walk(path):
+        for file in f:
+            data = np.load(os.path.join(r, file))
+            print('=== Mice %s ===' % file)
+            start = time.time()
+            
+            # Do it
+            try:
+                results_each_mice = fit_dynamic_learning_rate_each_mice(data, file_name = file, pool = pool, if_verbose = False)
+                np.savez_compressed( path + save_prefix + '_%s' % file, results_each_mice = results_each_mice)
+                print('Mice %s done in %g mins!\n' % (file, (time.time() - start)/60))
+            except:
+                print('SOMETHING WENT WRONG!!')
+                
+    print('\n ALL FINISHED IN %g hrs!' % ((time.time() - start_all)/3600) )  
+    
+    
+def fit_dynamic_learning_rate_example_session(result_path = "..\\results\\model_comparison\\w_wo_bias_15\\", combine_prefix = 'model_comparison_15_CV_patched_', 
+                                              group_results_name = 'group_results.npz', session_of_interest = ['FOR05', 33], pool = ''):
+    
+    from utils.plot_fitting import plot_model_comparison_predictive_choice_prob
+    import matplotlib.pyplot as plt
+    from utils.helper_func import moving_average
+
+
+    # -- Get data --
+    data = np.load(result_path + group_results_name, allow_pickle=True)
+    group_results = data.f.group_results.item()
+    results_all_mice = group_results['results_all_mice'] 
+    
+    mouse, session = session_of_interest
+    data = np.load(result_path + combine_prefix + mouse + '.npz', allow_pickle=True)
+    data = data.f.results_each_mice.item()
+    this_entry = results_all_mice[(results_all_mice.mice == mouse) & (results_all_mice.session_number == session)]
+    
+    session_idx = this_entry.session_idx.values[0] - 1
+    this_class = data['model_comparison_session_wise'][session_idx]
+    
+    # -- Recovery some essentials 
+    this_class.plot_predictive = [1,2,3]
+    this_class.p_reward = data['model_comparison_grand'].p_reward[:, data['model_comparison_grand'].session_num == session]
+    
+    choice_history = this_class.fit_choice_history
+    reward_history = this_class.fit_reward_history
+    p_reward = this_class.p_reward
+    
+    # -- Get session-wise fitting paras of RW1972 as X0 for fitting --
+    session_wise_RW = this_class.results_raw[4].x
+    fitted_learn_rate, fitted_sigma, fitted_bias, Q, choice_prob = fit_dynamic_learning_rate_session(choice_history, reward_history, 
+                                                                                     slide_win = 10, pool = '', x0 = session_wise_RW)  # Not using parallel pool because of heavy overhead
+    
+    # -- Plot session --
+    this_class.plot_predictive = [1]
+    plot_model_comparison_predictive_choice_prob(this_class, smooth_factor = 5)
+    fig = plt.gcf()
+    fig.text(0.05,0.94,'Mouse = %s, Session_number = %g (idx = %g), Foraging eff. = %g%%' % (mouse, session, session_idx, 
+                                                                                               this_entry.foraging_efficiency.iloc[0] * 100),fontsize = 13)
+    
+    plt.plot(choice_prob[1,:]/np.sum(choice_prob, axis = 0), 'orange-', linewidth = 1)
+    plt.plot(moving_average(fitted_learn_rate[0], 5), 'r-', linewidth = 1.5)
+    plt.pause(10)
+
+#%%    
 def patch_cross_validation(raw_path = '..\\export\\', result_to_patch = "..\\results\\model_comparison\\model_comparison_",
                            cross_validation_model_num = [15], pool = ''):
     
@@ -599,10 +715,16 @@ if __name__ == '__main__':
     #               mice_of_interest = ['FOR06'], 
     #               efficiency_partitions = [20, 20], block_partitions = [40, 40], if_first_plot = True)
     
-    analyze_runlength(result_path = "..\\results\\model_comparison\\w_wo_bias_15\\", 
-                  combine_prefix = 'model_comparison_15_CV_patched_', group_results_name = 'group_results_15_CV.npz',
-                  mice_of_interest = ['FOR05'], 
-                  efficiency_partitions = [33, 33], block_partitions = [50, 50], if_first_plot = True)
+    # analyze_runlength(result_path = "..\\results\\model_comparison\\w_wo_bias_15\\", 
+    #               combine_prefix = 'model_comparison_15_CV_patched_', group_results_name = 'group_results_15_CV.npz',
+    #               mice_of_interest = ['FOR05'], 
+    #               efficiency_partitions = [33, 33], block_partitions = [50, 50], if_first_plot = True)
+    
+    # -- Dynamic learning rate analysis --
+    # fit_dynamic_learning_rate_all_mice(path = '..\\export\\', save_prefix = 'dynamic_learning_rate' , pool = '')
+    
+    fit_dynamic_learning_rate_example_session(result_path = "..\\results\\model_comparison\\w_wo_bias_15\\", combine_prefix = 'model_comparison_15_CV_patched_', 
+                                              group_results_name = 'group_results_15_CV.npz', session_of_interest = ['FOR05', 33], pool = pool)
     
     pool.close()   # Just a good practice
     pool.join()

@@ -14,6 +14,7 @@ import pandas as pd
 from matplotlib.gridspec import GridSpec
 from matplotlib.pyplot import cm
 
+from utils.helper_func import moving_average
 
 # import models.bandit_model_comparison
 # import matplotlib as mpl 
@@ -21,11 +22,6 @@ from matplotlib.pyplot import cm
 
 # matplotlib.use('qt5agg')
 plt.rcParams.update({'font.size': 14, 'figure.dpi': 150})
-
-def moving_average(a, n=3) :
-    ret = np.cumsum(a, dtype=float)
-    ret[n:] = ret[n:] - ret[:-n]
-    return ret[n - 1:] / n
 
 def plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bounds, para_scales, para_color_code, para_2ds, n_trials, fit_method):
     sns.reset_orig()

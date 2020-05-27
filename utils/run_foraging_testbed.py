@@ -668,30 +668,31 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
  
     # bandit = Bandit(forager = 'IdealpHatOptimal')
     # bandit = Bandit(forager = 'pMatching')
-    # bandit = Bandit(forager = 'AmB1', m_AmB1=5)
+    
+    bandit = Bandit(forager = 'AmB1', m_AmB1=5)
     
     # bandit = Bandit(forager = 'PatternMelioration', step_sizes = 0.2, pattern_meliorate_threshold = 0.1, block_size_mean = 80, 
     #                 if_varying_amplitude = True, n_trials = global_n_trials)
-    # results_all_sessions = run_sessions_parallel(bandit, n_reps = 500, pool = pool)
+    results_all_sessions = run_sessions_parallel(bandit, n_reps = 500, pool = pool)
 
     # bandit = Bandit(forager = 'PatternMelioration_softmax', step_sizes = 0.1477, pattern_meliorate_softmax_temp = 0.1781, 
     #                 # pattern_meliorate_softmax_max_step = 4.6,
     #                 if_varying_amplitude = False, block_size_mean = 80, n_trials = global_n_trials)
     
     # #== Q-learning Animation, one block, varying prob. ==
-    bandit = Bandit(forager = 'FullStateQ_softmax', block_size_mean = 2000, n_trials = 1000, if_baited = True, p_reward_pairs = [[0.4, 0.05]], 
-                    step_sizes = 0.163, discount_rate = 0, max_run_length = 15, softmax_temperature = 0.043,  
-                    if_plot_Q = True, if_record_Q = True, if_varying_amplitude = False)
+    # bandit = Bandit(forager = 'FullStateQ_softmax', block_size_mean = 2000, n_trials = 1000, if_baited = True, p_reward_pairs = [[0.4, 0.05]], 
+    #                 step_sizes = 0.163, discount_rate = 0, max_run_length = 15, softmax_temperature = 0.043,  
+    #                 if_plot_Q = True, if_record_Q = True, if_varying_amplitude = False)
     
-    bandit.simulate()
+    # bandit.simulate()
     # plot_one_session(bandit)
     
     # #== Q-learning Animation, one block, varying amp. ==
-    bandit = Bandit(forager = 'FullStateQ_softmax', block_size_mean = 2000, n_trials = 1000, if_baited = True, p_reward_pairs = [[0.4, 0.05]], 
-                    step_sizes = 0.17827392, discount_rate = 0, max_run_length = 15, softmax_temperature = 0.07996672, 
-                    if_plot_Q = True, if_record_Q = True, if_varying_amplitude = True)
+    # bandit = Bandit(forager = 'FullStateQ_softmax', block_size_mean = 2000, n_trials = 1000, if_baited = True, p_reward_pairs = [[0.4, 0.05]], 
+    #                 step_sizes = 0.17827392, discount_rate = 0, max_run_length = 15, softmax_temperature = 0.07996672, 
+    #                 if_plot_Q = True, if_record_Q = True, if_varying_amplitude = True)
     
-    bandit.simulate()
+    # bandit.simulate()
     # plot_one_session(bandit)
     
     # # == Normal blocks, varying prob ==
