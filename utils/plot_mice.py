@@ -662,9 +662,8 @@ def plot_group_results(result_path = "..\\results\\model_comparison\\w_bias_8\\"
     #%%
     return
 
-
-def plot_example_sessions(result_path = "..\\results\\model_comparison\\", combine_prefix = 'model_comparison_15_', 
-                          group_results_name = 'group_results.npz', session_of_interest = [['FOR05', 33]], block_partitions = [70, 70], smooth_factor = 1):
+def plot_example_sessions(result_path = "..\\results\\model_comparison\\w_wo_bias_15\\", combine_prefix = 'model_comparison_15_CV_patched_', 
+                          group_results_name = 'group_results_15_CV.npz', session_of_interest = [['FOR05', 33]], block_partitions = [70, 70], smooth_factor = 1):
     #%%
     from utils.plot_fitting import plot_model_comparison_predictive_choice_prob
     
@@ -684,7 +683,7 @@ def plot_example_sessions(result_path = "..\\results\\model_comparison\\", combi
         this_class = data['model_comparison_session_wise'][session_idx]
         
         # -- Recovery some essentials 
-        this_class.plot_predictive = [1,2,3]
+        this_class.plot_predictive = [1]
         this_class.p_reward = data['model_comparison_grand'].p_reward[:, data['model_comparison_grand'].session_num == session]
         
         # -- Show and plot fitting results

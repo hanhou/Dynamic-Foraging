@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import pearsonr
 
+from utils.helper_func import moving_average
 from models.bandit_model_comparison import BanditModelComparison
 from utils.plot_mice import plot_each_mice, analyze_runlength_Lau2005, plot_runlength_Lau2005, plot_example_sessions, plot_group_results
 from models.dynamic_learning_rate import fit_dynamic_learning_rate_session
@@ -579,11 +580,9 @@ def fit_dynamic_learning_rate_all_mice(path, save_prefix = 'dynamic_learning_rat
     
     
 def fit_dynamic_learning_rate_example_session(result_path = "..\\results\\model_comparison\\w_wo_bias_15\\", combine_prefix = 'model_comparison_15_CV_patched_', 
-                                              group_results_name = 'group_results.npz', session_of_interest = ['FOR05', 33], pool = ''):
+                                              group_results_name = 'group_results.npz', session_of_interest = ['FOR05', 33], pool = '', fixed_sigma_bias = 'none'):
     
     from utils.plot_fitting import plot_model_comparison_predictive_choice_prob
-    import matplotlib.pyplot as plt
-    from utils.helper_func import moving_average
 
 
     # -- Get data --
@@ -605,23 +604,45 @@ def fit_dynamic_learning_rate_example_session(result_path = "..\\results\\model_
     
     choice_history = this_class.fit_choice_history
     reward_history = this_class.fit_reward_history
-    p_reward = this_class.p_reward
+    # p_reward = this_class.p_reward
     
     # -- Get session-wise fitting paras of RW1972 as X0 for fitting --
     session_wise_RW = this_class.results_raw[4].x
-    fitted_learn_rate, fitted_sigma, fitted_bias, Q, choice_prob = fit_dynamic_learning_rate_session(choice_history, reward_history, 
-                                                                                     slide_win = 10, pool = '', x0 = session_wise_RW)  # Not using parallel pool because of heavy overhead
+    fitted_learn_rate, fitted_sigma, fitted_bias, _, choice_prob = fit_dynamic_learning_rate_session(choice_history, reward_history, 
+                                                    slide_win = 10, pool = '', x0 = session_wise_RW, fixed_sigma_bias = fixed_sigma_bias)  # Not using parallel pool because of heavy overhead
     
     # -- Plot session --
     this_class.plot_predictive = [1]
     plot_model_comparison_predictive_choice_prob(this_class, smooth_factor = 5)
     fig = plt.gcf()
-    fig.text(0.05,0.94,'Mouse = %s, Session_number = %g (idx = %g), Foraging eff. = %g%%' % (mouse, session, session_idx, 
-                                                                                               this_entry.foraging_efficiency.iloc[0] * 100),fontsize = 13)
+    fig.text(0.05,0.94,'Mouse = %s, Session_number = %g (idx = %g), Foraging eff. = %g%%, fixed_$\\sigma$_b = %g' % (mouse, session, session_idx, 
+                                                                                               this_entry.foraging_efficiency.iloc[0] * 100, fixed_sigma_bias),fontsize = 13)
     
-    plt.plot(choice_prob[1,:]/np.sum(choice_prob, axis = 0), 'orange-', linewidth = 1)
-    plt.plot(moving_average(fitted_learn_rate[0], 5), 'r-', linewidth = 1.5)
-    plt.pause(10)
+    plt.plot(choice_prob[1,:]/np.sum(choice_prob, axis = 0), color = 'orange', linewidth = 1)
+    # plt.plot(moving_average(fitted_sigma[0], 5), color='c', linewidth=1, label='sigma')
+    # plt.plot(moving_average(fitted_bias[0], 5), color='k', linewidth=1, label='bias')
+
+    plt.plot(moving_average(fitted_learn_rate[0], 5), 'r-', linewidth = 2, label='learning rate')
+    plt.legend(fontsize = 10, loc=1, bbox_to_anchor=(0.985, 0.89), bbox_transform=plt.gcf().transFigure)
+    # plt.pause(10)
+
+def fit_dynamic_learning_rate_RW1972(slide_win = 10, fixed_sigma_bias = 'none'):
+
+    from utils.run_model_recovery import generate_fake_data
+    from utils.plot_fitting import plot_session_lightweight
+        
+    choice_history, reward_history, p_reward = generate_fake_data('RW1972_softmax', ['learn_rate', 'softmax_temperature', 'biasL'], 
+                                                      [0.3, 0.4, 0.2], n_trials = 500, p_reward_seed_override = 20200527)
+    
+    x0 = [0.3, 0.4, 0.2]
+    fitted_learn_rate, fitted_sigma, fitted_bias, _, choice_prob = fit_dynamic_learning_rate_session(choice_history, reward_history, 
+                                                    slide_win = slide_win, pool = '', x0 = x0, fixed_sigma_bias = fixed_sigma_bias)  # Not using parallel pool because of heavy overhead
+
+    plot_session_lightweight([choice_history, reward_history, p_reward], smooth_factor = 5) 
+    plt.plot(moving_average(fitted_learn_rate[0], 5), 'r-', linewidth = 2, label='learning rate')
+    plt.legend(fontsize = 10, loc=1, bbox_to_anchor=(0.985, 0.89), bbox_transform=plt.gcf().transFigure)
+    
+    
 
 #%%    
 def patch_cross_validation(raw_path = '..\\export\\', result_to_patch = "..\\results\\model_comparison\\model_comparison_",
@@ -677,8 +698,8 @@ if __name__ == '__main__':
     
     # --- Plot all results ---
     
-    # process_all_mice(result_path = "..\\results\\model_comparison\\w_wo_bias_15\\", combine_prefix = 'model_comparison_15_', 
-    #               group_results_name_to_save = 'group_results.npz', if_plot_each_mice = False)
+    # process_all_mice(result_path = "..\\results\\model_comparison\\w_wo_bias_15\\", combine_prefix = 'model_comparison_15_CV_patched_FOR06', 
+    #               group_results_name_to_save = 'temp.npz', if_plot_each_mice = True)
 
     # plot_group_results(result_path = "..\\results\\model_comparison\\w_wo_bias_15\\", group_results_name = 'group_results.npz',
     #                     average_session_number_range = [0,20])
@@ -694,7 +715,7 @@ if __name__ == '__main__':
     #                     average_session_number_range = [0,20])
                        
     # --- Example sessions ---
-    # plot_example_sessions(group_results_name = 'temp.npz', session_of_interest = [['FOR05', 33]])
+    # plot_example_sessions(session_of_interest = [['FOR06', 49]], smooth_factor = 5)
     
     # analyze_runlength(mice_of_interest = ['FOR05', 'FOR06'], efficiency_partitions = [20, 20], block_partitions = [30, 30])
     # analyze_runlength(efficiency_partitions = [20, 20], block_partitions = [50, 50], if_first_plot = False)
@@ -722,9 +743,11 @@ if __name__ == '__main__':
     
     # -- Dynamic learning rate analysis --
     # fit_dynamic_learning_rate_all_mice(path = '..\\export\\', save_prefix = 'dynamic_learning_rate' , pool = '')
+    # fit_dynamic_learning_rate_example_session(fixed_sigma_bias = 'none', result_path = "..\\results\\model_comparison\\w_wo_bias_15\\", combine_prefix = 'model_comparison_15_CV_patched_', 
+    #                                           group_results_name = 'group_results_15_CV.npz', session_of_interest = ['FOR05', 33], pool = pool)
     
-    fit_dynamic_learning_rate_example_session(result_path = "..\\results\\model_comparison\\w_wo_bias_15\\", combine_prefix = 'model_comparison_15_CV_patched_', 
-                                              group_results_name = 'group_results_15_CV.npz', session_of_interest = ['FOR05', 33], pool = pool)
+    # Negative control of constant learning rate
+    # fit_dynamic_learning_rate_RW1972(slide_win = 10)
     
     pool.close()   # Just a good practice
     pool.join()

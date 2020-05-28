@@ -32,7 +32,8 @@ def seaborn_style():
     """
     Set seaborn style for plotting figures
     """
-    sns.set(style="ticks", context="paper", font_scale=1.4)
+    # sns.set(style="ticks", context="paper", font_scale=1.4)
+    sns.set(style="ticks", context="talk", font_scale=2)
     sns.despine(trim=True)
     matplotlib.rcParams['pdf.fonttype'] = 42
     matplotlib.rcParams['ps.fonttype'] = 42

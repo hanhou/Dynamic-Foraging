@@ -23,8 +23,11 @@ from utils.helper_func import moving_average
 # matplotlib.use('qt5agg')
 plt.rcParams.update({'font.size': 14, 'figure.dpi': 150})
 
+# from utils.helper_func import seaborn_style
+# seaborn_style()
+
 def plot_para_recovery(forager, true_paras, fitted_paras, para_names, para_bounds, para_scales, para_color_code, para_2ds, n_trials, fit_method):
-    sns.reset_orig()
+    # sns.reset_orig()
     n_paras, n_models = np.shape(fitted_paras)
     n_para_2ds = len(para_2ds)
     if para_scales is None: 
@@ -205,6 +208,7 @@ def plot_LL_surface(forager, LLsurfaces, CI_cutoff_LPTs, para_names, para_2ds, p
     
 def plot_session_lightweight(fake_data, fitted_data = None, smooth_factor = 5):
     # sns.reset_orig()
+    sns.set(style="ticks", context="paper", font_scale=1.4)
 
     choice_history, reward_history, p_reward = fake_data
     
@@ -231,10 +235,12 @@ def plot_session_lightweight(fake_data, fitted_data = None, smooth_factor = 5):
             '|',color='gray', markersize=10, markeredgewidth=1)
     
     # Base probability
-    ax.plot(np.arange(0, n_trials), p_reward_fraction, color='y', label = 'base rew. prob.')
+    ax.plot(np.arange(0, n_trials), p_reward_fraction, color='y', label = 'base rew. prob.', lw = 1.5)
     
     # Smoothed choice history
-    ax.plot(moving_average(choice_history, smooth_factor) , linewidth = 1.5, color='black', label = 'choice (smooth = %g)' % smooth_factor)
+    y = moving_average(choice_history, smooth_factor)
+    x = np.arange(0, len(y)) + int(smooth_factor/2)
+    ax.plot(x, y, linewidth = 1.5, color='black', label = 'choice (smooth = %g)' % smooth_factor)
     
     # For each session, if any
     if fitted_data is not None:
@@ -247,11 +253,12 @@ def plot_session_lightweight(fake_data, fitted_data = None, smooth_factor = 5):
     # ax.set_xlim(0,300)
     
     # fig.tight_layout() 
-    
+    sns.despine(trim=True)
+
     return ax
     
 def plot_model_comparison_predictive_choice_prob(model_comparison, smooth_factor = 5):
-    # sns.reset_orig()
+    sns.reset_orig()
     
     choice_history, reward_history, p_reward, trial_numbers = model_comparison.fit_choice_history, model_comparison.fit_reward_history, model_comparison.p_reward, model_comparison.trial_numbers
     if not hasattr(model_comparison,'plot_predictive'):
@@ -272,16 +279,21 @@ def plot_model_comparison_predictive_choice_prob(model_comparison, smooth_factor
                     label = 'Model %g: %s, Km = %g\n%s\n%s' % (bb+1, this_result.model, this_result.Km, 
                                                                                         this_result.para_notation, this_result.para_fitted))
     
-    # Plot session ends
-    for sesson_end in np.cumsum(trial_numbers):
-        plt.axvline(sesson_end, color='b', linestyle='--', linewidth = 2)
+    # Plot session starts
+    if len(trial_numbers) > 1:  # More than one sessions
+        for session_start in np.cumsum([0, *trial_numbers[:-1]]):
+            plt.axvline(session_start, color='b', linestyle='--', linewidth = 2)
+            try:
+                plt.text(session_start + 1, 1, '%g' % model_comparison.session_num[session_start], fontsize = 10, color='b')
+            except:
+                pass
 
-    ax.legend(fontsize = 10, loc=1, bbox_to_anchor=(0.985, 0.89), bbox_transform=plt.gcf().transFigure)
+    ax.legend(fontsize = 7, loc=1, bbox_to_anchor=(0.985, 0.89), bbox_transform=plt.gcf().transFigure)
      
     # ax.set_xlim(0,300)
     
     # fig.tight_layout() 
-    
+    sns.set()
     return
 
 def plot_model_comparison_result(model_comparison):
