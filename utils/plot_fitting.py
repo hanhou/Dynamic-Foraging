@@ -206,7 +206,7 @@ def plot_LL_surface(forager, LLsurfaces, CI_cutoff_LPTs, para_names, para_2ds, p
     
     plt.show()
     
-def plot_session_lightweight(fake_data, fitted_data = None, smooth_factor = 5):
+def plot_session_lightweight(fake_data, fitted_data = None, smooth_factor = 5, base_color = 'y'):
     # sns.reset_orig()
     sns.set(style="ticks", context="paper", font_scale=1.4)
 
@@ -235,7 +235,7 @@ def plot_session_lightweight(fake_data, fitted_data = None, smooth_factor = 5):
             '|',color='gray', markersize=10, markeredgewidth=1)
     
     # Base probability
-    ax.plot(np.arange(0, n_trials), p_reward_fraction, color='y', label = 'base rew. prob.', lw = 1.5)
+    ax.plot(np.arange(0, n_trials), p_reward_fraction, color=base_color, label = 'base rew. prob.', lw = 1.5)
     
     # Smoothed choice history
     y = moving_average(choice_history, smooth_factor)

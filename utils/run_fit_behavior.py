@@ -615,10 +615,10 @@ def fit_dynamic_learning_rate_example_session(result_path = "..\\results\\model_
     this_class.plot_predictive = [1]
     plot_model_comparison_predictive_choice_prob(this_class, smooth_factor = 5)
     fig = plt.gcf()
-    fig.text(0.05,0.94,'Mouse = %s, Session_number = %g (idx = %g), Foraging eff. = %g%%, fixed_$\\sigma$_b = %g' % (mouse, session, session_idx, 
+    fig.text(0.05,0.94,'Mouse = %s, Session_number = %g (idx = %g), Foraging eff. = %g%%, fixed_$\\sigma$_b = %s' % (mouse, session, session_idx, 
                                                                                                this_entry.foraging_efficiency.iloc[0] * 100, fixed_sigma_bias),fontsize = 13)
     
-    plt.plot(choice_prob[1,:]/np.sum(choice_prob, axis = 0), color = 'orange', linewidth = 1)
+    plt.plot(choice_prob[1,:]/np.sum(choice_prob, axis = 0), color = 'g', linewidth = 1)
     # plt.plot(moving_average(fitted_sigma[0], 5), color='c', linewidth=1, label='sigma')
     # plt.plot(moving_average(fitted_bias[0], 5), color='k', linewidth=1, label='bias')
 

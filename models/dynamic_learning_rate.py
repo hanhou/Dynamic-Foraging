@@ -12,7 +12,7 @@ from tqdm import tqdm
 from utils.helper_func import softmax
 
 
-def fit_dynamic_learning_rate_session(choice_history, reward_history, slide_win = 10, pool = '', x0 = []):
+def fit_dynamic_learning_rate_session(choice_history, reward_history, slide_win = 10, pool = '', x0 = [], fixed_sigma_bias = 'None', method = 'DE'):
     ''' Fit R-W 1972 with sliding window = 10 (Wang, ..., Botvinick, 2018) '''
     
     trial_n = np.shape(choice_history)[1]
@@ -20,7 +20,13 @@ def fit_dynamic_learning_rate_session(choice_history, reward_history, slide_win 
     
     # Settings for RW1972
     # ['RW1972_softmax', ['learn_rate', 'softmax_temperature', 'biasL'],[0, 1e-2, -5],[1, 15, 5]]
-    fit_bounds = [[0, 1e-2, -5],[1, 15, 5]]
+    
+    if fixed_sigma_bias == 'global':
+        fit_bounds = [[0, x0[1], x0[2]],[1, x0[1], x0[2]]]  # Fixed sigma and bias at the global fitted parameters
+    elif fixed_sigma_bias == 'zeros':
+        fit_bounds = [[0, 1e-4, 0], [1, 1e-4, 0]]
+    elif fixed_sigma_bias == 'none' :
+        fit_bounds = [[0, 1e-2, -5],[1, 15, 5]]
     
     Q = np.zeros(np.shape(reward_history))  # Cache of Q values (using the best fit at each step)
     choice_prob = Q.copy()
@@ -34,15 +40,16 @@ def fit_dynamic_learning_rate_session(choice_history, reward_history, slide_win 
         choice_this = choice_history[:, t : t + slide_win]
         reward_this = reward_history[:, t : t + slide_win]
         
-        fitting_result = optimize.differential_evolution(func = negLL_slide_win, args = (Q_0, choice_this, reward_this),
+        if method == 'DE':
+            fitting_result = optimize.differential_evolution(func = negLL_slide_win, args = (Q_0, choice_this, reward_this),
                                                   bounds = optimize.Bounds(fit_bounds[0], fit_bounds[1]), 
-                                                  mutation=(0.5, 1), recombination = 0.7, popsize = 8, strategy = 'best1bin', 
+                                                  mutation=(0.5, 1), recombination = 0.7, popsize = 4, strategy = 'best1bin', 
                                                   disp = False, 
                                                   workers = 1 if pool == '' else 8,   # For DE, use pool to control if_parallel, although we don't use pool for DE
                                                   updating = 'immediate' if pool == '' else 'deferred')
-        
-        # fitting_result = optimize.minimize(negLL_slide_win, x0, args = (Q_0, choice_this, reward_this), method = 'L-BFGS-B', 
-        #                   bounds = optimize.Bounds(fit_bounds[0], fit_bounds[1]))
+        else:        
+            fitting_result = optimize.minimize(negLL_slide_win, x0, args = (Q_0, choice_this, reward_this), method = 'L-BFGS-B', 
+                        bounds = optimize.Bounds(fit_bounds[0], fit_bounds[1]))
 
         # Save parameters
         learn_rate, softmax_temperature, biasL = fitting_result.x

@@ -67,6 +67,8 @@ class BanditModel:
                  tau2 = None,   
                  w_tau1 = None,      
                  
+                 # Choice kernel
+                 
                  # For 'RW1972_epsi','RW1972_softmax','Bari2019', 'Hattori2019'
                  learn_rate = None, # For RW and Bari
                  learn_rate_rew = None,     # For Hattori
