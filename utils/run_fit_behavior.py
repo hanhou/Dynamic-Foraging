@@ -18,7 +18,7 @@ from scipy.stats import pearsonr
 from utils.helper_func import moving_average
 from models.bandit_model_comparison import BanditModelComparison
 from utils.plot_mice import plot_each_mice, analyze_runlength_Lau2005, plot_runlength_Lau2005, plot_example_sessions, plot_group_results
-from models.dynamic_learning_rate import fit_dynamic_learning_rate_session
+from models.dynamic_learning_rate import fit_dynamic_learning_rate_session, fit_dynamic_learning_rate_session_no_bias_free_Q_0
 
 def fit_each_mice(data, if_session_wise = False, if_verbose = True, file_name = '', pool = '', models = None):
     choice = data.f.choice
@@ -626,22 +626,26 @@ def fit_dynamic_learning_rate_example_session(result_path = "..\\results\\model_
     plt.legend(fontsize = 10, loc=1, bbox_to_anchor=(0.985, 0.89), bbox_transform=plt.gcf().transFigure)
     # plt.pause(10)
 
-def fit_dynamic_learning_rate_RW1972(slide_win = 10, fixed_sigma_bias = 'none'):
+def fit_dynamic_learning_rate_RW1972(slide_win = 10, fixed_sigma_bias = 'none', pool = '', method = 'DE'):
 
     from utils.run_model_recovery import generate_fake_data
     from utils.plot_fitting import plot_session_lightweight
         
+    x0 = [0.2, 0.2, 0.2]  
     choice_history, reward_history, p_reward = generate_fake_data('RW1972_softmax', ['learn_rate', 'softmax_temperature', 'biasL'], 
-                                                      [0.3, 0.4, 0.2], n_trials = 500, p_reward_seed_override = 20200527)
+                                                      x0, n_trials = 300, p_reward_seed_override = 20200527)
     
-    x0 = [0.3, 0.4, 0.2]
-    fitted_learn_rate, fitted_sigma, fitted_bias, _, choice_prob = fit_dynamic_learning_rate_session(choice_history, reward_history, 
-                                                    slide_win = slide_win, pool = '', x0 = x0, fixed_sigma_bias = fixed_sigma_bias)  # Not using parallel pool because of heavy overhead
+    
+    # fitted_learn_rate, fitted_sigma, fitted_bias, Q, choice_prob = fit_dynamic_learning_rate_session(choice_history, reward_history, 
+    #                                                 slide_win = slide_win, pool = pool, x0 = x0, fixed_sigma_bias = 'global', method = method)  # Not using parallel pool because of heavy overhead
+    fitted_learn_rate, fitted_sigma, fitted_bias, Q, choice_prob = fit_dynamic_learning_rate_session_no_bias_free_Q_0(choice_history, reward_history, 
+                                                    slide_win = slide_win, pool = pool, x0 = [0.2, 0.2, 0.5, 0.5], fixed_sigma = 'none', method = method)  # Not using parallel pool because of heavy overhead
 
     plot_session_lightweight([choice_history, reward_history, p_reward], smooth_factor = 5) 
     plt.plot(moving_average(fitted_learn_rate[0], 5), 'r-', linewidth = 2, label='learning rate')
+    plt.plot(choice_prob[1,:]/np.sum(choice_prob, axis = 0), color = 'gray', linewidth = 1, label='fitted')
     plt.legend(fontsize = 10, loc=1, bbox_to_anchor=(0.985, 0.89), bbox_transform=plt.gcf().transFigure)
-    
+    plt.show()
     
 
 #%%    
@@ -747,7 +751,7 @@ if __name__ == '__main__':
     #                                           group_results_name = 'group_results_15_CV.npz', session_of_interest = ['FOR05', 33], pool = pool)
     
     # Negative control of constant learning rate
-    # fit_dynamic_learning_rate_RW1972(slide_win = 10)
+    fit_dynamic_learning_rate_RW1972(slide_win = 40, method = 'nonDE', pool = '')
     
     pool.close()   # Just a good practice
     pool.join()
