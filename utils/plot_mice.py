@@ -914,7 +914,8 @@ def plot_runlength_Lau2005(df_run_length_Lau, block_partitions = ['unknown', 'un
     return fig
 
     
-def plot_block_switch(result_path = "..\\results\\model_comparison\\w_bias_8\\", group_results_name = 'group_results_all_with_bias.npz'):
+def plot_block_switch(result_path = "..\\results\\model_comparison\\w_bias_8\\", group_results_name = 'group_results_all_with_bias.npz',
+                      min_p_change = 0.2, session_partitions = [1/3, 1/3, 1/3], efficiency_partitions = [1/3, 1/3, 1/3]):
     #%%
     sns.set(context = 'notebook')
 
@@ -923,70 +924,143 @@ def plot_block_switch(result_path = "..\\results\\model_comparison\\w_bias_8\\",
     group_results = data.f.group_results.item()
     results_all_mice = group_results['results_all_mice'] 
     df_block_switch = group_results['df_block_switch']
+    df_block_switch = df_block_switch[df_block_switch.change_p_R >= min_p_change]
     prev_align = group_results['block_switch_para']['prev_align']
     
     palette_all = sns.color_palette("RdYlGn", max(results_all_mice['session_number'].unique()))
 
     # == Reproduce Marton's figure ==
-    fig = plt.figure()
+    fig = plt.figure(figsize=(8,3))
+    fig.suptitle('All mice, all blocks, min_p_change = %g' % (min_p_change), fontsize=10)
     
     # 1. All mice, all blocks
     ax1 = fig.add_subplot(121)
     choice_matrix = np.vstack(df_block_switch.choice_matrix)
-    plot_choice_matrix(choice_matrix, prev_align, ax = ax1, color = 'b', style = '-')
+    plot_choice_matrix([choice_matrix], prev_align, ax = ax1)
     ax1.set_title('all')
     
     ax2 = fig.add_subplot(122)
     choice_matrix = np.vstack(df_block_switch.choice_norm_matrix)
-    plot_choice_matrix(choice_matrix, prev_align, ax = ax2, color = 'b', style = '-')
+    plot_choice_matrix([choice_matrix], prev_align, ax = ax2)
     ax2.set_title('all_norm')
-
+    ax2.set_ylim([-0.5, 1.5])
+    
+    plt.subplots_adjust(top=0.8)
     plt.show()
     
     # 2. Each mice, all blocks
     fig = plt.figure(figsize=(9, 8), dpi = 150)
+    fig.suptitle('Each mouse, all blocks, min_p_change = %g' % (min_p_change), fontsize=16)
     n_mice = len(df_block_switch.mice.unique())
     gs = GridSpec(int(np.ceil(n_mice/4)), 4, hspace = .6, wspace = 0.5, 
-                  left = 0.1, right = 0.95, bottom = 0.05, top = 0.95)
+                  left = 0.1, right = 0.95, bottom = 0.05, top = 0.9)
     
+    # Raw
     for mm, mouse in enumerate(df_block_switch.mice.unique()):
         ax = fig.add_subplot(gs[mm]) 
         
         choice_matrix = np.vstack(df_block_switch[df_block_switch.mice == mouse].choice_matrix)
-        plot_choice_matrix(choice_matrix, prev_align, ax = ax, color = 'b', style = '-')
+        plot_choice_matrix([choice_matrix], prev_align, ax = ax)
         plt.title(mouse)
 
-    fig = plt.figure(figsize=(9, 8), dpi = 150)
+    # Norm
+    # fig = plt.figure(figsize=(9, 8), dpi = 150)
+    # n_mice = len(df_block_switch.mice.unique())
+    # gs = GridSpec(int(np.ceil(n_mice/4)), 4, hspace = .6, wspace = 0.5, 
+    #               left = 0.1, right = 0.95, bottom = 0.05, top = 0.95)
+
+    # for mm, mouse in enumerate(df_block_switch.mice.unique()):
+    #     ax = fig.add_subplot(gs[mm]) 
+        
+    #     choice_matrix = np.vstack(df_block_switch[df_block_switch.mice == mouse].choice_norm_matrix)
+    #     plot_choice_matrix(choice_matrix, prev_align, ax = ax, color = 'b', style = '-')
+    #     plt.title(mouse)
+    #     ax.set_ylim([-0.5, 1.5])
+        
+        
+    #%% 3. Each mice, training progress
+    fig = plt.figure(figsize=(9, 8), dpi = 200)
+    fig.suptitle('Each mouse, training sessions %s, min_p_change = %g' % (np.round(session_partitions,3), min_p_change), fontsize=16)
     n_mice = len(df_block_switch.mice.unique())
     gs = GridSpec(int(np.ceil(n_mice/4)), 4, hspace = .6, wspace = 0.5, 
-                  left = 0.1, right = 0.95, bottom = 0.05, top = 0.95)
+                  left = 0.1, right = 0.95, bottom = 0.05, top = 0.9)
+    
+    for mm, mouse in enumerate(df_block_switch.mice.unique()):
+        ax = fig.add_subplot(gs[mm]) 
+        unique_session_this = np.unique(df_block_switch[df_block_switch.mice == mouse].session_num)
+        
+        # Partition data into different choice_matrices
+        session_end = np.quantile(unique_session_this, np.cumsum(session_partitions))
+        session_start = np.hstack([0, session_end[:-1]])
+        choice_matrix_list = []
+        for s_start, s_end in zip(session_start, session_end):
+            valid_block = (df_block_switch.mice == mouse) & (s_start < df_block_switch.session_num) & (df_block_switch.session_num <= s_end)
+            choice_matrix_list.append(np.vstack(df_block_switch[valid_block].choice_matrix))
+    
+        # Plotting
+        plot_choice_matrix(choice_matrix_list, prev_align, ax=ax, color_list=['r','y','g'], style_list=['-'] * len(session_partitions), error_bar=False )
+        plt.title(mouse)
+    plt.show()
 
+    #%% 4. Each mice, foraging efficiency
+    fig = plt.figure(figsize=(9, 8), dpi = 200)
+    fig.suptitle('Each mouse, foraging efficiency %s, min_p_change = %g' % (np.round(efficiency_partitions,3), min_p_change), fontsize=16)
+    n_mice = len(df_block_switch.mice.unique())
+    gs = GridSpec(int(np.ceil(n_mice/4)), 4, hspace = .6, wspace = 0.5, 
+                  left = 0.1, right = 0.95, bottom = 0.05, top = 0.9)
+    
     for mm, mouse in enumerate(df_block_switch.mice.unique()):
         ax = fig.add_subplot(gs[mm]) 
         
-        choice_matrix = np.vstack(df_block_switch[df_block_switch.mice == mouse].choice_norm_matrix)
-        plot_choice_matrix(choice_matrix, prev_align, ax = ax, color = 'b', style = '-')
+        # Get efficiency from the other table
+        all_efficiency_this = results_all_mice[results_all_mice.mice == mouse].foraging_efficiency
+        
+        # Partition data into different choice_matrices
+        eff_end = np.quantile(all_efficiency_this, np.cumsum(efficiency_partitions))
+        eff_start = np.hstack([0, eff_end[:-1]])
+        choice_matrix_list = []
+        
+        for e_start, e_end in zip(eff_start, eff_end):
+            valid_session = results_all_mice[(results_all_mice.mice == mouse) & 
+                                             (e_start < results_all_mice.foraging_efficiency) & 
+                                             (results_all_mice.foraging_efficiency <= e_end)].session_number
+            valid_block = (df_block_switch.mice == mouse) & (df_block_switch.session_num.isin(valid_session))
+            if np.sum(valid_block) == 0:
+                choice_matrix_list.append([])
+            else:
+                choice_matrix_list.append(np.vstack(df_block_switch[valid_block].choice_matrix))
+    
+        # Plotting
+        plot_choice_matrix(choice_matrix_list, prev_align, ax=ax, color_list=['r','y','g'], style_list=['-'] * len(efficiency_partitions), error_bar=False )
         plt.title(mouse)
-
     plt.show()
     
     #%%
     return
 
-def plot_choice_matrix(choice_matrix, prev_align, ax = None, color = 'b', style = '-'):
+def plot_choice_matrix(choice_matrix_list, prev_align, ax = None, color_list = ['b'], style_list = ['-'], error_bar = True):
     ''' For block switch '''
     if ax is None:
         fig = plt.figure()
         ax = fig.add_subplot(111)
     
-    x = np.arange(choice_matrix.shape[1]) - prev_align
-    mean = np.nanmean(choice_matrix, axis=0)
-    ns = np.sum(~np.isnan(choice_matrix), axis=0)
-    sem = np.nanstd(choice_matrix, axis=0)/np.sqrt(ns)
+    x = np.arange(choice_matrix_list[0].shape[1]) - prev_align
     
-    ax.plot(x, mean, color=color, linestyle=style, lw=1, label='n = %g' % max(ns))
-    ax.legend(handlelength=0)
-    ax.fill_between(x, mean + sem, mean - sem, color = color, alpha = 0.5)
+    for choice_matrix, color, style in zip(choice_matrix_list, color_list, style_list):
+        if choice_matrix == []: continue
+    
+        mean = np.nanmean(choice_matrix, axis=0)
+        ns = np.sum(~np.isnan(choice_matrix), axis=0)
+        
+        ax.plot(x, mean, color=color, linestyle=style, lw=1, label='n = %g' % max(ns))
+        
+        if error_bar:
+            sem = np.nanstd(choice_matrix, axis=0)/np.sqrt(ns)
+            ax.fill_between(x, mean + sem, mean - sem, color = color, alpha = 0.5)
+        
+    ax.legend(fontsize=6)
+
+    ax.set_xlim([-30, 50])
     ax.axvline(0, c = 'k', ls = '--', lw = 1)
     ax.axhline(0, c = 'k', ls = '--', lw = 1)
     ax.axhline(1, c = 'k', ls = '--', lw = 1)
