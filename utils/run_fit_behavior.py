@@ -17,7 +17,7 @@ from scipy.stats import pearsonr
 
 from utils.helper_func import moving_average
 from models.bandit_model_comparison import BanditModelComparison
-from utils.plot_mice import plot_each_mice, analyze_runlength_Lau2005, plot_runlength_Lau2005, plot_example_sessions, plot_group_results
+from utils.plot_mice import plot_each_mice, analyze_runlength_Lau2005, plot_runlength_Lau2005, plot_example_sessions, plot_group_results, plot_block_switch
 from models.dynamic_learning_rate import fit_dynamic_learning_rate_session, fit_dynamic_learning_rate_session_no_bias_free_Q_0
 
 def fit_each_mice(data, if_session_wise = False, if_verbose = True, file_name = '', pool = '', models = None):
@@ -301,6 +301,12 @@ def process_each_mice(data, file, if_plot_each_mice, if_hattori_Fig1I):
     which_largest_grand = int(bias_grand <= 0)
     group_result['prediction_accuracy_bias_only_grand'] = np.sum(data['model_comparison_grand'].fit_choice_history == which_largest_grand) /\
                                                           data['model_comparison_grand'].n_trials 
+                                                          
+    # -- 5. Block-switch analysis (finally!) --
+    raw = data['model_comparison_grand']
+    group_result['block_switch_para'] = dict(min_block_length = 30, prev_align = 30, next_align = 80, norm_trial = 10)
+    group_result['df_block_switch_this_mouse'] = align_block_switch_each_mouse(raw.session_num, raw.p_reward, raw.fit_choice_history, 
+                                                                               **group_result['block_switch_para'])
 
     if if_plot_each_mice:
         plot_each_mice(group_result, if_hattori_Fig1I)
@@ -316,10 +322,11 @@ def process_all_mice(result_path = "..\\results\\model_comparison\\", combine_pr
     
     results_all_mice = pd.DataFrame()
     df_raw_LPT_AICs = pd.DataFrame()
+    df_block_switch_all_mice = pd.DataFrame()
     
     n_mice = 0
     
-    for file in listOfFiles:
+    for file in tqdm(listOfFiles, desc = 'Mice', total = len(listOfFiles)):
         
         # -- Screening of file name --
         if mice_select != '':
@@ -380,6 +387,13 @@ def process_all_mice(result_path = "..\\results\\model_comparison\\", combine_pr
         df_this = pd.concat([df_this, pd.DataFrame(group_result_this['LPT_AIC'].T, columns = group_result_this['para_notation'])], axis = 1)
         df_raw_LPT_AICs = df_raw_LPT_AICs.append(df_this)
         
+        # -- Block switch --
+        df_block_switch_this = group_result_this['df_block_switch_this_mouse']
+        if df_block_switch_this is not None:
+            df_block_switch_this['mice'] = mice_name   
+            df_block_switch_this.insert(0, 'mice', df_block_switch_this.pop('mice'))  # Move 'mice' to the first column
+            df_block_switch_all_mice = df_block_switch_all_mice.append(df_block_switch_this)
+        
     # Add some more stuffs for convenience
     group_results = {'results_all_mice': results_all_mice, 'raw_LPT_AICs': df_raw_LPT_AICs}    
     if if_hattori_Fig1I:
@@ -392,6 +406,9 @@ def process_all_mice(result_path = "..\\results\\model_comparison\\", combine_pr
     group_results['fitted_para_names'] = group_result_this['fitted_para_names']
     group_results['n_mice'] = n_mice 
     group_results['if_hattori_Fig1I'] = if_hattori_Fig1I
+    
+    group_results['df_block_switch'] = df_block_switch_all_mice
+    group_results['block_switch_para'] = group_result_this['block_switch_para']
     
     # Save group results to file
     np.savez_compressed(result_path + group_results_name_to_save, group_results = group_results)
@@ -425,7 +442,6 @@ def analyze_runlength(result_path = "..\\results\\model_comparison\\", combine_p
 
         #%% Plot foraging histogram 
         if if_first_plot: 
-            
             
             x = df_this.prediction_accuracy_NONCV
             y = df_this.foraging_efficiency
@@ -647,6 +663,74 @@ def fit_dynamic_learning_rate_RW1972(slide_win = 10, fixed_sigma_bias = 'none', 
     plt.legend(fontsize = 10, loc=1, bbox_to_anchor=(0.985, 0.89), bbox_transform=plt.gcf().transFigure)
     plt.show()
     
+    
+def align_block_switch_each_mouse(session_num, p_reward, choice_history, min_block_length = 30, prev_align = 30, next_align = 80, norm_trial = 10):
+        
+    #%% -- Get the choice matrix --
+    df_this_mouse = pd.DataFrame()
+     
+    unique_session = np.unique(session_num)
+    
+    for ss in unique_session:
+        df_this_session = {}
+        
+        choice_this_session = choice_history[0, session_num == ss]
+        p_R_this_session = p_reward[1, session_num == ss]
+        
+        block_switch_at = np.where(np.diff(p_R_this_session))[0] + 1
+        if block_switch_at.size == 0:  
+            continue
+        else:
+            block_length = np.hstack([block_switch_at[0], np.diff(np.hstack([block_switch_at, len(choice_this_session)]))])
+        
+        # Find valid block switches
+        valid = np.min([block_length[:-1], block_length[1:]], axis=0) >= min_block_length
+        df_this_session['session_num'] = [ss] * np.sum(valid)
+        df_this_session['block_switch'] = block_switch_at[valid]
+        df_this_session['prev_length'] = block_length[:-1][valid]
+        df_this_session['next_length'] = block_length[1:][valid]
+        df_this_session['prev_p_R'] = p_R_this_session[df_this_session['block_switch'] - 1]
+        df_this_session['next_p_R'] = p_R_this_session[df_this_session['block_switch']]
+        df_this_session['change_p_R'] = np.abs(df_this_session['prev_p_R'] - df_this_session['next_p_R'])
+
+        choice_matrix = np.full([len(df_this_session['block_switch']), prev_align + next_align], np.nan)
+        choice_norm_matrix = choice_matrix.copy()
+        
+        # For each valid block switch
+        for i, t_align in enumerate(df_this_session['block_switch']):
+            
+            prev_valid_n = min(prev_align, df_this_session['prev_length'][i])
+            next_valid_n = min(next_align, df_this_session['next_length'][i])
+            t_start = t_align - prev_valid_n
+            t_end = t_align + next_valid_n
+                
+            # Get choice
+            choice_selected = choice_this_session[t_start : t_end]
+            # To ensure "lean -> rich" is always aligned with "0->1", flip choice sign if p_R decreases after block switch
+            if df_this_session['next_p_R'][i] < df_this_session['prev_p_R'][i]: 
+                choice_selected = 1 - choice_selected
+            choice_matrix[i, prev_align - prev_valid_n : prev_align + next_valid_n] = choice_selected
+            
+            # choice_smoothed = moving_average(choice_selected, smooth_factor)
+            # choice_smoothed_matrix [i, prev_align - prev_valid_n : prev_align + next_valid_n] = choice_smoothed
+            
+            # -- Normalized choice --
+            norm_to_zero = np.mean(choice_selected[prev_align - norm_trial : prev_align]) # norm_trial trials before block switch
+            norm_to_one = np.mean(choice_selected[-norm_trial:])   # norm_trial trials at the last of the choice_selected
+            if norm_to_one - norm_to_zero > 0:
+                choice_norm = (choice_selected - norm_to_zero) / (norm_to_one - norm_to_zero)
+                choice_norm_matrix[i, prev_align - prev_valid_n : prev_align + next_valid_n] = choice_norm
+            else:
+                pass   # No normalized choice for this switch
+            
+        # Save to dataframe
+        df_this_session['choice_matrix'] = choice_matrix.tolist()
+        df_this_session['choice_norm_matrix'] = choice_norm_matrix.tolist()
+        df_this_session = pd.DataFrame(df_this_session)  # Turn to df
+        df_this_mouse = df_this_mouse.append(df_this_session)  # Save to this mouse
+        
+        #%%
+    return df_this_mouse
 
 #%%    
 def patch_cross_validation(raw_path = '..\\export\\', result_to_patch = "..\\results\\model_comparison\\model_comparison_",
@@ -709,7 +793,7 @@ if __name__ == '__main__':
     #                     average_session_number_range = [0,20])
 
     # process_all_mice(result_path = "..\\results\\model_comparison\\w_bias_8\\", combine_prefix = 'model_comparison_CV_patched_', 
-    #               group_results_name_to_save = 'group_results_CV_patched.npz', if_plot_each_mice = False)
+    #               group_results_name_to_save = 'group_results_8_CV.npz', if_plot_each_mice = False)
     
     
     # plot_group_results(result_path = "..\\results\\model_comparison\\", group_results_name = 'group_results_CV_patched.npz',
@@ -718,6 +802,8 @@ if __name__ == '__main__':
     # plot_group_results(result_path = "..\\results\\model_comparison\\w_bias_8\\", group_results_name = 'group_results_8_CV.npz',
     #                     average_session_number_range = [0,20])
                        
+    plot_block_switch(result_path = "..\\results\\model_comparison\\w_bias_8\\", group_results_name = 'group_results_8_CV.npz')
+
     # --- Example sessions ---
     # plot_example_sessions(session_of_interest = [['FOR06', 49]], smooth_factor = 5)
     
@@ -751,7 +837,7 @@ if __name__ == '__main__':
     #                                           group_results_name = 'group_results_15_CV.npz', session_of_interest = ['FOR05', 33], pool = pool)
     
     # Negative control of constant learning rate
-    fit_dynamic_learning_rate_RW1972(slide_win = 40, method = 'nonDE', pool = '')
+    # fit_dynamic_learning_rate_RW1972(slide_win = 40, method = 'nonDE', pool = '')
     
     pool.close()   # Just a good practice
     pool.join()

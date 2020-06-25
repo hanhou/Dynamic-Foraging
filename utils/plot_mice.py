@@ -15,8 +15,10 @@ from scipy.stats import pearsonr
 import statsmodels.api as sm
 
 from utils.plot_fitting import set_label
+from utils.helper_func import seaborn_style
 
 plt.rcParams.update({'figure.max_open_warning': 0})
+sns.set(context = 'talk')
 
 def corrfunc(x, y, **kws):
     (r, p) = pearsonr(x, y)
@@ -50,7 +52,7 @@ def plot_each_mice(group_result, if_hattori_Fig1I):
 
     #%%
     # plt.close('all')
-    sns.set()
+    sns.set(context = 'talk')
 
     plt.rcParams.update({'font.size': 8, 'figure.dpi': 150})
 
@@ -912,7 +914,84 @@ def plot_runlength_Lau2005(df_run_length_Lau, block_partitions = ['unknown', 'un
     return fig
 
     
+def plot_block_switch(result_path = "..\\results\\model_comparison\\w_bias_8\\", group_results_name = 'group_results_all_with_bias.npz'):
+    #%%
+    sns.set(context = 'notebook')
+
+    # == Load dataframe ==
+    data = np.load(result_path + group_results_name, allow_pickle=True)
+    group_results = data.f.group_results.item()
+    results_all_mice = group_results['results_all_mice'] 
+    df_block_switch = group_results['df_block_switch']
+    prev_align = group_results['block_switch_para']['prev_align']
     
+    palette_all = sns.color_palette("RdYlGn", max(results_all_mice['session_number'].unique()))
+
+    # == Reproduce Marton's figure ==
+    fig = plt.figure()
+    
+    # 1. All mice, all blocks
+    ax1 = fig.add_subplot(121)
+    choice_matrix = np.vstack(df_block_switch.choice_matrix)
+    plot_choice_matrix(choice_matrix, prev_align, ax = ax1, color = 'b', style = '-')
+    ax1.set_title('all')
+    
+    ax2 = fig.add_subplot(122)
+    choice_matrix = np.vstack(df_block_switch.choice_norm_matrix)
+    plot_choice_matrix(choice_matrix, prev_align, ax = ax2, color = 'b', style = '-')
+    ax2.set_title('all_norm')
+
+    plt.show()
+    
+    # 2. Each mice, all blocks
+    fig = plt.figure(figsize=(9, 8), dpi = 150)
+    n_mice = len(df_block_switch.mice.unique())
+    gs = GridSpec(int(np.ceil(n_mice/4)), 4, hspace = .6, wspace = 0.5, 
+                  left = 0.1, right = 0.95, bottom = 0.05, top = 0.95)
+    
+    for mm, mouse in enumerate(df_block_switch.mice.unique()):
+        ax = fig.add_subplot(gs[mm]) 
+        
+        choice_matrix = np.vstack(df_block_switch[df_block_switch.mice == mouse].choice_matrix)
+        plot_choice_matrix(choice_matrix, prev_align, ax = ax, color = 'b', style = '-')
+        plt.title(mouse)
+
+    fig = plt.figure(figsize=(9, 8), dpi = 150)
+    n_mice = len(df_block_switch.mice.unique())
+    gs = GridSpec(int(np.ceil(n_mice/4)), 4, hspace = .6, wspace = 0.5, 
+                  left = 0.1, right = 0.95, bottom = 0.05, top = 0.95)
+
+    for mm, mouse in enumerate(df_block_switch.mice.unique()):
+        ax = fig.add_subplot(gs[mm]) 
+        
+        choice_matrix = np.vstack(df_block_switch[df_block_switch.mice == mouse].choice_norm_matrix)
+        plot_choice_matrix(choice_matrix, prev_align, ax = ax, color = 'b', style = '-')
+        plt.title(mouse)
+
+    plt.show()
+    
+    #%%
+    return
+
+def plot_choice_matrix(choice_matrix, prev_align, ax = None, color = 'b', style = '-'):
+    ''' For block switch '''
+    if ax is None:
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+    
+    x = np.arange(choice_matrix.shape[1]) - prev_align
+    mean = np.nanmean(choice_matrix, axis=0)
+    ns = np.sum(~np.isnan(choice_matrix), axis=0)
+    sem = np.nanstd(choice_matrix, axis=0)/np.sqrt(ns)
+    
+    ax.plot(x, mean, color=color, linestyle=style, lw=1, label='n = %g' % max(ns))
+    ax.legend(handlelength=0)
+    ax.fill_between(x, mean + sem, mean - sem, color = color, alpha = 0.5)
+    ax.axvline(0, c = 'k', ls = '--', lw = 1)
+    ax.axhline(0, c = 'k', ls = '--', lw = 1)
+    ax.axhline(1, c = 'k', ls = '--', lw = 1)
+    
+    return
     
     
     
