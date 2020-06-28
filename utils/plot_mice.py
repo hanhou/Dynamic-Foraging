@@ -915,7 +915,7 @@ def plot_runlength_Lau2005(df_run_length_Lau, block_partitions = ['unknown', 'un
 
     
 def plot_block_switch(result_path = "..\\results\\model_comparison\\w_bias_8\\", group_results_name = 'group_results_all_with_bias.npz',
-                      min_p_change = 0.2, session_partitions = [1/3, 1/3, 1/3], efficiency_partitions = [1/3, 1/3, 1/3]):
+                      min_p_change = 0, session_partitions = [1/3, 1/3, 1/3], efficiency_partitions = [1/3, 1/3, 1/3]):
     #%%
     sns.set(context = 'notebook')
 
@@ -932,6 +932,14 @@ def plot_block_switch(result_path = "..\\results\\model_comparison\\w_bias_8\\",
     # == Reproduce Marton's figure ==
     fig = plt.figure(figsize=(8,3))
     fig.suptitle('All mice, all blocks, min_p_change = %g' % (min_p_change), fontsize=10)
+    
+    # 0. 
+    ax1 = fig.add_subplot(121)
+    choice_matrix = np.vstack(df_block_switch[(df_block_switch.mice == 'FOR06') & \
+                                              (df_block_switch.session_num == 29)].choice_matrix)
+    plot_choice_matrix([choice_matrix], prev_align, ax = ax1)
+    plt.show()
+   
     
     # 1. All mice, all blocks
     ax1 = fig.add_subplot(121)
@@ -962,6 +970,21 @@ def plot_block_switch(result_path = "..\\results\\model_comparison\\w_bias_8\\",
         choice_matrix = np.vstack(df_block_switch[df_block_switch.mice == mouse].choice_matrix)
         plot_choice_matrix([choice_matrix], prev_align, ax = ax)
         plt.title(mouse)
+
+    fig = plt.figure(figsize=(9, 8), dpi = 150)
+    fig.suptitle('Each mouse, all blocks, min_p_change = %g' % (min_p_change), fontsize=16)
+    n_mice = len(df_block_switch.mice.unique())
+    gs = GridSpec(int(np.ceil(n_mice/4)), 4, hspace = .6, wspace = 0.5, 
+                  left = 0.1, right = 0.95, bottom = 0.05, top = 0.9)
+    
+    # Raw
+    for mm, mouse in enumerate(df_block_switch.mice.unique()):
+        ax = fig.add_subplot(gs[mm]) 
+        
+        choice_matrix = np.vstack(df_block_switch[df_block_switch.mice == mouse].choice_matrix)
+        plot_choice_matrix([choice_matrix], prev_align, ax = ax)
+        plt.title(mouse)
+        ax.set_xlim([-10, 20])
 
     # Norm
     # fig = plt.figure(figsize=(9, 8), dpi = 150)
@@ -1000,6 +1023,7 @@ def plot_block_switch(result_path = "..\\results\\model_comparison\\w_bias_8\\",
         # Plotting
         plot_choice_matrix(choice_matrix_list, prev_align, ax=ax, color_list=['r','y','g'], style_list=['-'] * len(session_partitions), error_bar=False )
         plt.title(mouse)
+        
     plt.show()
 
     #%% 4. Each mice, foraging efficiency
@@ -1038,7 +1062,12 @@ def plot_block_switch(result_path = "..\\results\\model_comparison\\w_bias_8\\",
     #%%
     return
 
-def plot_choice_matrix(choice_matrix_list, prev_align, ax = None, color_list = ['b'], style_list = ['-'], error_bar = True):
+from scipy.optimize import curve_fit
+
+def exp_func(x, b1, b2, tau):
+    return b1 + (b2 - b1) * np.exp(-x/tau)
+
+def plot_choice_matrix(choice_matrix_list, prev_align, ax = None, color_list = ['b'], style_list = ['-'], error_bar = True, if_curve_fit = 'exp'):
     ''' For block switch '''
     if ax is None:
         fig = plt.figure()
@@ -1052,13 +1081,20 @@ def plot_choice_matrix(choice_matrix_list, prev_align, ax = None, color_list = [
         mean = np.nanmean(choice_matrix, axis=0)
         ns = np.sum(~np.isnan(choice_matrix), axis=0)
         
-        ax.plot(x, mean, color=color, linestyle=style, lw=1, label='n = %g' % max(ns))
+        ax.plot(x, mean, color=color, linestyle=style, lw=1)
         
         if error_bar:
             sem = np.nanstd(choice_matrix, axis=0)/np.sqrt(ns)
             ax.fill_between(x, mean + sem, mean - sem, color = color, alpha = 0.5)
+            
+        # Curve fitting
+        if if_curve_fit == 'exp':
+            xx = np.arange(0, 50)
+            yy = mean[prev_align:prev_align + 50]
+            popt, _ = curve_fit(exp_func, xx, yy)
+            plt.plot(xx, exp_func(xx, *popt), color+'--', lw=2, label='n = %g, $\\tau$ = %5.3f' % (max(ns), popt[-1]))
         
-    ax.legend(fontsize=6)
+    ax.legend(fontsize=5)
 
     ax.set_xlim([-30, 50])
     ax.axvline(0, c = 'k', ls = '--', lw = 1)
