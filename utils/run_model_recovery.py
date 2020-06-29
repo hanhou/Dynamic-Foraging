@@ -182,7 +182,7 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para,
         # -- In parallel --
         pool_results = []
         for x,y in zip(np.nditer(pp1),np.nditer(pp2)):
-            pool_results.append(pool_surface.apply_async(negLL_func, args = ([x, y], forager, [para_names[para_2d[0]], para_names[para_2d[1]]], choice_history, reward_history, session_num, para_fixed)))
+            pool_results.append(pool_surface.apply_async(negLL_func, args = ([x, y], forager, [para_names[para_2d[0]], para_names[para_2d[1]]], choice_history, reward_history, session_num, para_fixed, [])))
             
         # Must use two separate for loops, one for assigning and one for harvesting!   
         for nn,rr in tqdm(enumerate(pool_results), total = n_scan_paras, desc='LL_surface pair #%g' % ppp):
@@ -190,7 +190,7 @@ def compute_LL_surface(forager, para_names, para_bounds, true_para,
             
         # -- Serial for debugging --
         # for nn,(x,y) in tqdm(enumerate(zip(np.nditer(pp1),np.nditer(pp2))), total = n_scan_paras, desc='LL_surface pair #%g (serial)' % ppp):
-        #     LLs[nn] = negLL_func([x, y], forager, [para_names[para_2d[0]], para_names[para_2d[1]]], choice_history, reward_history, session_num, para_fixed)
+        #     LLs[nn] = negLL_func([x, y], forager, [para_names[para_2d[0]], para_names[para_2d[1]]], choice_history, reward_history, session_num, para_fixed, [])
         
         # -- Confidence interval --
         # https://www.umass.edu/landeco/teaching/ecodata/schedule/likelihood.pdf
@@ -515,17 +515,50 @@ if __name__ == '__main__':
     #                 n_trials = n_trials,
     #                 fit_method = 'DE', n_x0s = 8, pool = pool)
     
+    # n_trials = 1000
+    
+    # forager = 'Hattori2019_CK'
+    # para_names = ['learn_rate_rew','learn_rate_unrew', 'forget_rate','softmax_temperature', 'choice_step_size','choice_softmax_temperature']
+    # para_scales = ['linear','linear','linear', 'log', 'linear', 'log']
+    # para_bounds = [[0, 0, 0, 1e-2, 0, 1e-2],
+    #                [1, 1, 1, 15,   1, 20]]
+    
+    # # -- LL_surface --
+    # compute_LL_surface(forager, para_names, para_bounds, 
+    #                     true_para = [0.4, 0.2, 0.2, 0.25, 0.5, 1],  
+    #                     para_2ds = [[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]], # LL surfaces for user-defined pairs of paras
+    #                     n_grids = [[30,30]] * 6, 
+    #                     para_scales = para_scales,
+    #                     n_trials = n_trials,
+    #                     fit_method = 'DE', n_x0s = 8, pool = pool)
+    
     # # # ----------------------- Model Comparison ----------------------------------
     # fake_data = generate_fake_data('LossCounting', ['loss_count_threshold_mean','loss_count_threshold_std'], [10,3], n_trials = 1000)
     # fake_data = generate_fake_data('RW1972_softmax', ['learn_rate_rew','softmax_temperature'], [0.2,0.3])
-    choice_history, reward_history, p_reward = generate_fake_data('Hattori2019', ['learn_rate_rew','learn_rate_unrew', 'forget_rate','softmax_temperature'], 
-                                                      [0.23392543, 0.318161268, 0.3, 0.22028081], n_trials = 100)
+    # choice_history, reward_history, p_reward = generate_fake_data('Hattori2019', ['learn_rate_rew','learn_rate_unrew', 'forget_rate','softmax_temperature'], 
+    #                                                   [0.23392543, 0.318161268, 0.3, 0.22028081], n_trials = 100)
     
-    model_comparison = BanditModelComparison(choice_history, reward_history, p_reward)
-    model_comparison.fit(pool = pool, plot_predictive=[1,2,3])
-    model_comparison.show()
-    model_comparison.plot()
+    # model_comparison = BanditModelComparison(choice_history, reward_history, p_reward)
+    # model_comparison.fit(pool = pool, plot_predictive=[1,2,3])
+    # model_comparison.show()
+    # model_comparison.plot()
+
+    # choice_history, reward_history, p_reward = generate_fake_data('Hattori2019_CK', 
+    #                                                   ['learn_rate_rew','learn_rate_unrew', 'forget_rate','softmax_temperature',
+    #                                                     'choice_step_size','choice_softmax_temperature'], 
+    #                                                   [0.23392543, 0.318161268, 0.3, 0.22028081, 0.2, 0.5], n_trials = 1000)
+    # plot_session_lightweight([choice_history, reward_history, p_reward])
     
+    # choice_history, reward_history, p_reward = generate_fake_data('Hattori2019_CK', 
+    #                                                   ['learn_rate_rew','learn_rate_unrew', 'forget_rate','softmax_temperature',
+    #                                                     'choice_step_size','choice_softmax_temperature'], 
+    #                                                   [0.4, 0.2, 0.2, 0.25, 0.5, 1], n_trials = 1000)
+    
+    # model_comparison = BanditModelComparison(choice_history, reward_history, p_reward, models=[15, 16, 17])
+    # model_comparison.fit(pool = pool, plot_predictive=[1,2,3])
+    # model_comparison.show()
+    # model_comparison.plot()
+
     # choice_history, reward_history, p_reward = generate_fake_data('IdealpHatGreedy', [],[], n_trials = 1000)  # Almost Hattori et al.
     # model_comparison = BanditModelComparison(choice_history, reward_history, p_reward, models = [
     #             # No bias (1-8)
@@ -540,7 +573,18 @@ if __name__ == '__main__':
     # model_comparison.show()
 
     # plot_model_comparison_predictive_choice_prob(model_comparison, smooth_factor = 1)
-    
+
+    ## ----
+    choice_history, reward_history, p_reward = generate_fake_data('Hattori2019_CK', 
+                             ['learn_rate_rew','learn_rate_unrew', 'forget_rate','softmax_temperature', 'biasL',
+                                                       'choice_step_size','choice_softmax_temperature'], 
+                             [0.23392543, 0.318161268, 0.3, 0.22028081, 0.3, 0.2, 2], n_trials = 1000)
+       
+    model_comparison = BanditModelComparison(choice_history, reward_history, p_reward, models= list(np.arange(9,22)))
+    model_comparison.fit(pool = pool, plot_predictive=[1,2,3])
+    model_comparison.show()
+    model_comparison.plot()
+        
     ## ----
     # choice_history, reward_history, p_reward = generate_fake_data('IdealpHatGreedy', [],[], n_trials = 1000)  # Almost Hattori et al.
     # model_comparison = BanditModelComparison(choice_history, reward_history, p_reward, models = [

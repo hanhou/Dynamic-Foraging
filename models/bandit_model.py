@@ -20,6 +20,9 @@
 #       2). 'Bari2019':        return/income  ->   exp filter (both forgetting)   -> softmax     -> epsilon-Poisson (epsilon = 0 in their paper, no necessary)
 #       3). 'Hattori2019':     return/income  ->   exp filter (choice-dependent forgetting, reward-dependent step_size)  -> softmax  -> epsilon-Poisson (epsilon = 0 in their paper; no necessary)
 #
+#   4. Choice kernel
+#      Could be added to: 'RW1972_softmax_CK', 'LNP_softmax_CK', 'Bari2019_CK', 'Hattori2019_CK'
+# 
 #  = Other types that can simulate but not fit =
 #   1. 'Random'
 #   2. 'IdealpHatGreedy'
@@ -68,6 +71,8 @@ class BanditModel:
                  w_tau1 = None,      
                  
                  # Choice kernel
+                 choice_step_size = None,
+                 choice_softmax_temperature = None,
                  
                  # For 'RW1972_epsi','RW1972_softmax','Bari2019', 'Hattori2019'
                  learn_rate = None, # For RW and Bari
@@ -127,7 +132,8 @@ class BanditModel:
             # assert np.all(-1/self.K <= self.bias_terms) and np.all(self.bias_terms <= (self.K - 1)/self.K), self.bias_terms
             
         # 2. for those involve softmax: b_undefined = 0, no constraint. cp_k = exp(Q/sigma + b_i) / sum(Q/sigma + b_i). Putting b_i outside /sigma to make it comparable across different softmax_temperatures
-        elif forager in ['RW1972_softmax', 'LNP_softmax', 'Bari2019', 'Hattori2019']:
+        elif forager in ['RW1972_softmax', 'LNP_softmax', 'Bari2019', 'Hattori2019',
+                         'RW1972_softmax_CK', 'LNP_softmax_CK', 'Bari2019_CK', 'Hattori2019_CK']:
             if self.K == 2:
                 self.bias_terms = np.array([biasL, 0])  # Relative to right
             elif self.K == 3:
@@ -135,7 +141,7 @@ class BanditModel:
             # No constraints
             
         # -- Forager-dependent --
-        if forager == 'LNP_softmax':
+        if 'LNP_softmax' in forager:
             assert all(x is not None for x in (tau1, softmax_temperature))
             if tau2 == None:  # Only one tau ('Sugrue2004')
                 self.taus = [tau1]
@@ -149,19 +155,24 @@ class BanditModel:
             self.learn_rates = [learn_rate, learn_rate]    # RW1972 has the same learning rate for rewarded / unrewarded trials
             self.forget_rates = [0, 0]   # RW1972 does not forget
         
-        elif forager == 'Bari2019':
+        elif 'Bari2019' in forager:
             assert all(x is not None for x in (learn_rate, forget_rate))
             self.learn_rates = [learn_rate, learn_rate]   # Bari2019 also has the same learning rate for rewarded / unrewarded trials
             self.forget_rates = [forget_rate, forget_rate]
             
-        elif forager == 'Hattori2019':
+        elif 'Hattori2019' in forager:
             assert all(x is not None for x in (learn_rate_rew, learn_rate_unrew))
             if forget_rate is None:
                 forget_rate = 0  # Allow Hattori2019 to not have forget_rate. In that case, it is an extension of RW1972.
-            
+                
             self.learn_rates = [learn_rate_unrew, learn_rate_rew]   # 0: unrewarded, 1: rewarded
             self.forget_rates = [forget_rate, 0]   # 0: unchosen, 1: chosen
           
+        # Choice kernel can be added to any reward-based forager
+        if '_CK' in forager:  
+            assert choice_step_size is not None and choice_softmax_temperature is not None
+            self.choice_step_size = choice_step_size
+            self.choice_softmax_temperature = choice_softmax_temperature
             
     def reset(self):
         
@@ -190,10 +201,11 @@ class BanditModel:
             self.reward_available[:,0] = (np.random.uniform(0,1,self.K) < self.p_reward[:, self.time]).astype(int)
         
         # Forager-specific
-        if self.forager in ['RW1972_epsi','RW1972_softmax','Bari2019', 'Hattori2019']:
+        if self.forager in ['RW1972_epsi','RW1972_softmax','Bari2019', 'Hattori2019',
+                                          'RW1972_softmax_CK', 'Bari2019_CK', 'Hattori2019_CK']:
            pass
         
-        elif self.forager in ['LNP_softmax']:
+        elif self.forager in ['LNP_softmax', 'LNP_softmax_CK']:
             # Compute the history filter. Compatible with any number of taus.
             reversed_t = np.flipud(np.arange(self.n_trials))  # Use the full length of the session just in case of an extremely large tau.
             self.history_filter = np.zeros_like(reversed_t).astype('float64')
@@ -206,6 +218,10 @@ class BanditModel:
             self.loss_count = np.zeros([1, self.n_trials]) 
             if not self.if_fit_mode:
                 self.loss_threshold_this = np.random.normal(self.loss_count_threshold_mean, self.loss_count_threshold_std)
+                
+        # Choice kernel can be added to any forager
+        if '_CK' in self.forager:
+            self.choice_kernel = np.zeros([self.K, self.n_trials])
                 
 
     def generate_p_reward(self, block_size_base = global_block_size_mean, 
@@ -395,7 +411,12 @@ class BanditModel:
         
         # !! Should not change q_estimation!! Otherwise will affect following Qs
         # And I put softmax here
-        self.choice_prob[:, self.time] = softmax(self.q_estimation[:, self.time], self.softmax_temperature, bias = self.bias_terms)  
+        if '_CK' in self.forager:
+            self.choice_prob[:, self.time] = softmax(np.vstack([self.q_estimation[:, self.time], self.choice_kernel[:, self.time]]), 
+                                                     np.vstack([self.softmax_temperature, self.choice_softmax_temperature]), 
+                                                     bias = self.bias_terms)  # Updated softmax function that accepts two elements
+        else:
+            self.choice_prob[:, self.time] = softmax(self.q_estimation[:, self.time], self.softmax_temperature, bias = self.bias_terms)  
 
         if self.if_fit_mode:
             self.predictive_choice_prob[:, self.time] = self.choice_prob[:, self.time]
@@ -449,6 +470,15 @@ class BanditModel:
         # if self.forager in ['RW1972_softmax', 'Bari2019', 'Hattori2019']:
         #     self.q_estimation[:, self.time] = softmax(self.q_estimation[:, self.time], self.softmax_temperature)
 
+    def step_choice_kernel(self, choice):
+        # Choice vector
+        choice_vector = np.zeros([self.K])
+        choice_vector[choice] = 1
+        
+        # Update choice kernel (see Model 5 of Wilson and Collins, 2019)
+        # Note that if chocie_step_size = 1, degenerates to Bari 2019 (choice kernel = the last choice only)
+        self.choice_kernel[:, self.time] = self.choice_kernel[:, self.time - 1] \
+                                         + self.choice_step_size * (choice_vector - self.choice_kernel[:, self.time - 1])
        
     def act(self): # Compatible with either fitting mode (predictive) or not (generative). It's much clear now!!
 
@@ -467,11 +497,14 @@ class BanditModel:
         if self.forager == 'LossCounting':
             return self.act_LossCounting()
             
-        if self.forager in ['RW1972_epsi']:
+        if self.forager in ['RW1972_epsi']:  
             return self.act_EpsiGreedy()
             
-        if self.forager in ['RW1972_softmax', 'LNP_softmax', 'Bari2019', 'Hattori2019' ]:   # Probabilistic
+        if self.forager in ['RW1972_softmax', 'LNP_softmax', 'Bari2019', 'Hattori2019',
+                            'RW1972_softmax_CK', 'LNP_softmax_CK', 'Bari2019_CK', 'Hattori2019_CK']:   # Probabilistic (Could have choice kernel)
             return self.act_Probabilistic()
+        
+        print('No action found!!')
 
     def step(self, choice): # Compatible with either fitting mode (predictive) or not (generative). It's much clear now!!
            
@@ -504,17 +537,20 @@ class BanditModel:
         if self.forager in ['LossCounting']:
             self.step_LossCounting(reward)
                 
-        elif self.forager in ['RW1972_softmax', 'RW1972_epsi', 'Bari2019', 'Hattori2019']:    
+        elif self.forager in ['RW1972_softmax', 'RW1972_epsi', 'Bari2019', 'Hattori2019',
+                              'RW1972_softmax_CK', 'Bari2019_CK', 'Hattori2019_CK']:    
             self.step_RWlike(choice, reward)
                 
-        elif self.forager == 'LNP_softmax':
+        elif self.forager in ['LNP_softmax', 'LNP_softmax_CK']:
             if self.if_fit_mode:
                 valid_reward_history = self.fit_reward_history[:, :self.time]   # Targeted history till now
             else:
                 valid_reward_history = self.reward_history[:, :self.time]   # Models' history till now
             
             self.step_LNP(valid_reward_history)
-            
+        
+        if '_CK' in self.forager:  # Could be independent of other foragers, so use "if" rather than "elif"
+            self.step_choice_kernel(choice)
 
     def simulate(self):
         

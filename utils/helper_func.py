@@ -11,7 +11,11 @@ import matplotlib
 def softmax(x, softmax_temperature, bias = 0):
     
     # Put the bias outside /sigma to make it comparable across different softmax_temperatures.
-    X = x/softmax_temperature + bias 
+    if len(x.shape) == 1:
+        X = x/softmax_temperature + bias   # Backward compatibility
+    else:
+        X = np.sum(x/softmax_temperature, axis=0) + bias  # Allow more than one kernels (e.g., choice kernel)
+    
     max_temp = np.max(X)
     
     if max_temp > 700: # To prevent explosion of EXP

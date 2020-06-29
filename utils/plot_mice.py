@@ -1091,7 +1091,7 @@ def plot_choice_matrix(choice_matrix_list, prev_align, ax = None, color_list = [
         if if_curve_fit == 'exp':
             xx = np.arange(0, 50)
             yy = mean[prev_align:prev_align + 50]
-            popt, _ = curve_fit(exp_func, xx, yy)
+            popt, pcov = curve_fit(exp_func, xx, yy)
             plt.plot(xx, exp_func(xx, *popt), color+'--', lw=2, label='n = %g, $\\tau$ = %5.3f' % (max(ns), popt[-1]))
         
     ax.legend(fontsize=5)
