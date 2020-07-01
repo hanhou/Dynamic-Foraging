@@ -258,7 +258,7 @@ def plot_session_lightweight(fake_data, fitted_data = None, smooth_factor = 5, b
     return ax
     
 def plot_model_comparison_predictive_choice_prob(model_comparison, smooth_factor = 5):
-    sns.reset_orig()
+    # sns.reset_orig()
     
     choice_history, reward_history, p_reward, trial_numbers = model_comparison.fit_choice_history, model_comparison.fit_reward_history, model_comparison.p_reward, model_comparison.trial_numbers
     if not hasattr(model_comparison,'plot_predictive'):

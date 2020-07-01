@@ -347,7 +347,7 @@ def process_all_mice(result_path = "..\\results\\model_comparison\\", combine_pr
         data = np.load(result_path + file, allow_pickle=True)
         data = data.f.results_each_mice.item()
         
-        if_hattori_Fig1I = combine_prefix == 'model_comparison_15_'
+        if_hattori_Fig1I = 'model_comparison_15_' in combine_prefix
         
         group_result_this = process_each_mice(data, file, if_plot_each_mice = if_plot_each_mice, if_hattori_Fig1I = if_hattori_Fig1I)
         df_this = pd.DataFrame({'mice': mice_name,
@@ -802,7 +802,7 @@ if __name__ == '__main__':
     # plot_group_results(result_path = "..\\results\\model_comparison\\w_bias_8\\", group_results_name = 'group_results_8_CV.npz',
     #                     average_session_number_range = [0,20])
                        
-    plot_block_switch(result_path = "..\\results\\model_comparison\\w_bias_8\\", group_results_name = 'group_results_8_CV.npz')
+    # plot_block_switch(result_path = "..\\results\\model_comparison\\w_bias_8\\", group_results_name = 'group_results_8_CV.npz')
 
     # --- Example sessions ---
     # plot_example_sessions(session_of_interest = [['FOR06', 49]], smooth_factor = 5)
