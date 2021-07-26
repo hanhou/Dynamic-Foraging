@@ -19,6 +19,7 @@ You can run it online [![Binder](https://mybinder.org/badge_logo.svg)](https://m
 
 ## 3. Fit Real Data
 [Behavior Model Comparison](https://nbviewer.jupyter.org/github/hanhou/Dynamic-Foraging/blob/master/Behavior_Model_Comparison.ipynb)
+[Behavior Model Comparison more](https://https://nbviewer.jupyter.org/github/hanhou/Dynamic-Foraging/blob/master/Behavior_Model_Comparison_more.ipynb)
 
 ---
 I'm new to Python, so please let me know if you find any bugs:)
