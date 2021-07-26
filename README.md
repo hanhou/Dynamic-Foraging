@@ -18,7 +18,7 @@ You can run it online [![Binder](https://mybinder.org/badge_logo.svg)](https://m
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/hanhou/Dynamic-Foraging/master?filepath=%2FModel_Recovery.ipynb)
 
 ## 3. Fit Real Data
-[Behavior Model Comparison](https://nbviewer.jupyter.org/github/hanhou/Dynamic-Foraging/blob/master/Behavior_Model_Comparison.ipynb)
+[Behavior Model Comparison](https://nbviewer.jupyter.org/github/hanhou/Dynamic-Foraging/blob/master/Behavior_Model_Comparison.ipynb)<br>
 [Behavior Model Comparison more](https://https://nbviewer.jupyter.org/github/hanhou/Dynamic-Foraging/blob/master/Behavior_Model_Comparison_more.ipynb)
 
 ---
