@@ -49,8 +49,8 @@ def plot_one_session(bandit, fig='', plottype='2lickport'):
     if bandit.forager in ['IdealpHatOptimal', 'IdealpHatGreedy', 'FullStateQ'] or 'PatternMelioration' in bandit.forager:
         smooth_factor = 1
     else:
-        smooth_factor = 1
-        # smooth_factor = 5
+        # smooth_factor = 1
+        smooth_factor = 5
     
     # == Fetch data ==
     n_trials = bandit.n_trials

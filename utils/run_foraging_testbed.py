@@ -292,6 +292,7 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
                 intercept, a = model.params  # "a, b" in Corrado 2005
                 b = np.exp(intercept)
                 intercept_CI95, a_CI95  = np.diff(model.conf_int(), axis=1)/2
+                a_CI95 = a_CI95[0]
                 r_square, p = (model.rsquared, model.pvalues)
                 
                 # From log ratio to fraction
