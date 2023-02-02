@@ -49,8 +49,8 @@ def plot_one_session(bandit, fig='', plottype='2lickport'):
     if bandit.forager in ['IdealpHatOptimal', 'IdealpHatGreedy', 'FullStateQ'] or 'PatternMelioration' in bandit.forager:
         smooth_factor = 1
     else:
-        smooth_factor = 1
-        # smooth_factor = 5
+        # smooth_factor = 1
+        smooth_factor = 5
     
     # == Fetch data ==
     n_trials = bandit.n_trials
@@ -169,56 +169,56 @@ def plot_all_reps(results_all_reps):
     if 'example_session' in results_all_reps:
         plot_one_session(results_all_reps['example_session'], fig)
     
-    # == 2. Blockwise matching ==
-    c_frac, inc_frac, c_log_ratio, inc_log_ratio, rtn_log_ratio = results_all_reps['blockwise_stats']
+    # # == 2. Blockwise matching ==
+    # c_frac, inc_frac, c_log_ratio, inc_log_ratio, rtn_log_ratio = results_all_reps['blockwise_stats']
     
     gs = GridSpec(2,3, wspace=0.3, hspace=0.5, bottom=0.13)    
             
-    # if not np.all(np.isnan(inc_log_ratio)):
+    # # if not np.all(np.isnan(inc_log_ratio)):
          
-    # 2b. -- Log_ratio
-    # ax = fig.add_subplot(235)
-    ax = fig.add_subplot(gs[1,1])
+    # # 2b. -- Log_ratio
+    # # ax = fig.add_subplot(235)
+    # ax = fig.add_subplot(gs[1,1])
     
-    # Scatter plot
-    ax.plot(inc_log_ratio, c_log_ratio, '.k')
+    # # Scatter plot
+    # ax.plot(inc_log_ratio, c_log_ratio, '.k')
 
-    # Get linear fit paras
-    # "a,b" in Corrado 2005, "slope" in Iigaya 2019
-    [a, a_CI95], [b, _],[r_square, p],[slope, slope_CI95] = results_all_reps['linear_fit_log_income_ratio'][0,:,:]
+    # # Get linear fit paras
+    # # "a,b" in Corrado 2005, "slope" in Iigaya 2019
+    # [a, a_CI95], [b, _],[r_square, p],[slope, slope_CI95] = results_all_reps['linear_fit_log_income_ratio'][0,:,:]
 
-    # Plot line
-    xx = np.linspace(min(inc_log_ratio), max(inc_log_ratio), 100)
-    yy = np.log(b) + xx * a
-    hh = ax.plot(xx,yy,'r')
-    ax.legend(hh,['a = %.2g +/- %.2g\nr^2 = %.2g\np = %.2g' % (a, a_CI95, r_square, p)])
+    # # Plot line
+    # xx = np.linspace(min(inc_log_ratio), max(inc_log_ratio), 100)
+    # yy = np.log(b) + xx * a
+    # hh = ax.plot(xx,yy,'r')
+    # ax.legend(hh,['a = %.2g +/- %.2g\nr^2 = %.2g\np = %.2g' % (a, a_CI95, r_square, p)])
     
-    plt.plot([-4,4],[-4,4],'y--')
+    # plt.plot([-4,4],[-4,4],'y--')
  
-    plt.xlabel('Blockwise log income ratio')
-    plt.ylabel('Blockwise log choice ratio')
-    # ax.set_aspect('equal','datalim')
-    plt.axis('square')
+    # plt.xlabel('Blockwise log income ratio')
+    # plt.ylabel('Blockwise log choice ratio')
+    # # ax.set_aspect('equal','datalim')
+    # plt.axis('square')
 
-    # 2a. -- Fraction
-    # ax = fig.add_subplot(234)
-    ax = fig.add_subplot(gs[1,0])
-    ax.plot(inc_frac, c_frac, '.k')
-    ax.plot([0,1],[0,1],'y--')
+    # # 2a. -- Fraction
+    # # ax = fig.add_subplot(234)
+    # ax = fig.add_subplot(gs[1,0])
+    # ax.plot(inc_frac, c_frac, '.k')
+    # ax.plot([0,1],[0,1],'y--')
     
-    # Non-linear relationship using the linear fit of log_ratio
-    xx = np.linspace(min(inc_frac), max(inc_frac), 100)
-    yy = (xx ** a ) / (xx ** a + b * (1-xx) ** a)
-    ax.plot(xx, yy, 'r')    
+    # # Non-linear relationship using the linear fit of log_ratio
+    # xx = np.linspace(min(inc_frac), max(inc_frac), 100)
+    # yy = (xx ** a ) / (xx ** a + b * (1-xx) ** a)
+    # ax.plot(xx, yy, 'r')    
     
-    # slope_fraction = 0.5 in theory
-    yy = 1/(1+b) + (xx-0.5)*slope
-    ax.plot(xx, yy, 'b--', linewidth=2, label='slope = %.3g' % slope)
-    plt.legend()       
+    # # slope_fraction = 0.5 in theory
+    # yy = 1/(1+b) + (xx-0.5)*slope
+    # ax.plot(xx, yy, 'b--', linewidth=2, label='slope = %.3g' % slope)
+    # plt.legend()       
     
-    plt.xlabel('Blockwise INCOME fraction')
-    plt.ylabel('Blockwise choice fraction')
-    plt.axis('square')
+    # plt.xlabel('Blockwise INCOME fraction')
+    # plt.ylabel('Blockwise choice fraction')
+    # plt.axis('square')
   
     # 2c. -- Stay duration distribution
     if np.sum(results_all_reps['stay_duration_hist']) > 0:
@@ -231,7 +231,7 @@ def plot_all_reps(results_all_reps):
         plt.ylabel('Proportion')
         plt.legend()
     
-    # fig.show()
+    fig.show()
     
     # 3. -- Matching slope using Income VS Return (after Mar 4 2020 Foraging meeting)
     

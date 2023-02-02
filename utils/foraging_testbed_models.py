@@ -63,6 +63,9 @@ import numpy as np
 from models.full_state_Q import FullStateQ
 from utils.helper_func import softmax, choose_ps
 
+from models.random_walk import RandomWalkReward
+
+
 LEFT = 0
 RIGHT = 1
 
@@ -184,7 +187,7 @@ class Bandit:
         self.reward_history = np.zeros([self.k, self.n_trials])    # Reward history, separated for each port (Corrado Newsome 2005)
         
         # Generate baiting prob in block structure
-        self.generate_p_reward(self.block_size_mean, self.block_size_sd)
+        self.generate_p_reward()
         
         # Prepare reward for the first trial
         if not self.if_varying_amplitude:  # Varying reward prob.
@@ -241,9 +244,7 @@ class Bandit:
         else:
             self.description = self.forager
             
-    def generate_p_reward(self, block_size_base = 80, block_size_sd = 20,
-                                p_reward_pairs = [[.4,.05],[.3857,.0643],[.3375,.1125],[.225,.225]],  # (Bari-Cohen 2019)  
-                         ):  
+    def generate_p_reward(self):  
         
         # If para_optim, fix the random seed to ensure that p_reward schedule is fixed for all candidate parameters
         # However, we should make it random during a session (see the last line of this function)
@@ -682,3 +683,44 @@ class Bandit:
             action = self.act()
             self.step(action)
  
+
+
+class BanditRestless(Bandit):
+    
+    def __init__(self, p_min=0, p_max=1, sigma=0.15, mean=0, **kwargs):
+        super().__init__(**kwargs)
+        
+        self.p_min = p_min
+        self.p_max = p_max
+        self.sigma = sigma
+        self.mean = mean
+        
+
+    def generate_p_reward(self):
+
+        restless_bandit = RandomWalkReward(p_min=self.p_min, p_max=self.p_max, sigma=self.sigma, mean=self.mean)
+
+        # If para_optim, fix the random seed to ensure that p_reward schedule is fixed for all candidate parameters
+        # However, we should make it random during a session (see the last line of this function)
+        if self.p_reward_seed_override != '':
+            np.random.seed(self.p_reward_seed_override)
+
+        while restless_bandit.trial_now < self.n_trials - 1:     
+            restless_bandit.next_trial()
+
+        p_reward = np.vstack([restless_bandit.trial_rwd_prob['L'],
+                              restless_bandit.trial_rwd_prob['R']])
+
+        self.n_blocks = 0
+        self.p_reward = p_reward
+        self.block_size = []
+        self.p_reward_fraction = p_reward[RIGHT, :] / \
+            (np.sum(p_reward, axis=0))   # For future use
+        self.p_reward_ratio = p_reward[RIGHT, :] / \
+            p_reward[LEFT, :]   # For future use
+
+        # We should make it random afterwards
+        np.random.seed()
+        
+        self.rewards_IdealpHatOptimal = 1
+        self.rewards_IdealpHatGreedy = 1

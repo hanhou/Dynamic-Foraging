@@ -7,7 +7,7 @@
 # Feb 2020, Han Hou @ Houston
 # Svoboda lab
 # =============================================================================
-
+#%%
 
 import numpy as np
 from tqdm import tqdm  # For progress bar. HH
@@ -17,8 +17,11 @@ import copy
 import statsmodels.api as sm
 import scipy.optimize as optimize
 
+import sys
+sys.path.append('/root/capsule')
+
 # Import my own modules
-from utils.foraging_testbed_models import Bandit
+from utils.foraging_testbed_models import Bandit, BanditRestless
 from utils.foraging_testbed_plots import plot_all_reps, plot_para_scan, plot_model_compet, plot_one_session
 
 methods = [ 
@@ -292,6 +295,7 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
                 intercept, a = model.params  # "a, b" in Corrado 2005
                 b = np.exp(intercept)
                 intercept_CI95, a_CI95  = np.diff(model.conf_int(), axis=1)/2
+                a_CI95 = a_CI95[0]
                 r_square, p = (model.rsquared, model.pvalues)
                 
                 # From log ratio to fraction
@@ -355,7 +359,7 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
         return results_all_sessions['foraging_efficiency'][0] 
 
 
-#%% =============================================================================
+# =============================================================================
 #  1-D or 2-D manual parameter scan
 # =============================================================================
 def para_scan(forager, para_to_scan, n_reps = global_n_reps, pool = '', if_plot = True, if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None, **kwargs):
@@ -392,7 +396,7 @@ def para_scan(forager, para_to_scan, n_reps = global_n_reps, pool = '', if_plot 
     return results_para_scan
 
 
-#%% =============================================================================
+# =============================================================================
 #  Automatic parameters optimization (for performance)
 # =============================================================================
 
@@ -510,7 +514,7 @@ def para_optimize(forager, n_reps_per_iter = 200, opti_names = '', bounds = '', 
     
     return opti_para
 
-#%% =============================================================================
+# =============================================================================
 #   Model competition (for performance, NOT model comparison for fitting data) 
 # ===============================================================================
 def model_compet(model_compet_settings, n_reps = 200, pool = '', if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None):
@@ -568,7 +572,7 @@ def model_compet(model_compet_settings, n_reps = 200, pool = '', if_baited = Tru
                       if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs)
     
     
-#%%
+#
 def sandro():
     
     softmax_temperatures = np.power(10, np.linspace(-1.5,0,20 ))
@@ -638,10 +642,10 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     pool = ''
    
     if 'apply_async' in methods:
-        n_worker = int(mp.cpu_count()/2)  # Optimal number = number of physical cores
+        n_worker = int(mp.cpu_count())  # Optimal number = number of physical cores
         pool = mp.Pool(processes = n_worker)
         
-    #%% =============================================================================
+    # =============================================================================
     #     Play with the model manually
     # =============================================================================
     
@@ -669,7 +673,7 @@ if __name__ == '__main__':  # This line is essential for apply_async to run in W
     # bandit = Bandit(forager = 'IdealpHatOptimal')
     # bandit = Bandit(forager = 'pMatching')
     
-    bandit = Bandit(forager = 'AmB1', m_AmB1=5)
+    bandit = BanditRestless(forager = 'Random')
     
     # bandit = Bandit(forager = 'PatternMelioration', step_sizes = 0.2, pattern_meliorate_threshold = 0.1, block_size_mean = 80, 
     #                 if_varying_amplitude = True, n_trials = global_n_trials)
