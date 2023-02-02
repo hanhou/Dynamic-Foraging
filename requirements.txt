@@ -3,3 +3,4 @@ matplotlib
 tqdm
 statsmodels
 seaborn
+statannot
