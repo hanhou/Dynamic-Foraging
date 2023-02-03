@@ -9,9 +9,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 # import plotly.express as px
+from scipy import ndimage
 
 from matplotlib.gridspec import GridSpec
-from utils.helper_func import seaborn_style
+from utils.helper_func import seaborn_style, sigmoid   
 
 plt.rcParams.update({'font.size': 13})
 
@@ -65,11 +66,10 @@ def plot_one_session(bandit, fig='', plottype='2lickport'):
     # gs = GridSpec(2,3, top = 0.85)        
     # ax = fig.add_subplot(gs[0,0:2])
 
-    gs = GridSpec(1,1, top = 0.80)        
+    gs = GridSpec(1, 2, top = 0.80, width_ratios=[2.5, 1])        
     ax = fig.add_subplot(gs[0,0])
 
-    if not bandit.if_varying_amplitude:
-                                      
+    if not bandit.if_varying_amplitude:                                    
         rewarded_trials = np.any(reward_history, axis = 0)
         unrewarded_trials = np.logical_not(rewarded_trials)
         
@@ -109,6 +109,17 @@ def plot_one_session(bandit, fig='', plottype='2lickport'):
     
     # Efficiency
     plt.title('Example session, efficiency = %.3g%%' % (bandit.foraging_efficiency*100))
+    
+    # == Psychometric curve ==
+    ax1 = fig.add_subplot(gs[0, 1])
+    ax1.plot(bandit.psychometric_mean_p_diff, 
+             bandit.psychometric_mean_choice_R_frac, 
+             'ok', alpha=0.2)
+    
+    xx = np.linspace(-1, 1, 100)
+    yy = sigmoid(xx, *bandit.psychometric_popt, a=1, b=0)
+    ax1.plot(xx, yy, 'k--')
+    ax1.set(xlabel=f'$p_R - p_L$ (win = {bandit.psychometric_win} trials)', ylabel='Fraction choose right')
    
     # == Cumulative choice plot ==  [Sugrue 2004]
     # bandit.cumulative_choice_L = np.cumsum(bandit.choice_history == LEFT)
@@ -149,7 +160,7 @@ def plot_all_reps(results_all_reps):
     
     if_restless = 'restless' in results_all_reps['bandits_all_sessions'][0].task
     
-    fig = plt.figure(figsize=(12*1, 5*1))
+    fig = plt.figure(figsize=(15*1, 5*1))
         
     if if_restless:
         fig.text(0.05,0.94,'%s\n%g sessions, %g blocks, %g trials, restless sigma = %g' % (results_all_reps['description'], 
@@ -187,6 +198,18 @@ def plot_all_reps(results_all_reps):
     # == 1. Example Session ==
     if 'example_session' in results_all_reps:
         plot_one_session(results_all_reps['example_session'], fig)
+    
+    # == 2. Plot all psychometric curves ==
+    ax1 = fig.get_axes()[1]
+    xx = np.linspace(-1, 1, 100)
+    yy = []
+    
+    for bandit in results_all_reps['bandits_all_sessions']:
+        yy.append(sigmoid(xx, *bandit.psychometric_popt, a=1, b=0))
+        ax1.plot(xx, yy[-1], 'k-', alpha=0.1)  # Fitting from other sessions
+    
+    ax1.plot(xx, np.mean(yy, axis=0), 'k', lw=4)   # Average fitting
+    
     
     # # == 2. Blockwise matching ==
     # c_frac, inc_frac, c_log_ratio, inc_log_ratio, rtn_log_ratio = results_all_reps['blockwise_stats']
@@ -413,6 +436,8 @@ def plot_para_scan(results_para_scan, para_to_scan, if_baited = True, p_reward_s
         
         ax = fig.add_subplot(gs[0,0])
         im = plt.imshow(fe_mean.T, interpolation=interp, cmap=cmap)
+        
+        ax.contour(ndimage.gaussian_filter(fe_mean.T, sigma=1), levels=20, colors='k')
         
         plt.xlabel(para_names[0])
         ax.set_xlim(-0.5, len(para_ranges[0])-0.5)
