@@ -8,7 +8,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-import plotly.express as px
+# import plotly.express as px
 
 from matplotlib.gridspec import GridSpec
 from utils.helper_func import seaborn_style
@@ -398,53 +398,53 @@ def plot_para_scan(results_para_scan, para_to_scan, if_baited = True, p_reward_s
         matching_slope = results_para_scan['linear_fit_log_income_ratio'][:,3,0].reshape(len(para_ranges[0]), len(para_ranges[1]))
         
         # === Plotting ===
-        # gs = GridSpec(1,3, top = 0.9, wspace = .6, bottom = 0.15)
-        # fig = plt.figure(figsize=(13, 4))
+        gs = GridSpec(1,3, top = 0.9, wspace = .6, bottom = 0.15)
+        fig = plt.figure(figsize=(13, 4))
         
-        # fig.text(0.05,0.94,'Forager = %s, n_repetitions = %g, %s' % (forager, n_reps, kwargs), fontsize = 15)
+        fig.text(0.05,0.94,'Forager = %s, n_repetitions = %g, %s' % (forager, n_reps, kwargs), fontsize = 15)
         
-        # # -- 1. Foraging efficiency
-        # interp = 'none'
-        # cmap = plt.cm.get_cmap('hot')
-        # cmap.set_bad('cyan')
+        # -- 1. Foraging efficiency
+        interp = 'none'
+        cmap = plt.cm.get_cmap('hot')
+        cmap.set_bad('cyan')
         
         x_label_idx = np.r_[0:len(para_ranges[0]):2]
         y_label_idx = np.r_[0:len(para_ranges[1]):2]
         
-        # ax = fig.add_subplot(gs[0,0])
-        # im = plt.imshow(fe_mean.T, interpolation=interp, cmap=cmap)
+        ax = fig.add_subplot(gs[0,0])
+        im = plt.imshow(fe_mean.T, interpolation=interp, cmap=cmap)
         
-        # plt.xlabel(para_names[0])
-        # ax.set_xlim(-0.5, len(para_ranges[0])-0.5)
-        # ax.set_xticks(x_label_idx)
-        # ax.set_xticklabels(np.round(para_ranges[0][x_label_idx],2))
-        # plt.xticks(rotation=45)
+        plt.xlabel(para_names[0])
+        ax.set_xlim(-0.5, len(para_ranges[0])-0.5)
+        ax.set_xticks(x_label_idx)
+        ax.set_xticklabels(np.round(para_ranges[0][x_label_idx],2))
+        plt.xticks(rotation=45)
         
-        # plt.ylabel(para_names[1])
-        # ax.set_ylim(-0.5, len(para_ranges[1])-0.5)
-        # ax.set_yticks(y_label_idx)
-        # ax.set_yticklabels(np.round(para_ranges[1][y_label_idx],2))
+        plt.ylabel(para_names[1])
+        ax.set_ylim(-0.5, len(para_ranges[1])-0.5)
+        ax.set_yticks(y_label_idx)
+        ax.set_yticklabels(np.round(para_ranges[1][y_label_idx],2))
         
-        # plt.title('Foraging efficiency')
+        plt.title('Foraging efficiency')
         
-        # # create an axes on the right side of ax. The width of cax will be 5%
-        # # of ax and the padding between cax and ax will be fixed at 0.05 inch.
-        # divider = make_axes_locatable(ax)
-        # cax = divider.append_axes("right", size="5%", pad=0.05)
-        # plt.colorbar(im, cax=cax)
+        # create an axes on the right side of ax. The width of cax will be 5%
+        # of ax and the padding between cax and ax will be fixed at 0.05 inch.
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        plt.colorbar(im, cax=cax)
         
                 
-        fig = px.imshow(fe_mean.T,
-                        labels={'x': para_names[0], 'y': para_names[1], 'color': 'foraging eff.'},
-                        x=[str(x) for x in np.round(para_ranges[0][:],2)],
-                        y=[str(x) for x in np.round(para_ranges[1][:],2)],
-                        aspect='auto',
-                        origin='lower')
+        # fig = px.imshow(fe_mean.T,
+        #                 labels={'x': para_names[0], 'y': para_names[1], 'color': 'foraging eff.'},
+        #                 x=[str(x) for x in np.round(para_ranges[0][:],2)],
+        #                 y=[str(x) for x in np.round(para_ranges[1][:],2)],
+        #                 aspect='auto',
+        #                 origin='lower')
         
-        fig.update_layout(height=600, width=600, 
-                          title_text= 'Forager = %s, n_repetitions = %g, %s' % (forager, n_reps, kwargs)
-                          )
-        fig.show()
+        # fig.update_layout(height=600, width=600, 
+        #                   title_text= 'Forager = %s, n_repetitions = %g, %s' % (forager, n_reps, kwargs)
+        #                   )
+        # fig.show()
         
         # # -- 2. Matching slope
         # ax = fig.add_subplot(gs[0,1])
