@@ -49,28 +49,8 @@ def run_one_session(bandit, para_scan = False, para_optim = False):
     # =============================================================================
     # Compute results for this session
     # =============================================================================
-    # -- 1. Foraging efficiency = Sum of actual rewards / Maximum number of rewards that could have been collected --
-    bandit.actual_rewards = np.sum(bandit.reward_history)
-    
-    '''Don't know which one is the fairest''' #???
-    # Method 1: Average of max(p_reward) 
-    # bandit.maximum_rewards = np.sum(np.max(bandit.p_reward, axis = 0)) 
-    # Method 2: Average of sum(p_reward).   [Corrado et al 2005: efficienty = 50% for choosing only one color]
-    # bandit.maximum_rewards = np.sum(np.sum(bandit.p_reward, axis = 0)) 
-    # Method 3: Maximum reward given the actual reward_available (one choice per trial constraint)
-    # bandit.maximum_rewards = np.sum(np.any(bandit.reward_available, axis = 0))  # Equivalent to sum(max())
-    # Method 4: Sum of all ever-baited rewards (not fair)  
-    # bandit.maximum_rewards = np.sum(np.sum(bandit.reward_available, axis = 0))
-    
-    ''' Use ideal-p^-optimal'''
-    # bandit.maximum_rewards = bandit.rewards_IdealpHatGreedy
-    if not para_optim: 
-        bandit.maximum_rewards = bandit.rewards_IdealpHatOptimal
-    else:  # If in optimization, fast and good
-        bandit.maximum_rewards = bandit.rewards_IdealpHatGreedy
-        
-    bandit.foraging_efficiency = bandit.actual_rewards / bandit.maximum_rewards
-    
+ 
+    bandit.compute_foraging_eff(para_optim)   
    
     if not para_optim:
          # -- 2. Blockwise statistics --
@@ -362,7 +342,10 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
 # =============================================================================
 #  1-D or 2-D manual parameter scan
 # =============================================================================
-def para_scan(forager, para_to_scan, n_reps = global_n_reps, pool = '', if_plot = True, if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None, **kwargs):
+def para_scan(forager, para_to_scan, task='Bandit_block', 
+              n_reps = global_n_reps, pool = '', 
+              if_plot = True, if_baited = True, 
+              p_reward_sum = 0.45, p_reward_pairs = None, **kwargs):
     
     # == Turn para_to_scan into list of Bandits ==
     n_nest = len(para_to_scan)
@@ -373,7 +356,15 @@ def para_scan(forager, para_to_scan, n_reps = global_n_reps, pool = '', if_plot 
         
         for pp in para_range:
             kwargs_all = {**{para_name:pp}, **kwargs}   # All parameters
-            bandits_to_scan.append(Bandit(forager = forager, if_baited = if_baited,  p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs, **kwargs_all))   # Append to the list
+            
+            if task == 'Bandit_block':
+                bandits_to_scan.append(Bandit(forager = forager, if_baited = if_baited,  
+                                            p_reward_sum = p_reward_sum, 
+                                            p_reward_pairs = p_reward_pairs, 
+                                            **kwargs_all))   # Append to the list
+            elif task == 'Bandit_restless':
+                bandits_to_scan.append(BanditRestless(forager = forager, 
+                                                        **kwargs_all))   # Append to the list
             
     elif n_nest == 2:
         para_names = list(para_to_scan.keys())
@@ -388,7 +379,15 @@ def para_scan(forager, para_to_scan, n_reps = global_n_reps, pool = '', if_plot 
                 else:   
                     kwargs_all = {**{para_names[0]: pp_1, para_names[1]: pp_2}, **kwargs}
                     
-                bandits_to_scan.append(Bandit(forager = forager, if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs, **kwargs_all))   # Append to the list
+                if task == 'Bandit_block':
+                    bandits_to_scan.append(Bandit(forager = forager, 
+                                                  if_baited = if_baited, 
+                                                  p_reward_sum = p_reward_sum, 
+                                                  p_reward_pairs = p_reward_pairs,
+                                                  **kwargs_all))   # Append to the list
+                elif task == 'Bandit_restless':
+                    bandits_to_scan.append(BanditRestless(forager = forager, 
+                                                          **kwargs_all))   # Append to the list
             
     results_para_scan = run_sessions_parallel(bandits_to_scan, n_reps = n_reps, pool = pool)
     if if_plot: plot_para_scan(results_para_scan, para_to_scan, if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs, **kwargs)
