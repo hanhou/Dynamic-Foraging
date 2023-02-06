@@ -21,7 +21,13 @@ import sys
 sys.path.append('/root/capsule')
 
 # Import my own modules
-from utils.foraging_testbed_models import Bandit, BanditRestless
+
+# from utils.foraging_testbed_models import Bandit, BanditRestless
+
+# Use new classes (copyed back from DJ; refactored)
+from models.bandit_model import BanditModel as Bandit
+from models.bandit_model import BanditModelRestless as BanditRestless
+
 from utils.foraging_testbed_plots import plot_all_reps, plot_para_scan, plot_model_compet, plot_one_session
 from utils.helper_func import fit_sigmoid_p_choice
 
@@ -53,7 +59,7 @@ def run_one_session(bandit, para_scan = False, para_optim = False):
  
     bandit.compute_foraging_eff(para_optim)   
    
-    if not para_optim:
+    if not para_optim and not para_scan:
         # -- Psychometric curve --
         p_reward = bandit.p_reward
         choice = bandit.choice_history[0]
@@ -438,17 +444,20 @@ def generate_kwargs(forager, opti_names, opti_value):  # Helper function for par
 def score_func(opti_value, *argss):
         
     # Arguments interpretation
-    forager, opti_names, n_reps_per_iter, if_baited, p_reward_sum, p_reward_pairs, if_varying_amplitude, pool, kwargs = argss
+    forager, opti_names, n_reps_per_iter, if_baited, p_reward_sum, p_reward_pairs, if_varying_amplitude, pool, task, kwargs = argss
     kwargs_all = generate_kwargs(forager, opti_names, opti_value)
 
     # More keyword arguments
     kwargs_all = {**kwargs_all, **kwargs}
     
     # Run simulation
-    bandit = Bandit(**kwargs_all, if_baited = if_baited, p_reward_sum = p_reward_sum, 
+    bandit_to_use = Bandit if task == 'Bandit_block' else BanditRestless
+    bandit = bandit_to_use(**kwargs_all, if_baited = if_baited, p_reward_sum = p_reward_sum, 
                     p_reward_pairs = p_reward_pairs, p_reward_seed_override = 20200303, 
                     if_varying_amplitude = if_varying_amplitude,
                     if_para_optim = True)  # The same reward schedule for fair comparison
+ 
+        
     score = - run_sessions_parallel(bandit, n_reps = n_reps_per_iter, pool = pool, para_optim = True)  # Negative efficiency as cost function
     
     # print(np.round(opti_value,4), score, '\n')
@@ -457,7 +466,9 @@ def score_func(opti_value, *argss):
 
 
 def para_optimize(forager, n_reps_per_iter = 200, opti_names = '', bounds = '', pool = '', 
-                  if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None, if_varying_amplitude = False, **kwargs):
+                  if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None, if_varying_amplitude = False, 
+                  task='Bandit_block', 
+                  **kwargs):
     
     start = time.time()
     
@@ -511,7 +522,7 @@ def para_optimize(forager, n_reps_per_iter = 200, opti_names = '', bounds = '', 
     # Parameter optimization with DE    
     opti_para = optimize.differential_evolution(func = score_func, 
                                                 args = (forager, opti_names, n_reps_per_iter, if_baited, p_reward_sum, p_reward_pairs, 
-                                                        if_varying_amplitude, pool, kwargs), 
+                                                        if_varying_amplitude, pool, task, kwargs), 
                                                 bounds = bounds, 
                                                 workers = 1, disp=True, strategy = 'best1bin',
                                                 mutation=(0.5, 1), recombination = 0.7, popsize = 20)
@@ -520,8 +531,10 @@ def para_optimize(forager, n_reps_per_iter = 200, opti_names = '', bounds = '', 
     kwargs_all = generate_kwargs(forager, opti_names, opti_para.x)
     kwargs_all = {**kwargs_all, **kwargs}
         
-    bandit = Bandit(if_baited = if_baited, p_reward_sum = p_reward_sum, 
+    bandit_to_use = Bandit if task == 'Bandit_block' else BanditRestless
+    bandit = bandit_to_use(if_baited = if_baited, p_reward_sum = p_reward_sum, 
                     p_reward_pairs = p_reward_pairs, if_varying_amplitude = if_varying_amplitude, **kwargs_all)
+    
     run_sessions_parallel(bandit, n_reps = 500, pool = pool)
                           
     print(opti_para)
