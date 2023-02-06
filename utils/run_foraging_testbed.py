@@ -23,6 +23,7 @@ sys.path.append('/root/capsule')
 # Import my own modules
 from utils.foraging_testbed_models import Bandit, BanditRestless
 from utils.foraging_testbed_plots import plot_all_reps, plot_para_scan, plot_model_compet, plot_one_session
+from utils.helper_func import fit_sigmoid_p_choice
 
 methods = [ 
             # 'serial',
@@ -49,130 +50,122 @@ def run_one_session(bandit, para_scan = False, para_optim = False):
     # =============================================================================
     # Compute results for this session
     # =============================================================================
-    # -- 1. Foraging efficiency = Sum of actual rewards / Maximum number of rewards that could have been collected --
-    bandit.actual_rewards = np.sum(bandit.reward_history)
-    
-    '''Don't know which one is the fairest''' #???
-    # Method 1: Average of max(p_reward) 
-    # bandit.maximum_rewards = np.sum(np.max(bandit.p_reward, axis = 0)) 
-    # Method 2: Average of sum(p_reward).   [Corrado et al 2005: efficienty = 50% for choosing only one color]
-    # bandit.maximum_rewards = np.sum(np.sum(bandit.p_reward, axis = 0)) 
-    # Method 3: Maximum reward given the actual reward_available (one choice per trial constraint)
-    # bandit.maximum_rewards = np.sum(np.any(bandit.reward_available, axis = 0))  # Equivalent to sum(max())
-    # Method 4: Sum of all ever-baited rewards (not fair)  
-    # bandit.maximum_rewards = np.sum(np.sum(bandit.reward_available, axis = 0))
-    
-    ''' Use ideal-p^-optimal'''
-    # bandit.maximum_rewards = bandit.rewards_IdealpHatGreedy
-    if not para_optim: 
-        bandit.maximum_rewards = bandit.rewards_IdealpHatOptimal
-    else:  # If in optimization, fast and good
-        bandit.maximum_rewards = bandit.rewards_IdealpHatGreedy
-        
-    bandit.foraging_efficiency = bandit.actual_rewards / bandit.maximum_rewards
-    
+ 
+    bandit.compute_foraging_eff(para_optim)   
    
     if not para_optim:
-         # -- 2. Blockwise statistics --
-        temp_nans = np.zeros(bandit.n_blocks)
-        temp_nans[:] = np.nan   # Better way?
+        # -- Psychometric curve --
+        p_reward = bandit.p_reward
+        choice = bandit.choice_history[0]
+
+        bandit.psychometric_win = 10
+        popt, _, mean_p_diff, mean_choice_R_frac = fit_sigmoid_p_choice(p_reward, choice, win=bandit.psychometric_win)
         
-        bandit.blockwise_choice_fraction = temp_nans.copy()
-        bandit.blockwise_income_fraction = temp_nans.copy()
-        bandit.blockwise_log_choice_ratio = temp_nans.copy()
-        bandit.blockwise_log_income_ratio = temp_nans.copy()
-        bandit.blockwise_log_return_ratio = temp_nans.copy()
+        bandit.psychometric_popt = popt
+        bandit.psychometric_mean_p_diff = mean_p_diff
+        bandit.psychometric_mean_choice_R_frac = mean_choice_R_frac
         
-        bandit.block_trans_time = np.cumsum(np.hstack([0,bandit.block_size]))
+        # # -- 2. Blockwise statistics --
+        # temp_nans = np.zeros(bandit.n_blocks)
+        # temp_nans[:] = np.nan   # Better way?
         
-        for i_block in range(bandit.n_blocks):   # For each block in this session
-            trial_range = np.r_[bandit.block_trans_time[i_block] : bandit.block_trans_time[i_block+1]]  # r_ trick
+        
+        # bandit.blockwise_choice_fraction = temp_nans.copy()
+        # bandit.blockwise_income_fraction = temp_nans.copy()
+        # bandit.blockwise_log_choice_ratio = temp_nans.copy()
+        # bandit.blockwise_log_income_ratio = temp_nans.copy()
+        # bandit.blockwise_log_return_ratio = temp_nans.copy()
+        
+        # bandit.block_trans_time = np.cumsum(np.hstack([0,bandit.block_size]))
+        
+        # for i_block in range(bandit.n_blocks):   # For each block in this session
+        #     trial_range = np.r_[bandit.block_trans_time[i_block] : bandit.block_trans_time[i_block+1]]  # r_ trick
            
-            choice_R = np.sum(bandit.choice_history[0,trial_range] == RIGHT)
-            choice_L = np.sum(bandit.choice_history[0,trial_range] == LEFT)
-            rew_R = np.sum(bandit.reward_history[RIGHT, trial_range])
-            rew_L = np.sum(bandit.reward_history[LEFT, trial_range])
+        #     choice_R = np.sum(bandit.choice_history[0,trial_range] == RIGHT)
+        #     choice_L = np.sum(bandit.choice_history[0,trial_range] == LEFT)
+        #     rew_R = np.sum(bandit.reward_history[RIGHT, trial_range])
+        #     rew_L = np.sum(bandit.reward_history[LEFT, trial_range])
                     
-            if (rew_R + rew_L):    # Non-zero total reward. Otherwise, leaves nan
-                bandit.blockwise_choice_fraction[i_block] = choice_R / (choice_R + choice_L)
-                bandit.blockwise_income_fraction[i_block] = rew_R / (rew_R + rew_L)
+        #     if (rew_R + rew_L):    # Non-zero total reward. Otherwise, leaves nan
+        #         bandit.blockwise_choice_fraction[i_block] = choice_R / (choice_R + choice_L)
+        #         bandit.blockwise_income_fraction[i_block] = rew_R / (rew_R + rew_L)
             
-            if all([rew_R, rew_L, choice_R, choice_L]):   # All non-zero. Otherwise, leaves nan
-                bandit.blockwise_log_choice_ratio[i_block] = np.log(choice_R / choice_L)
-                bandit.blockwise_log_income_ratio[i_block] = np.log(rew_R / rew_L)
+        #     if all([rew_R, rew_L, choice_R, choice_L]):   # All non-zero. Otherwise, leaves nan
+        #         bandit.blockwise_log_choice_ratio[i_block] = np.log(choice_R / choice_L)
+        #         bandit.blockwise_log_income_ratio[i_block] = np.log(rew_R / rew_L)
                 
-                # Let's try matching slope using 'RETURN' as well. (after Mar.4 2020 Foraging meeting)
-                bandit.blockwise_log_return_ratio[i_block] = np.log((rew_R/choice_R)/(rew_L/choice_L))
+        #         # Let's try matching slope using 'RETURN' as well. (after Mar.4 2020 Foraging meeting)
+        #         bandit.blockwise_log_return_ratio[i_block] = np.log( (rew_R/choice_R)/(rew_L/choice_L))
                 
-        # -- 2.5 Matching for each session --
-        # For model competition, it is unfair that I group all blocks over all sessions and then fit the line once.
-        # Because this would lead to a very small slope_CI95 that may mask the high variability of matching slope due to extreme biases in never-explore regime.
-        # I should compute a macthing slope for each session and then calculate the CI95 using the same way as foraging efficiency. 
+        # # -- 2.5 Matching for each session --
+        # # For model competition, it is unfair that I group all blocks over all sessions and then fit the line once.
+        # # Because this would lead to a very small slope_CI95 that may mask the high variability of matching slope due to extreme biases in never-explore regime.
+        # # I should compute a macthing slope for each session and then calculate the CI95 using the same way as foraging efficiency. 
         
-        # --- Linear regression on log_ratios (for each session) ---
-        c_fraction = bandit.blockwise_choice_fraction
-        inc_fraction = bandit.blockwise_income_fraction
+        # # --- Linear regression on log_ratios (for each session) ---
+        # c_fraction = bandit.blockwise_choice_fraction
+        # inc_fraction = bandit.blockwise_income_fraction
         
-        c_log_ratio = bandit.blockwise_log_choice_ratio
-        inc_log_ratio = bandit.blockwise_log_income_ratio 
+        # c_log_ratio = bandit.blockwise_log_choice_ratio
+        # inc_log_ratio = bandit.blockwise_log_income_ratio 
         
-        # Let's try matching slope using 'RETURN' as well. (after Mar.4 2020 Foraging meeting)
-        rtn_log_ratio = bandit.blockwise_log_return_ratio
+        # # Let's try matching slope using 'RETURN' as well. (after Mar.4 2020 Foraging meeting)
+        # rtn_log_ratio = bandit.blockwise_log_return_ratio
         
         
-        bandit.linear_fit_income_per_session = np.nan
-        bandit.linear_fit_return_per_session = np.nan
+        # bandit.linear_fit_income_per_session = np.nan
+        # bandit.linear_fit_return_per_session = np.nan
             
-        if np.sum(~np.isnan(inc_log_ratio)) > 5:  # Use log_ratio
+        # if np.sum(~np.isnan(inc_log_ratio)) > 5:  # Use log_ratio
             
-            # == 1. Income_log_ratio ==
-            x = inc_log_ratio[~np.isnan(inc_log_ratio)]
-            y = c_log_ratio[~np.isnan(c_log_ratio)]
+        #     # == 1. Income_log_ratio ==
+        #     x = inc_log_ratio[~np.isnan(inc_log_ratio)]
+        #     y = c_log_ratio[~np.isnan(c_log_ratio)]
             
-            # Linear regression
-            model = sm.OLS(y, sm.add_constant(x)).fit()
+        #     # Linear regression
+        #     model = sm.OLS(y, sm.add_constant(x)).fit()
             
-            intercept, a = model.params  # "a, b" in Corrado 2005
-            # b = np.exp(intercept)
-            intercept_CI95, a_CI95  = np.diff(model.conf_int(), axis=1)/2
-            # r_square, p = (model.rsquared, model.pvalues)
+        #     intercept, a = model.params  # "a, b" in Corrado 2005
+        #     # b = np.exp(intercept)
+        #     intercept_CI95, a_CI95  = np.diff(model.conf_int(), axis=1)/2
+        #     # r_square, p = (model.rsquared, model.pvalues)
             
-            # From log ratio to fraction
-            # slope = 4*a*b/(1+b)**2   #　"Slope" in Iigaya 2019: linear fitting of fractional choice vs fractional reward. By derivation  
-            # slope_CI95 = a_CI95*4*b/(1+b)**2
+        #     # From log ratio to fraction
+        #     # slope = 4*a*b/(1+b)**2   #　"Slope" in Iigaya 2019: linear fitting of fractional choice vs fractional reward. By derivation  
+        #     # slope_CI95 = a_CI95*4*b/(1+b)**2
            
-            bandit.linear_fit_income_per_session = a  # Let's use slope from log ratio here, because I don't want to let the bias contaminate the ratio
+        #     bandit.linear_fit_income_per_session = a  # Let's use slope from log ratio here, because I don't want to let the bias contaminate the ratio
             
-            # == 2. Return_log_ratio ==            
-            # Let's try matching slope using 'RETURN' as well. (after Mar.4 2020 Foraging meeting)
-            x = rtn_log_ratio[~np.isnan(rtn_log_ratio)]
-            y = c_log_ratio[~np.isnan(c_log_ratio)]
+        #     # == 2. Return_log_ratio ==            
+        #     # Let's try matching slope using 'RETURN' as well. (after Mar.4 2020 Foraging meeting)
+        #     x = rtn_log_ratio[~np.isnan(rtn_log_ratio)]
+        #     y = c_log_ratio[~np.isnan(c_log_ratio)]
             
-            # Linear regression
-            model = sm.OLS(y, sm.add_constant(x)).fit()
+        #     # Linear regression
+        #     model = sm.OLS(y, sm.add_constant(x)).fit()
             
-            intercept, a = model.params  # "a, b" in Corrado 2005
-            bandit.linear_fit_return_per_session = a  # Let's use slope from log ratio here, because I don't want to let the bias contaminate the ratio
+        #     intercept, a = model.params  # "a, b" in Corrado 2005
+        #     bandit.linear_fit_return_per_session = a  # Let's use slope from log ratio here, because I don't want to let the bias contaminate the ratio
             
-        elif np.sum(~np.isnan(inc_fraction)) > 5:   # Otherwise, use fraction (only this way can we get a matching slope for ideal_greedy and forager with extreme bias)
+        # elif np.sum(~np.isnan(inc_fraction)) > 5:   # Otherwise, use fraction (only this way can we get a matching slope for ideal_greedy and forager with extreme bias)
             
-            x = inc_fraction[~np.isnan(inc_fraction)]
-            y = c_fraction[~np.isnan(c_fraction)]
+        #     x = inc_fraction[~np.isnan(inc_fraction)]
+        #     y = c_fraction[~np.isnan(c_fraction)]
             
-            # Linear regression
-            model = sm.OLS(y, sm.add_constant(x)).fit()
+        #     # Linear regression
+        #     model = sm.OLS(y, sm.add_constant(x)).fit()
             
-            try:
-                intercept, a = model.params
-                bandit.linear_fit_income_per_session = a  # Let's use slope from log ratio here, because I don't want to let the bias contaminate the ratio
-            except:
-                pass
+        #     try:
+        #         intercept, a = model.params
+        #         bandit.linear_fit_income_per_session = a  # Let's use slope from log ratio here, because I don't want to let the bias contaminate the ratio
+        #     except:
+        #         pass
               
-        # -- 3. Stay duration --
-        if not para_scan:
-            temp = np.array([[-999]]) # -999 is to capture the first and the last stay
-            changeover_position = np.where(np.diff(np.hstack((temp, bandit.choice_history, temp))))[1] 
-            bandit.stay_durations = np.diff(changeover_position)
+        # # -- 3. Stay duration --
+        # if not para_scan:
+        #     temp = np.array([[-999]]) # -999 is to capture the first and the last stay
+        #     changeover_position = np.where(np.diff(np.hstack((temp, bandit.choice_history, temp))))[1] 
+        #     bandit.stay_durations = np.diff(changeover_position)
         
     return bandit   # For apply_async, in-place change is impossible since each worker uses "bandit" as 
                     # an independent local object. So I have to return "bandit" explicitly
@@ -259,65 +252,70 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
             results_all_sessions['foraging_efficiency_per_session'][unique_idx,ss] = bb.foraging_efficiency
             
             if not (para_scan or para_optim):
-                results_all_sessions['stay_duration_hist'] += np.histogram(bb.stay_durations, bins = stay_duration_hist_bins)[0]
+                pass
+                # results_all_sessions['stay_duration_hist'] += np.histogram(bb.stay_durations, bins = stay_duration_hist_bins)[0]
                 
                 # if bandit[0].forager == 'IdealOptimal':
                 #     results_all_sessions['matching_slope_IdealOptimal_theoretical_per_session'][ss] = bb.matching_slope_IdealOptimal_theoretical
 
             if not para_optim:
+                pass
                 
-                results_all_sessions['linear_fit_income_per_session'][unique_idx,ss] = bb.linear_fit_income_per_session # Add session-wise matching slope for model competition
-                results_all_sessions['linear_fit_return_per_session'][unique_idx,ss] = bb.linear_fit_return_per_session # Matching slope from log_return_ratio
+                # results_all_sessions['linear_fit_income_per_session'][unique_idx,ss] = bb.linear_fit_income_per_session # Add session-wise matching slope for model competition
+                # results_all_sessions['linear_fit_return_per_session'][unique_idx,ss] = bb.linear_fit_return_per_session # Matching slope from log_return_ratio
 
-                blockwise_stats_this_bandit[:, n_blocks_now : n_blocks_now + bb.n_blocks] =  \
-                    np.vstack([bb.blockwise_choice_fraction, 
-                               bb.blockwise_income_fraction, 
-                               bb.blockwise_log_choice_ratio, 
-                               bb.blockwise_log_income_ratio,
-                               bb.blockwise_log_return_ratio])  # Add the last one. Mar.5, 2020
-                n_blocks_now += bb.n_blocks
+                # blockwise_stats_this_bandit[:, n_blocks_now : n_blocks_now + bb.n_blocks] =  \
+                #     np.vstack([bb.blockwise_choice_fraction, 
+                #                bb.blockwise_income_fraction, 
+                #                bb.blockwise_log_choice_ratio, 
+                #                bb.blockwise_log_income_ratio,
+                #                bb.blockwise_log_return_ratio])  # Add the last one. Mar.5, 2020
+                # n_blocks_now += bb.n_blocks
             
         if not para_optim and not para_scan:   # For para_optim, we don't need this. For para_scan, I decided to use session-wise matching index.
+            
+            pass
+        
             # --- Linear regression on log_ratios (moved here) ---
-            c_log_ratio = blockwise_stats_this_bandit[2,:]
-            inc_log_ratio = blockwise_stats_this_bandit[3,:]
+            # c_log_ratio = blockwise_stats_this_bandit[2,:]
+            # inc_log_ratio = blockwise_stats_this_bandit[3,:]
                 
-            c_fraction = blockwise_stats_this_bandit[0,:]
-            inc_fraction = blockwise_stats_this_bandit[1,:]
+            # c_fraction = blockwise_stats_this_bandit[0,:]
+            # inc_fraction = blockwise_stats_this_bandit[1,:]
             
-            if bandit[0].forager not in ['AlwaysLEFT','IdealpGreedy'] and np.sum(~np.isnan(inc_log_ratio)) > 10:  # Use log_ratio
-                x = inc_log_ratio[~np.isnan(inc_log_ratio)]
-                y = c_log_ratio[~np.isnan(c_log_ratio)]
+            # if bandit[0].forager not in ['AlwaysLEFT','IdealpGreedy'] and np.sum(~np.isnan(inc_log_ratio)) > 10:  # Use log_ratio
+            #     x = inc_log_ratio[~np.isnan(inc_log_ratio)]
+            #     y = c_log_ratio[~np.isnan(c_log_ratio)]
                 
-                # Linear regression
-                model = sm.OLS(y, sm.add_constant(x)).fit()
+            #     # Linear regression
+            #     model = sm.OLS(y, sm.add_constant(x)).fit()
                 
-                intercept, a = model.params  # "a, b" in Corrado 2005
-                b = np.exp(intercept)
-                intercept_CI95, a_CI95  = np.diff(model.conf_int(), axis=1)/2
-                a_CI95 = a_CI95[0]
-                r_square, p = (model.rsquared, model.pvalues)
+            #     intercept, a = model.params  # "a, b" in Corrado 2005
+            #     b = np.exp(intercept)
+            #     intercept_CI95, a_CI95  = np.diff(model.conf_int(), axis=1)/2
+            #     a_CI95 = a_CI95[0]
+            #     r_square, p = (model.rsquared, model.pvalues)
                 
-                # From log ratio to fraction
-                slope = 4*a*b/(1+b)**2   #　"Slope" in Iigaya 2019: linear fitting of fractional choice vs fractional reward. By derivation  
-                slope_CI95 = a_CI95*4*b/(1+b)**2
+            #     # From log ratio to fraction
+            #     slope = 4*a*b/(1+b)**2   #　"Slope" in Iigaya 2019: linear fitting of fractional choice vs fractional reward. By derivation  
+            #     slope_CI95 = a_CI95*4*b/(1+b)**2
                
-                results_all_sessions['linear_fit_log_income_ratio'][unique_idx,:,:] = [a, a_CI95], [b, np.nan],[r_square, p[1]],[slope, slope_CI95]
+            #     results_all_sessions['linear_fit_log_income_ratio'][unique_idx,:,:] = [a, a_CI95], [b, np.nan],[r_square, p[1]],[slope, slope_CI95]
                 
-            elif np.sum(~np.isnan(inc_fraction)) > 5:   # Otherwise, use fraction (only this way can we get a matching slope for ideal_greedy and forager with extreme bias)
+            # elif np.sum(~np.isnan(inc_fraction)) > 5:   # Otherwise, use fraction (only this way can we get a matching slope for ideal_greedy and forager with extreme bias)
             
-                x = inc_fraction[~np.isnan(inc_fraction)]
-                y = c_fraction[~np.isnan(c_fraction)]
+            #     x = inc_fraction[~np.isnan(inc_fraction)]
+            #     y = c_fraction[~np.isnan(c_fraction)]
                 
-                # Linear regression
-                model = sm.OLS(y, sm.add_constant(x)).fit()
+            #     # Linear regression
+            #     model = sm.OLS(y, sm.add_constant(x)).fit()
                 
-                try:
-                    intercept, a = model.params
-                    intercept_CI95, a_CI95  = np.diff(model.conf_int(), axis=1)/2
-                    results_all_sessions['linear_fit_log_income_ratio'][unique_idx,:,:] = [np.nan, np.nan], [np.nan, np.nan],[np.nan, np.nan],[a, a_CI95]
-                except:
-                    pass
+            #     try:
+            #         intercept, a = model.params
+            #         intercept_CI95, a_CI95  = np.diff(model.conf_int(), axis=1)/2
+            #         results_all_sessions['linear_fit_log_income_ratio'][unique_idx,:,:] = [np.nan, np.nan], [np.nan, np.nan],[np.nan, np.nan],[a, a_CI95]
+            #     except:
+            #         pass
             
     if not para_scan:    
         results_all_sessions['foraging_efficiency'] = np.array([np.mean(results_all_sessions['foraging_efficiency_per_session']),
@@ -362,7 +360,10 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
 # =============================================================================
 #  1-D or 2-D manual parameter scan
 # =============================================================================
-def para_scan(forager, para_to_scan, n_reps = global_n_reps, pool = '', if_plot = True, if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None, **kwargs):
+def para_scan(forager, para_to_scan, task='Bandit_block', 
+              n_reps = global_n_reps, pool = '', 
+              if_plot = True, if_baited = True, 
+              p_reward_sum = 0.45, p_reward_pairs = None, **kwargs):
     
     # == Turn para_to_scan into list of Bandits ==
     n_nest = len(para_to_scan)
@@ -373,7 +374,15 @@ def para_scan(forager, para_to_scan, n_reps = global_n_reps, pool = '', if_plot 
         
         for pp in para_range:
             kwargs_all = {**{para_name:pp}, **kwargs}   # All parameters
-            bandits_to_scan.append(Bandit(forager = forager, if_baited = if_baited,  p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs, **kwargs_all))   # Append to the list
+            
+            if task == 'Bandit_block':
+                bandits_to_scan.append(Bandit(forager = forager, if_baited = if_baited,  
+                                            p_reward_sum = p_reward_sum, 
+                                            p_reward_pairs = p_reward_pairs, 
+                                            **kwargs_all))   # Append to the list
+            elif task == 'Bandit_restless':
+                bandits_to_scan.append(BanditRestless(forager = forager, 
+                                                        **kwargs_all))   # Append to the list
             
     elif n_nest == 2:
         para_names = list(para_to_scan.keys())
@@ -388,7 +397,15 @@ def para_scan(forager, para_to_scan, n_reps = global_n_reps, pool = '', if_plot 
                 else:   
                     kwargs_all = {**{para_names[0]: pp_1, para_names[1]: pp_2}, **kwargs}
                     
-                bandits_to_scan.append(Bandit(forager = forager, if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs, **kwargs_all))   # Append to the list
+                if task == 'Bandit_block':
+                    bandits_to_scan.append(Bandit(forager = forager, 
+                                                  if_baited = if_baited, 
+                                                  p_reward_sum = p_reward_sum, 
+                                                  p_reward_pairs = p_reward_pairs,
+                                                  **kwargs_all))   # Append to the list
+                elif task == 'Bandit_restless':
+                    bandits_to_scan.append(BanditRestless(forager = forager, 
+                                                          **kwargs_all))   # Append to the list
             
     results_para_scan = run_sessions_parallel(bandits_to_scan, n_reps = n_reps, pool = pool)
     if if_plot: plot_para_scan(results_para_scan, para_to_scan, if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs, **kwargs)

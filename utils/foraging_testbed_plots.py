@@ -8,9 +8,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+# import plotly.express as px
+from scipy import ndimage
 
 from matplotlib.gridspec import GridSpec
-from utils.helper_func import seaborn_style
+from utils.helper_func import seaborn_style, sigmoid   
 
 plt.rcParams.update({'font.size': 13})
 
@@ -61,17 +63,19 @@ def plot_one_session(bandit, fig='', plottype='2lickport'):
     if fig == '':
         fig = plt.figure()
         
-    gs = GridSpec(2,3, top = 0.85)        
-    ax = fig.add_subplot(gs[0,0:2])
+    # gs = GridSpec(2,3, top = 0.85)        
+    # ax = fig.add_subplot(gs[0,0:2])
 
-    if not bandit.if_varying_amplitude:
-                                      
+    gs = GridSpec(1, 2, top = 0.80, width_ratios=[2.5, 1])        
+    ax = fig.add_subplot(gs[0,0])
+
+    if not bandit.if_varying_amplitude:                                    
         rewarded_trials = np.any(reward_history, axis = 0)
         unrewarded_trials = np.logical_not(rewarded_trials)
         
         # Rewarded trials
         ax.plot(np.nonzero(rewarded_trials)[0], 0.5 + (choice_history[0,rewarded_trials]-0.5) * 1.4, 
-                'k|',color='black',markersize=20, markeredgewidth=2)
+                '|',color='black',markersize=20, markeredgewidth=2)
         # Unrewarded trials
         ax.plot(np.nonzero(unrewarded_trials)[0], 0.5 + (choice_history[0,unrewarded_trials] - 0.5) * 1.4, 
                 '|',color='gray', markersize=10, markeredgewidth=1)
@@ -105,52 +109,73 @@ def plot_one_session(bandit, fig='', plottype='2lickport'):
     
     # Efficiency
     plt.title('Example session, efficiency = %.3g%%' % (bandit.foraging_efficiency*100))
+    
+    # == Psychometric curve ==
+    ax1 = fig.add_subplot(gs[0, 1])
+    ax1.plot(bandit.psychometric_mean_p_diff, 
+             bandit.psychometric_mean_choice_R_frac, 
+             'ok', alpha=0.2)
+    
+    xx = np.linspace(-1, 1, 100)
+    yy = sigmoid(xx, *bandit.psychometric_popt, a=1, b=0)
+    ax1.plot(xx, yy, 'k--')
+    ax1.set(xlabel=f'$p_R - p_L$ (win = {bandit.psychometric_win} trials)', ylabel='Fraction choose right')
    
     # == Cumulative choice plot ==  [Sugrue 2004]
-    bandit.cumulative_choice_L = np.cumsum(bandit.choice_history == LEFT)
-    bandit.cumulative_choice_R = np.cumsum(bandit.choice_history == RIGHT)
+    # bandit.cumulative_choice_L = np.cumsum(bandit.choice_history == LEFT)
+    # bandit.cumulative_choice_R = np.cumsum(bandit.choice_history == RIGHT)
     
-    # Actual choices
-    ax = fig.add_subplot(gs[0,2])
-    ax.plot(bandit.cumulative_choice_L, bandit.cumulative_choice_R, color='black')
-    ax.yaxis.set_label_position('right')
-    ax.yaxis.tick_right()
+    # # Actual choices
+    # ax = fig.add_subplot(gs[0,2])
+    # ax.plot(bandit.cumulative_choice_L, bandit.cumulative_choice_R, color='black')
+    # ax.yaxis.set_label_position('right')
+    # ax.yaxis.tick_right()
     
-    # p_rewards
+    # # p_rewards
     
-    # bandit.block_trans_time = np.cumsum(np.hstack([0,bandit.block_size]))
+    # # bandit.block_trans_time = np.cumsum(np.hstack([0,bandit.block_size]))
     
-    for i_block, block_start in enumerate(bandit.block_trans_time[:-1]):   # For each block in this session
+    # for i_block, block_start in enumerate(bandit.block_trans_time[:-1]):   # For each block in this session
         
-        # Find the starting point and slope for each block
+    #     # Find the starting point and slope for each block
         
-        x0 = bandit.cumulative_choice_L[block_start]
-        y0 = bandit.cumulative_choice_R[block_start]
-        slope = bandit.p_reward_ratio[block_start]    # Note that this should be p_reward_ratio, not p_reward_fraction!!
+    #     x0 = bandit.cumulative_choice_L[block_start]
+    #     y0 = bandit.cumulative_choice_R[block_start]
+    #     slope = bandit.p_reward_ratio[block_start]    # Note that this should be p_reward_ratio, not p_reward_fraction!!
         
-        # next_x = bandit.cumulative_choice_L[bandit.block_trans_time[i_block+1] - 1]   # To ensure horizontal continuity
-        dx = bandit.block_size[i_block]/(1 + slope)   # To ensure total number of trials be the same
-        dy = dx * slope
+    #     # next_x = bandit.cumulative_choice_L[bandit.block_trans_time[i_block+1] - 1]   # To ensure horizontal continuity
+    #     dx = bandit.block_size[i_block]/(1 + slope)   # To ensure total number of trials be the same
+    #     dy = dx * slope
         
-        # Plot p_reward_fraction
-        ax.plot([x0 , x0 + dx], [y0, y0 + dy],'-', color='DarkOrange')
+    #     # Plot p_reward_fraction
+    #     ax.plot([x0 , x0 + dx], [y0, y0 + dy],'-', color='DarkOrange')
         
-    plt.xlabel('Cumulative Left choices')
-    plt.ylabel('Cumulative Right choices')
-    plt.axis('square')
+    # plt.xlabel('Cumulative Left choices')
+    # plt.ylabel('Cumulative Right choices')
+    # plt.axis('square')
 
     return fig
     
 def plot_all_reps(results_all_reps):
     
-    fig = plt.figure(figsize=(12*1, 8*1))
+    if_restless = 'restless' in results_all_reps['bandits_all_sessions'][0].task
+    
+    fig = plt.figure(figsize=(15*1, 5*1))
         
-    fig.text(0.05,0.94,'%s\n%g sessions, %g blocks, %g trials, p_override = %s' % (results_all_reps['description'], 
-                                                                results_all_reps['n_reps'], 
-                                                                results_all_reps['n_blocks'], 
-                                                                results_all_reps['n_trials'], 
-                                                                results_all_reps['p_reward_pairs'],
-                                                                ), fontsize = 15)
+    if if_restless:
+        fig.text(0.05,0.94,'%s\n%g sessions, %g blocks, %g trials, restless sigma = %g' % (results_all_reps['description'], 
+                                                                    results_all_reps['n_reps'], 
+                                                                    results_all_reps['n_blocks'], 
+                                                                    results_all_reps['n_trials'], 
+                                                                    results_all_reps['bandits_all_sessions'][0].sigma                                                                
+                                                                    ), fontsize = 15)
+    else:
+        fig.text(0.05,0.94,'%s\n%g sessions, %g blocks, %g trials, p_override = %s' % (results_all_reps['description'], 
+                                                                    results_all_reps['n_reps'], 
+                                                                    results_all_reps['n_blocks'], 
+                                                                    results_all_reps['n_trials'], 
+                                                                    results_all_reps['p_reward_pairs'],
+                                                                    ), fontsize = 15)
     
     if results_all_reps['if_baited']:
         if results_all_reps['if_varying_amplitude']:
@@ -159,20 +184,37 @@ def plot_all_reps(results_all_reps):
             baiting_method = 'prob.'
     else:
         baiting_method = ''
-    
-    fig.text(0.05,0.91,'Efficiency +/- 95%% CI: %.3g%% +/- %.2g%% (if_baited = %s (%s), p_reward_sum = %g)' % (results_all_reps['foraging_efficiency'][0]*100,
-                                                          results_all_reps['foraging_efficiency'][1]*100, results_all_reps['if_baited'], baiting_method, 
-                                                          results_all_reps['p_reward_sum']
-                                                          ), fontsize = 15)
+        
+    if if_restless:
+        fig.text(0.05,0.88,'Efficiency +/- 95%% CI: %.3g%% +/- %.2g%% (if_baited = %s (%s))' % (results_all_reps['foraging_efficiency'][0]*100,
+                                                        results_all_reps['foraging_efficiency'][1]*100, results_all_reps['if_baited'], baiting_method, 
+                                                        ), fontsize = 15)
+    else:
+        fig.text(0.05,0.88,'Efficiency +/- 95%% CI: %.3g%% +/- %.2g%% (if_baited = %s (%s), p_reward_sum = %g)' % (results_all_reps['foraging_efficiency'][0]*100,
+                                                            results_all_reps['foraging_efficiency'][1]*100, results_all_reps['if_baited'], baiting_method, 
+                                                            results_all_reps['p_reward_sum']
+                                                            ), fontsize = 15)
     
     # == 1. Example Session ==
     if 'example_session' in results_all_reps:
         plot_one_session(results_all_reps['example_session'], fig)
     
+    # == 2. Plot all psychometric curves ==
+    ax1 = fig.get_axes()[1]
+    xx = np.linspace(-1, 1, 100)
+    yy = []
+    
+    for bandit in results_all_reps['bandits_all_sessions']:
+        yy.append(sigmoid(xx, *bandit.psychometric_popt, a=1, b=0))
+        ax1.plot(xx, yy[-1], 'k-', alpha=0.1)  # Fitting from other sessions
+    
+    ax1.plot(xx, np.mean(yy, axis=0), 'k', lw=4)   # Average fitting
+    
+    
     # # == 2. Blockwise matching ==
     # c_frac, inc_frac, c_log_ratio, inc_log_ratio, rtn_log_ratio = results_all_reps['blockwise_stats']
     
-    gs = GridSpec(2,3, wspace=0.3, hspace=0.5, bottom=0.13)    
+    # gs = GridSpec(2,3, wspace=0.3, hspace=0.5, bottom=0.13)    
             
     # # if not np.all(np.isnan(inc_log_ratio)):
          
@@ -221,15 +263,15 @@ def plot_all_reps(results_all_reps):
     # plt.axis('square')
   
     # 2c. -- Stay duration distribution
-    if np.sum(results_all_reps['stay_duration_hist']) > 0:
-        ax = fig.add_subplot(gs[1,2])
-        bin_center = np.arange(len(results_all_reps['stay_duration_hist']))
-        ax.bar(bin_center + 0.5, results_all_reps['stay_duration_hist'] / np.sum(results_all_reps['stay_duration_hist']), 
-               color = 'k', label = 'No COD')
-        ax.set_yscale('log')
-        plt.xlabel('Stay duration (trials)')
-        plt.ylabel('Proportion')
-        plt.legend()
+    # if np.sum(results_all_reps['stay_duration_hist']) > 0:
+    #     ax = fig.add_subplot(gs[1,2])
+    #     bin_center = np.arange(len(results_all_reps['stay_duration_hist']))
+    #     ax.bar(bin_center + 0.5, results_all_reps['stay_duration_hist'] / np.sum(results_all_reps['stay_duration_hist']), 
+    #            color = 'k', label = 'No COD')
+    #     ax.set_yscale('log')
+    #     plt.xlabel('Stay duration (trials)')
+    #     plt.ylabel('Proportion')
+    #     plt.legend()
     
     fig.show()
     
@@ -306,9 +348,9 @@ def plot_para_scan(results_para_scan, para_to_scan, if_baited = True, p_reward_s
         # For model competition / scan, it is unfair that I group all blocks over all sessions and then fit the line once.
         # Because this would lead to a very small slope_CI95 that may mask the high variability of matching slope due to extreme biases in never-explore regime.
         # I should compute a macthing slope for each session and then calculate the CI95 using the same way as foraging efficiency. 
-        paras_matching_slope = results_para_scan['linear_fit_per_session']
-        matching_slope = np.nanmean(paras_matching_slope, axis = 1)
-        matching_slope_CI95 = 1.96 * np.nanstd(paras_matching_slope, axis = 1) / np.sqrt(n_reps)
+        # paras_matching_slope = results_para_scan['linear_fit_per_session']
+        # matching_slope = np.nanmean(paras_matching_slope, axis = 1)
+        # matching_slope_CI95 = 1.96 * np.nanstd(paras_matching_slope, axis = 1) / np.sqrt(n_reps)
         
         # === Plotting ===
         gs = GridSpec(1,3, top = 0.85, wspace = 0.3, bottom = 0.12)
@@ -341,19 +383,19 @@ def plot_para_scan(results_para_scan, para_to_scan, if_baited = True, p_reward_s
         plt.text(xlim[0], ideal_result[0], 'ideal')
 
         # -- 2. Matching slope vs para
-        ax = fig.add_subplot(gs[0,1])
-        plt.plot(para_range, matching_slope, '-')
-        plt.fill_between(para_range, matching_slope - matching_slope_CI95, matching_slope + matching_slope_CI95, label = '95% CI', alpha = 0.2)
-        plt.xlabel(para_name)
-        plt.ylabel('Matching slope (log ratio)')
-        ax.legend()
-        if if_log: ax.set_xscale('log')
+        # ax = fig.add_subplot(gs[0,1])
+        # plt.plot(para_range, matching_slope, '-')
+        # plt.fill_between(para_range, matching_slope - matching_slope_CI95, matching_slope + matching_slope_CI95, label = '95% CI', alpha = 0.2)
+        # plt.xlabel(para_name)
+        # plt.ylabel('Matching slope (log ratio)')
+        # ax.legend()
+        # if if_log: ax.set_xscale('log')
         
         # -- 3. Foraging efficiency vs Matching slope
-        ax = fig.add_subplot(gs[0,2])
-        plt.plot(matching_slope, fe_mean, 'o-')
-        plt.xlabel('Matching slope (log ratio)')
-        plt.ylabel('Foraging efficiency')
+        # ax = fig.add_subplot(gs[0,2])
+        # plt.plot(matching_slope, fe_mean, 'o-')
+        # plt.xlabel('Matching slope (log ratio)')
+        # plt.ylabel('Foraging efficiency')
         
     elif len(para_to_scan) == 2:    # 2-D
         
@@ -395,6 +437,8 @@ def plot_para_scan(results_para_scan, para_to_scan, if_baited = True, p_reward_s
         ax = fig.add_subplot(gs[0,0])
         im = plt.imshow(fe_mean.T, interpolation=interp, cmap=cmap)
         
+        ax.contour(ndimage.gaussian_filter(fe_mean.T, sigma=1), levels=20, colors='k')
+        
         plt.xlabel(para_names[0])
         ax.set_xlim(-0.5, len(para_ranges[0])-0.5)
         ax.set_xticks(x_label_idx)
@@ -414,35 +458,48 @@ def plot_para_scan(results_para_scan, para_to_scan, if_baited = True, p_reward_s
         cax = divider.append_axes("right", size="5%", pad=0.05)
         plt.colorbar(im, cax=cax)
         
-        # -- 2. Matching slope
-        ax = fig.add_subplot(gs[0,1])
-        im = plt.imshow(matching_slope.T, interpolation=interp, cmap=cmap)
+                
+        # fig = px.imshow(fe_mean.T,
+        #                 labels={'x': para_names[0], 'y': para_names[1], 'color': 'foraging eff.'},
+        #                 x=[str(x) for x in np.round(para_ranges[0][:],2)],
+        #                 y=[str(x) for x in np.round(para_ranges[1][:],2)],
+        #                 aspect='auto',
+        #                 origin='lower')
         
-        plt.xlabel(para_names[0])
-        ax.set_xlim(-0.5, len(para_ranges[0])-0.5)
-        ax.set_xticks(x_label_idx)
-        ax.set_xticklabels(np.round(para_ranges[0][x_label_idx],2))
-        plt.xticks(rotation=45)
+        # fig.update_layout(height=600, width=600, 
+        #                   title_text= 'Forager = %s, n_repetitions = %g, %s' % (forager, n_reps, kwargs)
+        #                   )
+        # fig.show()
         
-        plt.ylabel(para_names[1])
-        ax.set_ylim(-0.5, len(para_ranges[1])-0.5)
-        ax.set_yticks(y_label_idx)
-        ax.set_yticklabels(np.round(para_ranges[1][y_label_idx],2))
+        # # -- 2. Matching slope
+        # ax = fig.add_subplot(gs[0,1])
+        # im = plt.imshow(matching_slope.T, interpolation=interp, cmap=cmap)
         
-        plt.title('Matching slope (log ratio)')
+        # plt.xlabel(para_names[0])
+        # ax.set_xlim(-0.5, len(para_ranges[0])-0.5)
+        # ax.set_xticks(x_label_idx)
+        # ax.set_xticklabels(np.round(para_ranges[0][x_label_idx],2))
+        # plt.xticks(rotation=45)
         
-        # create an axes on the right side of ax. The width of cax will be 5%
-        # of ax and the padding between cax and ax will be fixed at 0.05 inch.
-        divider = make_axes_locatable(ax)
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-        plt.colorbar(im, cax=cax)
+        # plt.ylabel(para_names[1])
+        # ax.set_ylim(-0.5, len(para_ranges[1])-0.5)
+        # ax.set_yticks(y_label_idx)
+        # ax.set_yticklabels(np.round(para_ranges[1][y_label_idx],2))
         
-        # -- 3. Foraging efficiency vs Matching slope
-        ax = fig.add_subplot(gs[0,2])
-        plt.plot(matching_slope.T, fe_mean.T, 'o')
+        # plt.title('Matching slope (log ratio)')
         
-        plt.xlabel('Matching slope (log ratio)')
-        plt.ylabel('Foraging efficiency')
+        # # create an axes on the right side of ax. The width of cax will be 5%
+        # # of ax and the padding between cax and ax will be fixed at 0.05 inch.
+        # divider = make_axes_locatable(ax)
+        # cax = divider.append_axes("right", size="5%", pad=0.05)
+        # plt.colorbar(im, cax=cax)
+        
+        # # -- 3. Foraging efficiency vs Matching slope
+        # ax = fig.add_subplot(gs[0,2])
+        # plt.plot(matching_slope.T, fe_mean.T, 'o')
+        
+        # plt.xlabel('Matching slope (log ratio)')
+        # plt.ylabel('Foraging efficiency')
                
         
 def plot_model_compet(model_compet_results, model_compet_settings, n_reps, baselines, if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None):
