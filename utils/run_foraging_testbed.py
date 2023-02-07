@@ -397,11 +397,12 @@ def para_scan(forager, para_to_scan, task='Bandit_block',
         for pp_1 in para_ranges[0]:
             for pp_2 in para_ranges[1]:
                 
-                if forager == 'Hattori2019':    # Stupid workaround...
-                    kwargs_all = {'step_sizes': [pp_1, pp_2], **kwargs}
+                # if forager == 'Hattori2019':    # Stupid workaround...
+                #     kwargs_all = {'step_sizes': [pp_1, pp_2], **kwargs}
                     
-                else:   
-                    kwargs_all = {**{para_names[0]: pp_1, para_names[1]: pp_2}, **kwargs}
+                # else:   
+                    
+                kwargs_all = {**{para_names[0]: pp_1, para_names[1]: pp_2}, **kwargs}
                     
                 if task == 'Bandit_block':
                     bandits_to_scan.append(Bandit(forager = forager, 
@@ -431,8 +432,8 @@ def generate_kwargs(forager, opti_names, opti_value):  # Helper function for par
     elif forager == 'Corrado2005_fixW':
         kwargs_all = {'forager': 'Corrado2005', 'taus': opti_value[0:2], 'w_taus': [0.33, 0.67], 'softmax_temperature': opti_value[2]}
     
-    elif forager == 'Hattori2019':
-        kwargs_all = {'forager': 'Hattori2019', 'step_sizes': opti_value[0:2], 'forget_rate': opti_value[2], 'softmax_temperature': opti_value[3]}
+    # elif forager == 'Hattori2019':
+    #     kwargs_all = {'forager': 'Hattori2019', 'step_sizes': opti_value[0:2], 'forget_rate': opti_value[2], 'softmax_temperature': opti_value[3]}
 
     else:
         kwargs_all = {'forager': forager}
@@ -547,7 +548,8 @@ def para_optimize(forager, n_reps_per_iter = 200, opti_names = '', bounds = '', 
 # =============================================================================
 #   Model competition (for performance, NOT model comparison for fitting data) 
 # ===============================================================================
-def model_compet(model_compet_settings, n_reps = 200, pool = '', if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None):
+def model_compet(model_compet_settings, task='Bandit_block',
+                 n_reps = 200, pool = '', if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None):
     
     model_compet_results = []   # Foraging efficiency mean
     
@@ -558,7 +560,8 @@ def model_compet(model_compet_settings, n_reps = 200, pool = '', if_baited = Tru
         para_to_fix = this_setting['para_to_fix']
     
         # Run simulation
-        results_para_scan = para_scan(forager, para_to_scan, **para_to_fix , if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs, n_reps = n_reps, pool = pool, if_plot = False)
+        results_para_scan = para_scan(forager, para_to_scan, **para_to_fix , task=task,
+                                      if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs, n_reps = n_reps, pool = pool, if_plot = False)
         
         # Fetch data
         paras_foraging_efficiency = results_para_scan['foraging_efficiency_per_session']
@@ -579,12 +582,20 @@ def model_compet(model_compet_settings, n_reps = 200, pool = '', if_baited = Tru
         model_compet_results.append(np.vstack((fe_mean, fe_CI95, ms_mean, ms_CI95)))
         
     # Run baseline models: random, ideal_greedy, and ideal-p^-optimal
-    baseline_models = ['IdealpHatOptimal','IdealpHatGreedy','pMatching','IdealpGreedy','Random']
+    baseline_models = [#'IdealpHatOptimal',
+                       'IdealpHatGreedy','pMatching',
+                       #'IdealpGreedy',
+                       'Random'] \
+                      if task == 'Bandit_block'\
+                      else ['Random']
     baseline_eff = []
     baseline_ms = []
     
     for bm in baseline_models:
-        bandit = Bandit(forager = bm, if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs)
+        
+        bandit_to_use = Bandit if task == 'Bandit_block' else BanditRestless
+        bandit = bandit_to_use(forager = bm, if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs)
+        
         results = run_sessions_parallel(bandit, n_reps = n_reps, if_plot = False, pool = pool)
         
         paras_matching_slope = results['linear_fit_income_per_session']

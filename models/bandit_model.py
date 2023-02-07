@@ -183,18 +183,26 @@ class BanditModel:
             else:                           # 'Corrado2005'
                 self.taus = [tau1, tau2]
                 self.w_taus = [w_tau1, 1 - w_tau1]
+                
+            self.description += ', taus = %s, w_taus = %s' % \
+                                (np.round(self.taus,3), np.round(self.w_taus,3))
 
         elif 'RW1972' in forager:
             assert all(x is not None for x in (learn_rate,))
             # RW1972 has the same learning rate for rewarded / unrewarded trials
             self.learn_rates = [learn_rate, learn_rate]
             self.forget_rates = [0, 0]   # RW1972 does not forget
+            
+            self.description += ', learn rate = %s' % (np.round(learn_rate, 3)) 
 
         elif 'Bari2019' in forager:
             assert all(x is not None for x in (learn_rate, forget_rate))
             # Bari2019 also has the same learning rate for rewarded / unrewarded trials
             self.learn_rates = [learn_rate, learn_rate]
             self.forget_rates = [forget_rate, forget_rate]
+            
+            self.description += ', learn_rate = %s, forget_rate = %s' % \
+                       (np.round(learn_rate, 3), np.round(forget_rate, 3))
 
         elif 'Hattori2019' in forager:
             assert all(x is not None for x in (
@@ -206,6 +214,9 @@ class BanditModel:
             # 0: unrewarded, 1: rewarded
             self.learn_rates = [learn_rate_unrew, learn_rate_rew]
             self.forget_rates = [forget_rate, 0]   # 0: unchosen, 1: chosen
+            
+            self.description += ', learn_rates (unrew, rew) = %s, forget_rate = %s' %\
+                (np.round(self.learn_rates, 3), np.round(forget_rate, 3))
 
         elif 'CANN' in forager:
             assert all(x is not None for x in (
@@ -221,17 +232,23 @@ class BanditModel:
             self.learn_rates = [learn_rate, learn_rate]
             self.forget_rates = [forget_rate, forget_rate]
             
-        if 'softmax' in forager:
+        if any([x in forager for x in ('softmax', 'Bari2019', 'Hattori2019')]):
             assert all(x is not None for x in (self.softmax_temperature,))
+            self.description += ', softmax_temp = %s' % (np.round(self.softmax_temperature, 3))
 
         if 'epsi' in forager:
             assert all(x is not None for x in (self.epsilon,))
+            self.description += ', epsilon = %s'  % (np.round(self.epsilon, 3))
                     
         # Choice kernel can be added to any reward-based forager
         if '_CK' in forager:
             assert choice_step_size is not None and choice_softmax_temperature is not None
             self.choice_step_size = choice_step_size
             self.choice_softmax_temperature = choice_softmax_temperature
+            
+            self.description += ', choice_kernel_step_size = %s, choice_softmax_temp = %s' %\
+                (np.round(choice_step_size, 3), np.round(choice_softmax_temperature, 3))
+
 
     def reset(self):
 
@@ -419,7 +436,7 @@ class BanditModel:
             c_star_this_block = c_star_this_block[:n_trials_this_block]
 
             self.choice_history[0, n_trials_now: n_trials_now +
-                                n_trials_this_block] = c_star_this_block  # Save the optimal sequence
+                                n_trials_this_block] = np.hstack(c_star_this_block)  # Save the optimal sequence
             
 
     def get_IdealpHatGreedy_strategy(self, p_reward):

@@ -450,7 +450,7 @@ def plot_para_scan(results_para_scan, para_to_scan, if_baited = True, p_reward_s
         ax.set_yticks(y_label_idx)
         ax.set_yticklabels(np.round(para_ranges[1][y_label_idx],2))
         
-        plt.title('Foraging efficiency')
+        plt.title(f'Foraging efficiency, max = {np.max(fe_mean)*100: .3g}%')
         
         # create an axes on the right side of ax. The width of cax will be 5%
         # of ax and the padding between cax and ax will be fixed at 0.05 inch.
