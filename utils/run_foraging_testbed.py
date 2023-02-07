@@ -21,7 +21,13 @@ import sys
 sys.path.append('/root/capsule')
 
 # Import my own modules
-from utils.foraging_testbed_models import Bandit, BanditRestless
+
+# from utils.foraging_testbed_models import Bandit, BanditRestless
+
+# Use new classes (copyed back from DJ; refactored)
+from models.bandit_model import BanditModel as Bandit
+from models.bandit_model import BanditModelRestless as BanditRestless
+
 from utils.foraging_testbed_plots import plot_all_reps, plot_para_scan, plot_model_compet, plot_one_session
 from utils.helper_func import fit_sigmoid_p_choice
 
@@ -53,7 +59,7 @@ def run_one_session(bandit, para_scan = False, para_optim = False):
  
     bandit.compute_foraging_eff(para_optim)   
    
-    if not para_optim:
+    if not para_optim and not para_scan:
         # -- Psychometric curve --
         p_reward = bandit.p_reward
         choice = bandit.choice_history[0]
@@ -391,11 +397,12 @@ def para_scan(forager, para_to_scan, task='Bandit_block',
         for pp_1 in para_ranges[0]:
             for pp_2 in para_ranges[1]:
                 
-                if forager == 'Hattori2019':    # Stupid workaround...
-                    kwargs_all = {'step_sizes': [pp_1, pp_2], **kwargs}
+                # if forager == 'Hattori2019':    # Stupid workaround...
+                #     kwargs_all = {'step_sizes': [pp_1, pp_2], **kwargs}
                     
-                else:   
-                    kwargs_all = {**{para_names[0]: pp_1, para_names[1]: pp_2}, **kwargs}
+                # else:   
+                    
+                kwargs_all = {**{para_names[0]: pp_1, para_names[1]: pp_2}, **kwargs}
                     
                 if task == 'Bandit_block':
                     bandits_to_scan.append(Bandit(forager = forager, 
@@ -425,8 +432,8 @@ def generate_kwargs(forager, opti_names, opti_value):  # Helper function for par
     elif forager == 'Corrado2005_fixW':
         kwargs_all = {'forager': 'Corrado2005', 'taus': opti_value[0:2], 'w_taus': [0.33, 0.67], 'softmax_temperature': opti_value[2]}
     
-    elif forager == 'Hattori2019':
-        kwargs_all = {'forager': 'Hattori2019', 'step_sizes': opti_value[0:2], 'forget_rate': opti_value[2], 'softmax_temperature': opti_value[3]}
+    # elif forager == 'Hattori2019':
+    #     kwargs_all = {'forager': 'Hattori2019', 'step_sizes': opti_value[0:2], 'forget_rate': opti_value[2], 'softmax_temperature': opti_value[3]}
 
     else:
         kwargs_all = {'forager': forager}
@@ -438,17 +445,20 @@ def generate_kwargs(forager, opti_names, opti_value):  # Helper function for par
 def score_func(opti_value, *argss):
         
     # Arguments interpretation
-    forager, opti_names, n_reps_per_iter, if_baited, p_reward_sum, p_reward_pairs, if_varying_amplitude, pool, kwargs = argss
+    forager, opti_names, n_reps_per_iter, if_baited, p_reward_sum, p_reward_pairs, if_varying_amplitude, pool, task, kwargs = argss
     kwargs_all = generate_kwargs(forager, opti_names, opti_value)
 
     # More keyword arguments
     kwargs_all = {**kwargs_all, **kwargs}
     
     # Run simulation
-    bandit = Bandit(**kwargs_all, if_baited = if_baited, p_reward_sum = p_reward_sum, 
+    bandit_to_use = Bandit if task == 'Bandit_block' else BanditRestless
+    bandit = bandit_to_use(**kwargs_all, if_baited = if_baited, p_reward_sum = p_reward_sum, 
                     p_reward_pairs = p_reward_pairs, p_reward_seed_override = 20200303, 
                     if_varying_amplitude = if_varying_amplitude,
                     if_para_optim = True)  # The same reward schedule for fair comparison
+ 
+        
     score = - run_sessions_parallel(bandit, n_reps = n_reps_per_iter, pool = pool, para_optim = True)  # Negative efficiency as cost function
     
     # print(np.round(opti_value,4), score, '\n')
@@ -457,7 +467,9 @@ def score_func(opti_value, *argss):
 
 
 def para_optimize(forager, n_reps_per_iter = 200, opti_names = '', bounds = '', pool = '', 
-                  if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None, if_varying_amplitude = False, **kwargs):
+                  if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None, if_varying_amplitude = False, 
+                  task='Bandit_block', 
+                  **kwargs):
     
     start = time.time()
     
@@ -511,7 +523,7 @@ def para_optimize(forager, n_reps_per_iter = 200, opti_names = '', bounds = '', 
     # Parameter optimization with DE    
     opti_para = optimize.differential_evolution(func = score_func, 
                                                 args = (forager, opti_names, n_reps_per_iter, if_baited, p_reward_sum, p_reward_pairs, 
-                                                        if_varying_amplitude, pool, kwargs), 
+                                                        if_varying_amplitude, pool, task, kwargs), 
                                                 bounds = bounds, 
                                                 workers = 1, disp=True, strategy = 'best1bin',
                                                 mutation=(0.5, 1), recombination = 0.7, popsize = 20)
@@ -520,8 +532,10 @@ def para_optimize(forager, n_reps_per_iter = 200, opti_names = '', bounds = '', 
     kwargs_all = generate_kwargs(forager, opti_names, opti_para.x)
     kwargs_all = {**kwargs_all, **kwargs}
         
-    bandit = Bandit(if_baited = if_baited, p_reward_sum = p_reward_sum, 
+    bandit_to_use = Bandit if task == 'Bandit_block' else BanditRestless
+    bandit = bandit_to_use(if_baited = if_baited, p_reward_sum = p_reward_sum, 
                     p_reward_pairs = p_reward_pairs, if_varying_amplitude = if_varying_amplitude, **kwargs_all)
+    
     run_sessions_parallel(bandit, n_reps = 500, pool = pool)
                           
     print(opti_para)
@@ -534,7 +548,8 @@ def para_optimize(forager, n_reps_per_iter = 200, opti_names = '', bounds = '', 
 # =============================================================================
 #   Model competition (for performance, NOT model comparison for fitting data) 
 # ===============================================================================
-def model_compet(model_compet_settings, n_reps = 200, pool = '', if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None):
+def model_compet(model_compet_settings, task='Bandit_block',
+                 n_reps = 200, pool = '', if_baited = True, p_reward_sum = 0.45, p_reward_pairs = None):
     
     model_compet_results = []   # Foraging efficiency mean
     
@@ -545,7 +560,8 @@ def model_compet(model_compet_settings, n_reps = 200, pool = '', if_baited = Tru
         para_to_fix = this_setting['para_to_fix']
     
         # Run simulation
-        results_para_scan = para_scan(forager, para_to_scan, **para_to_fix , if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs, n_reps = n_reps, pool = pool, if_plot = False)
+        results_para_scan = para_scan(forager, para_to_scan, **para_to_fix , task=task,
+                                      if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs, n_reps = n_reps, pool = pool, if_plot = False)
         
         # Fetch data
         paras_foraging_efficiency = results_para_scan['foraging_efficiency_per_session']
@@ -566,12 +582,20 @@ def model_compet(model_compet_settings, n_reps = 200, pool = '', if_baited = Tru
         model_compet_results.append(np.vstack((fe_mean, fe_CI95, ms_mean, ms_CI95)))
         
     # Run baseline models: random, ideal_greedy, and ideal-p^-optimal
-    baseline_models = ['IdealpHatOptimal','IdealpHatGreedy','pMatching','IdealpGreedy','Random']
+    baseline_models = [#'IdealpHatOptimal',
+                       'IdealpHatGreedy','pMatching',
+                       #'IdealpGreedy',
+                       'Random'] \
+                      if task == 'Bandit_block'\
+                      else ['Random']
     baseline_eff = []
     baseline_ms = []
     
     for bm in baseline_models:
-        bandit = Bandit(forager = bm, if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs)
+        
+        bandit_to_use = Bandit if task == 'Bandit_block' else BanditRestless
+        bandit = bandit_to_use(forager = bm, if_baited = if_baited, p_reward_sum = p_reward_sum, p_reward_pairs = p_reward_pairs)
+        
         results = run_sessions_parallel(bandit, n_reps = n_reps, if_plot = False, pool = pool)
         
         paras_matching_slope = results['linear_fit_income_per_session']

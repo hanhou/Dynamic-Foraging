@@ -85,7 +85,7 @@ def plot_one_session(bandit, fig='', plottype='2lickport'):
         
     
     # Base probability
-    ax.plot(np.arange(0, n_trials), bandit.p_reward_fraction, color='DarkOrange', label = 'base rew. prob.')
+    ax.plot(np.arange(0, len(bandit.p_reward_fraction)), bandit.p_reward_fraction, color='DarkOrange', label = 'base rew. prob.')
     
     # Choice probability
     if bandit.forager in ['LossCounting']:
@@ -435,7 +435,7 @@ def plot_para_scan(results_para_scan, para_to_scan, if_baited = True, p_reward_s
         y_label_idx = np.r_[0:len(para_ranges[1]):2]
         
         ax = fig.add_subplot(gs[0,0])
-        im = plt.imshow(fe_mean.T, interpolation=interp, cmap=cmap)
+        im = plt.imshow(fe_mean.T, interpolation=interp, cmap=cmap, vmin=0.7, vmax=1)
         
         ax.contour(ndimage.gaussian_filter(fe_mean.T, sigma=1), levels=20, colors='k')
         
@@ -450,7 +450,7 @@ def plot_para_scan(results_para_scan, para_to_scan, if_baited = True, p_reward_s
         ax.set_yticks(y_label_idx)
         ax.set_yticklabels(np.round(para_ranges[1][y_label_idx],2))
         
-        plt.title('Foraging efficiency')
+        plt.title(f'Foraging efficiency, max = {np.max(fe_mean)*100: .3g}%')
         
         # create an axes on the right side of ax. The width of cax will be 5%
         # of ax and the padding between cax and ax will be fixed at 0.05 inch.

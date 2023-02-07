@@ -13,6 +13,7 @@
 #   2. NLP-like foragers
 #       1). 'LNP_softmax' (absorbs 'Corrado2005', 'Sugrue2004' and 'Iigaya2019', forget about fraction income):
 #               income  ->  2-exp filter  ->  softmax ( = diff + sigmoid)  -> epsilon-Poisson (epsilon = 0 in their paper; has the same effect as tau_long??)
+#       2). 'LNP_epsi'
 #
 #   3. RL-like foragers
 #       1). 'RW1972_epsi':  return  ->   exp filter    -> epsilon-greedy  (epsilon > 0 is essential)
@@ -41,7 +42,8 @@
 
 import numpy as np
 from scipy.stats import norm
-from .util import softmax, choose_ps
+from utils.helper_func import softmax, choose_ps
+from models.random_walk import RandomWalkReward
 
 LEFT = 0
 RIGHT = 1
@@ -61,6 +63,9 @@ class BanditModel:
     # @step_size: constant step size for updating estimations
 
     def __init__(self, forager=None, K_arm=2, n_trials=1000, if_baited=True,
+                 
+                 if_para_optim=False,
+                 if_varying_amplitude=False,
 
                  epsilon=None,               # For 'RW1972_epsi'
                  # For 'LNP_softmax', 'RW1972_softmax', 'Bari2019', 'Hattori2019'
@@ -113,6 +118,9 @@ class BanditModel:
 
         self.forager = forager
         self.if_baited = if_baited
+        self.if_varying_amplitude = if_varying_amplitude
+        self.if_para_optim = if_para_optim
+
         self.epsilon = epsilon
         self.softmax_temperature = softmax_temperature
         self.loss_count_threshold_mean = loss_count_threshold_mean
@@ -134,6 +142,9 @@ class BanditModel:
         else:  # Backward compatibility
             self.K = K_arm
             self.n_trials = n_trials
+        
+        self.description = f'{self.forager}'
+        self.task = 'Bandit'
 
         # =============================================================================
         #   Parameter check and prepration
@@ -153,7 +164,7 @@ class BanditModel:
             # assert np.all(-1/self.K <= self.bias_terms) and np.all(self.bias_terms <= (self.K - 1)/self.K), self.bias_terms
 
         # 2. for those involve softmax: b_undefined = 0, no constraint. cp_k = exp(Q/sigma + b_i) / sum(Q/sigma + b_i). Putting b_i outside /sigma to make it comparable across different softmax_temperatures
-        elif forager in ['RW1972_softmax', 'LNP_softmax', 'Bari2019', 'Hattori2019',
+        elif forager in ['RW1972_softmax', 'LNP_softmax', 'LNP_epsi', 'Bari2019', 'Hattori2019',
                          'RW1972_softmax_CK', 'LNP_softmax_CK', 'Bari2019_CK', 'Hattori2019_CK',
                          'CANN', 'Synaptic', 'Synaptic_W>0']:
             if self.K == 2:
@@ -164,26 +175,34 @@ class BanditModel:
             # No constraints
 
         # -- Forager-dependent --
-        if 'LNP_softmax' in forager:
-            assert all(x is not None for x in (tau1, softmax_temperature))
+        if 'LNP' in forager:
+            assert all(x is not None for x in (tau1,))
             if tau2 == None:  # Only one tau ('Sugrue2004')
                 self.taus = [tau1]
                 self.w_taus = [1]
             else:                           # 'Corrado2005'
                 self.taus = [tau1, tau2]
                 self.w_taus = [w_tau1, 1 - w_tau1]
+                
+            self.description += ', taus = %s, w_taus = %s' % \
+                                (np.round(self.taus,3), np.round(self.w_taus,3))
 
         elif 'RW1972' in forager:
             assert all(x is not None for x in (learn_rate,))
             # RW1972 has the same learning rate for rewarded / unrewarded trials
             self.learn_rates = [learn_rate, learn_rate]
             self.forget_rates = [0, 0]   # RW1972 does not forget
+            
+            self.description += ', learn rate = %s' % (np.round(learn_rate, 3)) 
 
         elif 'Bari2019' in forager:
             assert all(x is not None for x in (learn_rate, forget_rate))
             # Bari2019 also has the same learning rate for rewarded / unrewarded trials
             self.learn_rates = [learn_rate, learn_rate]
             self.forget_rates = [forget_rate, forget_rate]
+            
+            self.description += ', learn_rate = %s, forget_rate = %s' % \
+                       (np.round(learn_rate, 3), np.round(forget_rate, 3))
 
         elif 'Hattori2019' in forager:
             assert all(x is not None for x in (
@@ -195,6 +214,9 @@ class BanditModel:
             # 0: unrewarded, 1: rewarded
             self.learn_rates = [learn_rate_unrew, learn_rate_rew]
             self.forget_rates = [forget_rate, 0]   # 0: unchosen, 1: chosen
+            
+            self.description += ', learn_rates (unrew, rew) = %s, forget_rate = %s' %\
+                (np.round(self.learn_rates, 3), np.round(forget_rate, 3))
 
         elif 'CANN' in forager:
             assert all(x is not None for x in (
@@ -210,11 +232,23 @@ class BanditModel:
             self.learn_rates = [learn_rate, learn_rate]
             self.forget_rates = [forget_rate, forget_rate]
             
+        if any([x in forager for x in ('softmax', 'Bari2019', 'Hattori2019')]):
+            assert all(x is not None for x in (self.softmax_temperature,))
+            self.description += ', softmax_temp = %s' % (np.round(self.softmax_temperature, 3))
+
+        if 'epsi' in forager:
+            assert all(x is not None for x in (self.epsilon,))
+            self.description += ', epsilon = %s'  % (np.round(self.epsilon, 3))
+                    
         # Choice kernel can be added to any reward-based forager
         if '_CK' in forager:
             assert choice_step_size is not None and choice_softmax_temperature is not None
             self.choice_step_size = choice_step_size
             self.choice_softmax_temperature = choice_softmax_temperature
+            
+            self.description += ', choice_kernel_step_size = %s, choice_softmax_temp = %s' %\
+                (np.round(choice_step_size, 3), np.round(choice_softmax_temperature, 3))
+
 
     def reset(self):
 
@@ -257,7 +291,7 @@ class BanditModel:
                             'RW1972_softmax_CK', 'Bari2019_CK', 'Hattori2019_CK']:
             pass
 
-        elif self.forager in ['LNP_softmax', 'LNP_softmax_CK']:
+        elif 'LNP' in self.forager:   # 'LNP_softmax', 'LNP_softmax_CK', 'LNP_epsi'
             # Compute the history filter. Compatible with any number of taus.
             # Use the full length of the session just in case of an extremely large tau.
             reversed_t = np.flipud(np.arange(self.n_trials + 1))
@@ -311,6 +345,10 @@ class BanditModel:
         block_size = []
         n_trials = self.n_trials + 1
         p_reward = np.zeros([2, n_trials])
+        
+        self.rewards_IdealpHatOptimal = 0
+        self.rewards_IdealpHatGreedy = 0
+
 
         # Fill in trials until the required length
         while n_trials_now < n_trials:
@@ -350,10 +388,8 @@ class BanditModel:
                      n_trials_this_block] = p_reward_this_block.T
 
             # Fill choice history for some special foragers with choice patterns {AmBn} (including IdealpHatOptimal, IdealpHatGreedy, and AmB1)
-            if self.forager == 'IdealpHatGreedy':
-                self.get_AmBn_choice_history(
-                    p_reward_this_block, n_trials_this_block, n_trials_now)
-
+            self.get_AmBn_choice_history(p_reward_this_block, n_trials_this_block, n_trials_now)
+            
             # Next block
             n_trials_now += n_trials_this_block
 
@@ -367,28 +403,41 @@ class BanditModel:
 
         # We should make it random afterwards
         np.random.seed()
+        
 
     def get_AmBn_choice_history(self, p_reward_this_block, n_trials_this_block, n_trials_now):
+        
+        if not self.if_para_optim:  
+            # Calculate theoretical upper bound (ideal-p^-optimal) and the (fixed) choice history/matching point of it
+            # Ideal-p^-Optimal
+            # mn_star_pHatOptimal, p_star_pHatOptimal = self.get_IdealpHatOptimal_strategy(p_reward_this_block[0])
+            # self.rewards_IdealpHatOptimal += p_star_pHatOptimal * n_trials_this_block
+            pass
 
         # Ideal-p^-Greedy
         mn_star_pHatGreedy, p_star_pHatGreedy = self.get_IdealpHatGreedy_strategy(
             p_reward_this_block[0])
         mn_star = mn_star_pHatGreedy
+        # Ideal-p^-Greedy
+        self.rewards_IdealpHatGreedy += p_star_pHatGreedy * n_trials_this_block
 
-        # For ideal optimal, given p_0(t) and p_1(t), the optimal choice history is fixed, i.e., {m_star, 1} (p_min > 0)
-        S = int(np.ceil(n_trials_this_block/(mn_star[0] + mn_star[1])))
-        c_max_this = np.argwhere(p_reward_this_block[0] == np.max(
-            p_reward_this_block))[0]  # To handle the case of p0 = p1
-        c_min_this = np.argwhere(
-            p_reward_this_block[0] == np.min(p_reward_this_block))[-1]
-        # Choice pattern of {m_star, 1}
-        c_star_this_block = ([c_max_this] * mn_star[0] +
-                             [c_min_this] * mn_star[1]) * S
-        # Truncate to the correct length
-        c_star_this_block = c_star_this_block[:n_trials_this_block]
 
-        self.choice_history[0, n_trials_now: n_trials_now +
-                            n_trials_this_block] = c_star_this_block  # Save the optimal sequence
+        if self.forager == 'IdealpHatGreedy':
+            # For ideal optimal, given p_0(t) and p_1(t), the optimal choice history is fixed, i.e., {m_star, 1} (p_min > 0)
+            S = int(np.ceil(n_trials_this_block/(mn_star[0] + mn_star[1])))
+            c_max_this = np.argwhere(p_reward_this_block[0] == np.max(
+                p_reward_this_block))[0]  # To handle the case of p0 = p1
+            c_min_this = np.argwhere(
+                p_reward_this_block[0] == np.min(p_reward_this_block))[-1]
+            # Choice pattern of {m_star, 1}
+            c_star_this_block = ([c_max_this] * mn_star[0] +
+                                [c_min_this] * mn_star[1]) * S
+            # Truncate to the correct length
+            c_star_this_block = c_star_this_block[:n_trials_this_block]
+
+            self.choice_history[0, n_trials_now: n_trials_now +
+                                n_trials_this_block] = np.hstack(c_star_this_block)  # Save the optimal sequence
+            
 
     def get_IdealpHatGreedy_strategy(self, p_reward):
         '''
@@ -660,7 +709,7 @@ class BanditModel:
         if self.forager == 'LossCounting':
             return self.act_LossCounting()
 
-        if self.forager in ['RW1972_epsi']:
+        if 'epsi' in self.forager: # 'RW1972_epsi', 'LNP_epsi'
             return self.act_EpsiGreedy()
 
         if self.forager in ['RW1972_softmax', 'LNP_softmax', 'Bari2019', 'Hattori2019',
@@ -718,7 +767,7 @@ class BanditModel:
         elif self.forager in ['Synaptic']:
             self.step_synaptic(choice, reward)
 
-        elif self.forager in ['LNP_softmax', 'LNP_softmax_CK']:
+        elif 'LNP' in self.forager: # 'LNP_softmax', 'LNP_epsilon', 'LNP_softmax_CK'
             if self.if_fit_mode:
                 # Targeted history till now
                 valid_reward_history = self.fit_reward_history[:, :self.time]
@@ -745,3 +794,91 @@ class BanditModel:
         if self.if_fit_mode:
             # Allow the final update of action prob after the last trial (for comparing with ephys)
             action = self.act()
+
+
+    def compute_foraging_eff(self, para_optim):
+        # -- 1. Foraging efficiency = Sum of actual rewards / Maximum number of rewards that could have been collected --
+        self.actual_rewards = np.sum(self.reward_history)
+        
+        '''Don't know which one is the fairest''' #???
+        # Method 1: Average of max(p_reward) 
+        # self.maximum_rewards = np.sum(np.max(self.p_reward, axis = 0)) 
+        # Method 2: Average of sum(p_reward).   [Corrado et al 2005: efficienty = 50% for choosing only one color]
+        # self.maximum_rewards = np.sum(np.sum(self.p_reward, axis = 0)) 
+        # Method 3: Maximum reward given the actual reward_available (one choice per trial constraint)
+        # self.maximum_rewards = np.sum(np.any(self.reward_available, axis = 0))  # Equivalent to sum(max())
+        # Method 4: Sum of all ever-baited rewards (not fair)  
+        # self.maximum_rewards = np.sum(np.sum(self.reward_available, axis = 0))
+        
+        ''' Use ideal-p^-optimal'''
+        # self.maximum_rewards = self.rewards_IdealpHatGreedy
+        # if not para_optim: 
+        #     self.maximum_rewards = self.rewards_IdealpHatOptimal
+        # else:  # If in optimization, fast and good
+        self.maximum_rewards = self.rewards_IdealpHatGreedy
+            
+        self.foraging_efficiency = self.actual_rewards / self.maximum_rewards
+        
+
+
+class BanditModelRestless(BanditModel):
+    
+    def __init__(self, p_min=0.01, p_max=1, sigma=0.15, mean=0, **kwargs):
+        super().__init__(**kwargs)
+        
+        self.task = 'Bandit_restless'
+        self.p_min = p_min
+        self.p_max = p_max
+        self.sigma = sigma
+        self.mean = mean
+        
+        self.if_baited = False
+        
+
+    def generate_p_reward(self):
+
+        restless_bandit = RandomWalkReward(p_min=self.p_min, p_max=self.p_max, sigma=self.sigma, mean=self.mean)
+
+        # If para_optim, fix the random seed to ensure that p_reward schedule is fixed for all candidate parameters
+        # However, we should make it random during a session (see the last line of this function)
+        if self.p_reward_seed_override != '':
+            np.random.seed(self.p_reward_seed_override)
+
+        while restless_bandit.trial_now < self.n_trials:     
+            restless_bandit.next_trial()
+
+        p_reward = np.vstack([restless_bandit.trial_rwd_prob['L'],
+                              restless_bandit.trial_rwd_prob['R']])
+
+        self.n_blocks = 0
+        self.p_reward = p_reward
+        self.block_size = []
+        self.p_reward_fraction = p_reward[RIGHT, :] / \
+            (np.sum(p_reward, axis=0))   # For future use
+        self.p_reward_ratio = p_reward[RIGHT, :] / \
+            p_reward[LEFT, :]   # For future use
+
+        # We should make it random afterwards
+        np.random.seed()
+        
+        self.rewards_IdealpHatOptimal = 1
+        self.rewards_IdealpHatGreedy = 1
+        
+
+    def compute_foraging_eff(self, para_optim):
+        
+        # -- 1. Foraging efficiency = Sum of actual rewards / Maximum number of rewards that could have been collected --
+        self.actual_rewards = np.sum(self.reward_history)
+        
+        '''Don't know which one is the fairest''' #???
+        # Method 1: Average of max(p_reward) 
+        self.maximum_rewards = np.sum(np.max(self.p_reward, axis = 0))
+        
+        # Method 2: Average of sum(p_reward).   [Corrado et al 2005: efficienty = 50% for choosing only one color]
+        # self.maximum_rewards = np.sum(np.sum(self.p_reward, axis = 0)) 
+        # Method 3: Maximum reward given the actual reward_available (one choice per trial constraint)
+        # self.maximum_rewards = np.sum(np.any(self.reward_available, axis = 0))  # Equivalent to sum(max())
+        # Method 4: Sum of all ever-baited rewards (not fair)  
+        # self.maximum_rewards = np.sum(np.sum(self.reward_available, axis = 0))
+            
+        self.foraging_efficiency = self.actual_rewards / self.maximum_rewards
