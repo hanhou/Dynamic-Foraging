@@ -30,6 +30,7 @@ from models.bandit_model import BanditModelRestless as BanditRestless
 
 from utils.foraging_testbed_plots import plot_all_reps, plot_para_scan, plot_model_compet, plot_one_session
 from utils.helper_func import fit_sigmoid_p_choice
+from utils.logistic_reg import prepare_logistic, logistic_regression, logistic_regression_CV
 
 methods = [ 
             # 'serial',
@@ -43,7 +44,7 @@ global_n_trials = 1000
 global_n_reps = 500
 
 
-def run_one_session(bandit, para_scan = False, para_optim = False):     
+def run_one_session(bandit, para_scan = False, para_optim = False, if_logistic=True):     
     # =============================================================================
     # Simulate one session
     # =============================================================================
@@ -60,7 +61,7 @@ def run_one_session(bandit, para_scan = False, para_optim = False):
     bandit.compute_foraging_eff(para_optim)   
    
     if not para_optim and not para_scan:
-        # -- Psychometric curve --
+        # -- 1. Psychometric curve --
         p_reward = bandit.p_reward
         choice = bandit.choice_history[0]
 
@@ -70,6 +71,14 @@ def run_one_session(bandit, para_scan = False, para_optim = False):
         bandit.psychometric_popt = popt
         bandit.psychometric_mean_p_diff = mean_p_diff
         bandit.psychometric_mean_choice_R_frac = mean_choice_R_frac
+        
+        # -- 2. Logistic regression --
+        if if_logistic:
+            choice = bandit.choice_history[0]   # choice: [0, 1, 1, 0]
+            reward = np.sum(bandit.reward_history, axis=0)      # reward: [0, 0, 0, 1]
+            data, Y = prepare_logistic(choice, reward, trials_back=20)
+            logistic_reg = logistic_regression(data, Y, solver='liblinear', penalty='l2')
+            bandit.logistic_reg = logistic_reg
         
         # # -- 2. Blockwise statistics --
         # temp_nans = np.zeros(bandit.n_blocks)
@@ -176,7 +185,7 @@ def run_one_session(bandit, para_scan = False, para_optim = False):
     return bandit   # For apply_async, in-place change is impossible since each worker uses "bandit" as 
                     # an independent local object. So I have to return "bandit" explicitly
 
-def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim = False, if_plot = True):  
+def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim = False, if_plot = True, if_logistic=True):  
     # =============================================================================
     # Run simulations with the same bandit (para_scan = 0) or a list of bandits (para_scan = 1), in serial or in parallel, repeating n_reps.
     # =============================================================================
@@ -196,10 +205,10 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
         
         if not para_optim:  # Progress bar
             for ss, bb in tqdm(enumerate(bandits_all_sessions), total = len(bandits_all_sessions), desc='serial'):     # trange: progress bar. HH
-                run_one_session(bb, para_scan, para_optim)     # There is no need to assign back the resulting bandit. (Modified inside run_one_session())
+                run_one_session(bb, para_scan, para_optim, if_logistic)     # There is no need to assign back the resulting bandit. (Modified inside run_one_session())
         else:
             for ss, bb in enumerate(bandits_all_sessions):     # trange: progress bar. HH
-                run_one_session(bb, para_scan, para_optim)     # There is no need to assign back the resulting bandit. (Modified inside run_one_session())
+                run_one_session(bb, para_scan, para_optim, if_logistic)     # There is no need to assign back the resulting bandit. (Modified inside run_one_session())
             
                 
         if not para_optim: print('--- serial finished in %g s ---' % (time.time()-start))
@@ -208,7 +217,7 @@ def run_sessions_parallel(bandit, n_reps = global_n_reps, pool = '', para_optim 
         start = time.time()
         
         # Note the "," in (bb,). See here https://stackoverflow.com/questions/29585910/why-is-multiprocessings-apply-async-so-picky
-        result_ids = [pool.apply_async(run_one_session, args = (bb, para_scan, para_optim)) for bb in bandits_all_sessions]  
+        result_ids = [pool.apply_async(run_one_session, args = (bb, para_scan, para_optim, if_logistic)) for bb in bandits_all_sessions]  
                         
         if not para_optim:  # Progress bar
             for ss, result_id in tqdm(enumerate(result_ids), total = len(bandits_all_sessions), desc='apply_async'):

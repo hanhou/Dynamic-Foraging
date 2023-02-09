@@ -13,6 +13,8 @@ from scipy import ndimage
 
 from matplotlib.gridspec import GridSpec
 from utils.helper_func import seaborn_style, sigmoid   
+from utils.logistic_reg import plot_logistic_regression
+
 
 plt.rcParams.update({'font.size': 13})
 
@@ -66,8 +68,8 @@ def plot_one_session(bandit, fig='', plottype='2lickport'):
     # gs = GridSpec(2,3, top = 0.85)        
     # ax = fig.add_subplot(gs[0,0:2])
 
-    gs = GridSpec(1, 2, top = 0.80, width_ratios=[2.5, 1])        
-    ax = fig.add_subplot(gs[0,0])
+    gs = GridSpec(2, 2, top = 0.80, width_ratios=[1, 2.5])        
+    ax = fig.add_subplot(gs[0, :])
 
     if not bandit.if_varying_amplitude:                                    
         rewarded_trials = np.any(reward_history, axis = 0)
@@ -111,7 +113,7 @@ def plot_one_session(bandit, fig='', plottype='2lickport'):
     plt.title('Example session, efficiency = %.3g%%' % (bandit.foraging_efficiency*100))
     
     # == Psychometric curve ==
-    ax1 = fig.add_subplot(gs[0, 1])
+    ax1 = fig.add_subplot(gs[1, 0])
     ax1.plot(bandit.psychometric_mean_p_diff, 
              bandit.psychometric_mean_choice_R_frac, 
              'ok', alpha=0.2)
@@ -120,7 +122,13 @@ def plot_one_session(bandit, fig='', plottype='2lickport'):
     yy = sigmoid(xx, *bandit.psychometric_popt, a=1, b=0)
     ax1.plot(xx, yy, 'k--')
     ax1.set(xlabel=f'$p_R - p_L$ (win = {bandit.psychometric_win} trials)', ylabel='Fraction choose right')
-   
+    
+    # == Logistic regression ==
+    if hasattr(bandit, 'logistic_reg'):
+        ax2 = fig.add_subplot(gs[1, 1])
+        plot_logistic_regression(bandit.logistic_reg, ax=ax2, ls='--')
+        ax2.set(title='')
+    
     # == Cumulative choice plot ==  [Sugrue 2004]
     # bandit.cumulative_choice_L = np.cumsum(bandit.choice_history == LEFT)
     # bandit.cumulative_choice_R = np.cumsum(bandit.choice_history == RIGHT)
@@ -160,7 +168,7 @@ def plot_all_reps(results_all_reps):
     
     if_restless = 'restless' in results_all_reps['bandits_all_sessions'][0].task
     
-    fig = plt.figure(figsize=(15*1, 5*1))
+    fig = plt.figure(figsize=(15*1, 4.5*2))
         
     if if_restless:
         fig.text(0.05,0.94,'%s\n%g sessions, %g blocks, %g trials, restless sigma = %g' % (results_all_reps['description'], 
@@ -210,6 +218,29 @@ def plot_all_reps(results_all_reps):
     
     ax1.plot(xx, np.mean(yy, axis=0), 'k', lw=4)   # Average fitting
     
+    # == 3. Plot all logistic regressions ==
+    if hasattr(results_all_reps['bandits_all_sessions'][0], 'logistic_reg'):
+        ax2 = fig.get_axes()[2]
+        
+        # Fake a CV class using fittings across simulation runs 
+        logistic_reg = results_all_reps['bandits_all_sessions'][0].logistic_reg
+        
+        cache = {}
+        betas = ['b_RewC', 'b_UnrC', 'b_C', 'bias']
+        
+        for beta in betas:
+            cache = []
+            for bandit in results_all_reps['bandits_all_sessions']:
+                cache.append(getattr(bandit.logistic_reg, beta))
+            
+            setattr(logistic_reg, beta, np.mean(cache, axis=0))
+            setattr(logistic_reg, beta + '_CI', np.std(cache, axis=0))
+            
+        logistic_reg.scores_ = {1.0: [bandit.logistic_reg.test_score for bandit in results_all_reps['bandits_all_sessions']]}
+            
+        plot_logistic_regression(logistic_reg, ax=ax2)
+        ax2.set(title='')
+            
     
     # # == 2. Blockwise matching ==
     # c_frac, inc_frac, c_log_ratio, inc_log_ratio, rtn_log_ratio = results_all_reps['blockwise_stats']

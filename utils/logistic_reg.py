@@ -45,7 +45,7 @@ def prepare_logistic(choice, reward, trials_back=15):
 
     
 
-def logistic_regression(data, Y, solver='liblinear', penalty='l2', C=1):
+def logistic_regression(data, Y, solver='liblinear', penalty='l2', C=1, test_size=0.10):
     '''
     logistic regression (Reward trials + Unreward trials + Choice + bias)
     Han 20230208
@@ -53,7 +53,7 @@ def logistic_regression(data, Y, solver='liblinear', penalty='l2', C=1):
     trials_back = int(data.shape[1] / 3)
     
     # Do training
-    x_train, x_test, y_train, y_test = train_test_split(data, Y, test_size=0.15)
+    x_train, x_test, y_train, y_test = train_test_split(data, Y, test_size=test_size)
     logistic_reg = LogisticRegression(solver=solver, fit_intercept=True, penalty='l2', C=1, n_jobs=1)
     logistic_reg.fit(x_train, y_train)
     
@@ -118,7 +118,7 @@ def logistic_regression_CV(data, Y, Cs=10, cv=10, solver='liblinear', penalty='l
 
 
             
-def plot_logistic_regression(logistic_reg, ax=None):
+def plot_logistic_regression(logistic_reg, ax=None, ls='-o'):
     if ax is None:
         fig, ax = plt.subplots(1, 1)
         
@@ -128,7 +128,7 @@ def plot_logistic_regression(logistic_reg, ax=None):
 
     for name, col in plot_spec.items():
         mean = getattr(logistic_reg, name)
-        ax.plot(x if name != 'bias' else 1, mean, '-o' + col, label=name + ' $\pm$ CI')
+        ax.plot(x if name != 'bias' else 1, mean, ls + col, label=name + ' $\pm$ CI')
 
         if if_CV:  # From cross validation
             CI = getattr(logistic_reg, name + '_CI')
@@ -141,7 +141,8 @@ def plot_logistic_regression(logistic_reg, ax=None):
     if if_CV:
         score_mean = np.mean(logistic_reg.scores_[1.0])
         score_std = np.std(logistic_reg.scores_[1.0])
-        ax.set(title=f'{logistic_reg.cv}-fold CV, score $\pm$ std = {score_mean:.3g} $\pm$ {score_std:.2g}\n'
+        if hasattr(logistic_reg, 'cv'):
+            ax.set(title=f'{logistic_reg.cv}-fold CV, score $\pm$ std = {score_mean:.3g} $\pm$ {score_std:.2g}\n'
                      f'best C = {logistic_reg.C_[0]}')
     else:
         ax.set(title=f'train: {logistic_reg.train_score:.3g}, test: {logistic_reg.test_score:.3g}')
