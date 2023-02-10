@@ -125,7 +125,7 @@ def plot_one_session(bandit, fig='', plottype='2lickport'):
     
     # == WSLS ===
     ax3 = fig.add_subplot(gs[1, 1])
-    plot_wsls(bandit.p_wsls, ax=ax3)
+    # plot_wsls(bandit.p_wsls, ax=ax3)
     
     # == Logistic regression ==
     if hasattr(bandit, 'logistic_reg'):
@@ -223,6 +223,29 @@ def plot_all_reps(results_all_reps):
     ax1.plot(xx, np.mean(yy, axis=0), 'k', lw=4)   # Average fitting
     
     # == 3. WSLS ===
+    ax2 = fig.get_axes()[2]
+    p_lookup = ('p_stay_win',
+            'p_stay_win_L',
+            'p_stay_win_R',
+            'p_switch_lose',
+            'p_switch_lose_L',
+            'p_switch_lose_R',
+            )
+    
+    # Fake group data to reuse the plotting function 
+    p_wsls = results_all_reps['bandits_all_sessions'][0].p_wsls
+    
+    for name in p_wsls.keys():
+        if '_CI' in name: continue
+        
+        cache = []
+        for bandit in results_all_reps['bandits_all_sessions']:
+            cache.append(bandit.p_wsls[name])
+        
+        p_wsls[name] = np.mean(cache)
+        p_wsls[name + '_CI'] = np.std(cache, axis=0)/np.sqrt(results_all_reps['n_reps'])
+    
+    plot_wsls(p_wsls, ax=ax2)
     
     # == 4. Plot all logistic regressions ==
     if_logistic = hasattr(results_all_reps['bandits_all_sessions'][0], 'logistic_reg')
@@ -242,14 +265,14 @@ def plot_all_reps(results_all_reps):
                 cache.append(getattr(bandit.logistic_reg, beta))
             
             setattr(logistic_reg, beta, np.mean(cache, axis=0))
-            setattr(logistic_reg, beta + '_CI', np.std(cache, axis=0))
+            setattr(logistic_reg, beta + '_CI', np.std(cache, axis=0)/np.sqrt(results_all_reps['n_reps']))
             
         logistic_reg.scores_ = {1.0: [bandit.logistic_reg.test_score for bandit in results_all_reps['bandits_all_sessions']]}
             
         plot_logistic_regression(logistic_reg, ax=ax2)
         
         h, l = ax2.get_legend_handles_labels()
-        ax2.legend(h[:4], l[:4])
+        ax2.legend(h[-4:], [Rf'$\beta$_{a} $\pm$ sem' for a in ('RewC', 'UnrC', 'C', 'bias')])
         ax2.set(title='')
             
     
