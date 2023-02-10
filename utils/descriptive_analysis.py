@@ -1,17 +1,64 @@
 '''
-Logistic regression on choice and reward history
+Descriptive analysis for the foraing task
 
-Use the model in Hattori 2019 https://www.sciencedirect.com/science/article/pii/S0092867419304465?via%3Dihub
+1. Win-stay-lose-shift probabilities
+2. Logistic regression on choice and reward history
+   Use the model in Hattori 2019 https://www.sciencedirect.com/science/article/pii/S0092867419304465?via%3Dihub
+            logit (p_R) ~ Rewarded choice + Unrewarded choice + Choice + Bias
+  
+Assumed format:
+    choice = np.array([0, 1, 1, 0, ...])  # 0 = L, 1 = R
+    reward = np.array([0, 0, 0, 1, ...])  # 0 = Unrew, 1 = Reward
 
-logit (p_R) ~ Rewarded choice + Unrewarded choice + Choice + Bias
-
-Han 20230208
+Han Hou, Feb 2023
 '''
 
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+
+
+def win_stay_lose_shift(choice, reward):
+    '''
+    Compute p(stay|win), p(shift|lose), and separately for two sides, i.e., p(stay|win in R), etc.
+    
+    choice = np.array([0, 1, 1, 0, ...])  # 0 = L, 1 = R
+    reward = np.array([0, 0, 0, 1, ...])  # 0 = Unrew, 1 = Reward
+    
+    ---
+    return: dict{'p_stay_win', 'p_stay_win_CI', ...}
+    '''
+    
+    stays = np.diff(choice) == 0
+    switches = np.diff(choice) != 0
+    wins = reward[:-1] == 1
+    loses = reward[:-1] == 0
+    Ls = choice[:-1] == 0
+    Rs = choice[:-1] == 1
+    
+    p_wsls = {}
+    p_lookup = {'p_stay_win':    (stays & wins, wins),   # 'p(y|x)': (y * x, x)
+                'p_stay_win_L':  (stays & wins & Ls, wins & Ls),
+                'p_stay_win_R':  (stays & wins & Rs, wins & Rs),
+                'p_switch_lose': (switches & loses, loses),
+                'p_switch_lose_L': (switches & loses & Ls, loses & Ls),
+                'p_switch_lose_R': (switches & loses & Rs, loses & Rs),
+                }
+
+    for name, (k, n) in p_lookup.items():
+        p_wsls[name], p_wsls[name + '_CI'] = _binomial(np.sum(k), np.sum(n))
+        
+    return p_wsls
+
+
+def _binomial(k, n):
+    '''
+    Get p and its confidence interval
+    '''
+    p = k / n
+    return p, 1.96 * np.sqrt(p * (1 - p) / n)
+
 
 def prepare_logistic(choice, reward, trials_back=15):
     '''    
@@ -101,7 +148,7 @@ def logistic_regression_CV(data, Y, Cs=10, cv=10, solver='liblinear', penalty='l
     coefs_paths = logistic_reg_refit.coefs_paths_[1.0][:, 0, :]
     coefs_mean = np.mean(coefs_paths, axis=0)
     coefs_CI = np.std(coefs_paths, axis=0) * 1.96
-           
+        
     logistic_reg_refit.b_RewC = coefs_mean[trials_back - 1::-1]
     logistic_reg_refit.b_RewC_CI = coefs_CI[trials_back - 1::-1]
     
@@ -117,6 +164,9 @@ def logistic_regression_CV(data, Y, Cs=10, cv=10, solver='liblinear', penalty='l
     return logistic_reg_refit, logistic_reg_cv
 
 
+
+
+# ----- Plotting functions -----
             
 def plot_logistic_regression(logistic_reg, ax=None, ls='-o'):
     if ax is None:
@@ -143,7 +193,7 @@ def plot_logistic_regression(logistic_reg, ax=None, ls='-o'):
         score_std = np.std(logistic_reg.scores_[1.0])
         if hasattr(logistic_reg, 'cv'):
             ax.set(title=f'{logistic_reg.cv}-fold CV, score $\pm$ std = {score_mean:.3g} $\pm$ {score_std:.2g}\n'
-                     f'best C = {logistic_reg.C_[0]}')
+                    f'best C = {logistic_reg.C_[0]}')
     else:
         ax.set(title=f'train: {logistic_reg.train_score:.3g}, test: {logistic_reg.test_score:.3g}')
     
@@ -152,3 +202,26 @@ def plot_logistic_regression(logistic_reg, ax=None, ls='-o'):
     ax.axhline(y=0, color='k', linestyle=':', linewidth=0.5)
     
     return ax
+
+
+def plot_wsls(p_wsls, ax=None):
+    if ax is None:
+        fig, ax = plt.subplots(1,1)
+    
+    x = 0
+    xlabel = []
+    for i, name in enumerate(['stay_win', 'switch_lose']):    
+        ax.bar(x, p_wsls[f'p_{name}'], 
+               yerr=p_wsls[f'p_{name}_CI'],
+               color='k', label='all')
+        x += 1
+        for side, col in (('L', 'r'), ('R', 'b')):
+            ax.bar(x, p_wsls[f'p_{name}_{side}'], 
+                   yerr=p_wsls[f'p_{name}_{side}_CI'],
+                   color=col, label=side)
+            x += 1
+    
+    ax.set(xticks=[1, 4], xticklabels=['p(stay | win)', 'p(shift | lose)'])
+    h, l = ax.get_legend_handles_labels()
+    ax.legend(h[:3], l[:3])
+    ax.set(ylim=(0, 1))

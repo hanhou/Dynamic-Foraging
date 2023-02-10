@@ -13,7 +13,7 @@ from scipy import ndimage
 
 from matplotlib.gridspec import GridSpec
 from utils.helper_func import seaborn_style, sigmoid   
-from utils.logistic_reg import plot_logistic_regression
+from utils.descriptive_analysis import plot_logistic_regression, plot_wsls
 
 
 plt.rcParams.update({'font.size': 13})
@@ -68,7 +68,7 @@ def plot_one_session(bandit, fig='', plottype='2lickport'):
     # gs = GridSpec(2,3, top = 0.85)        
     # ax = fig.add_subplot(gs[0,0:2])
 
-    gs = GridSpec(2, 2, top = 0.80, width_ratios=[1, 2.5])        
+    gs = GridSpec(2, 3, top = 0.80, width_ratios=[1, 1, 1.5])        
     ax = fig.add_subplot(gs[0, :])
 
     if not bandit.if_varying_amplitude:                                    
@@ -106,7 +106,7 @@ def plot_one_session(bandit, fig='', plottype='2lickport'):
         
     ax.legend(fontsize = 10)
      
-    ax.set_yticks([0,1])
+    ax.set_yticks([0, 1])
     ax.set_yticklabels(['Left','Right'])
     
     # Efficiency
@@ -123,9 +123,13 @@ def plot_one_session(bandit, fig='', plottype='2lickport'):
     ax1.plot(xx, yy, 'k--')
     ax1.set(xlabel=f'$p_R - p_L$ (win = {bandit.psychometric_win} trials)', ylabel='Fraction choose right')
     
+    # == WSLS ===
+    ax3 = fig.add_subplot(gs[1, 1])
+    plot_wsls(bandit.p_wsls, ax=ax3)
+    
     # == Logistic regression ==
     if hasattr(bandit, 'logistic_reg'):
-        ax2 = fig.add_subplot(gs[1, 1])
+        ax2 = fig.add_subplot(gs[1, 2])
         plot_logistic_regression(bandit.logistic_reg, ax=ax2, ls='--')
         ax2.set(title='')
     
@@ -218,9 +222,13 @@ def plot_all_reps(results_all_reps):
     
     ax1.plot(xx, np.mean(yy, axis=0), 'k', lw=4)   # Average fitting
     
-    # == 3. Plot all logistic regressions ==
-    if hasattr(results_all_reps['bandits_all_sessions'][0], 'logistic_reg'):
-        ax2 = fig.get_axes()[2]
+    # == 3. WSLS ===
+    
+    # == 4. Plot all logistic regressions ==
+    if_logistic = hasattr(results_all_reps['bandits_all_sessions'][0], 'logistic_reg')
+    
+    if if_logistic:
+        ax2 = fig.get_axes()[3]
         
         # Fake a CV class using fittings across simulation runs 
         logistic_reg = results_all_reps['bandits_all_sessions'][0].logistic_reg
@@ -239,6 +247,9 @@ def plot_all_reps(results_all_reps):
         logistic_reg.scores_ = {1.0: [bandit.logistic_reg.test_score for bandit in results_all_reps['bandits_all_sessions']]}
             
         plot_logistic_regression(logistic_reg, ax=ax2)
+        
+        h, l = ax2.get_legend_handles_labels()
+        ax2.legend(h[:4], l[:4])
         ax2.set(title='')
             
     

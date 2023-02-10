@@ -30,7 +30,7 @@ from models.bandit_model import BanditModelRestless as BanditRestless
 
 from utils.foraging_testbed_plots import plot_all_reps, plot_para_scan, plot_model_compet, plot_one_session
 from utils.helper_func import fit_sigmoid_p_choice
-from utils.logistic_reg import prepare_logistic, logistic_regression, logistic_regression_CV
+from utils.descriptive_analysis import prepare_logistic, logistic_regression, logistic_regression_CV, win_stay_lose_shift
 
 methods = [ 
             # 'serial',
@@ -72,13 +72,17 @@ def run_one_session(bandit, para_scan = False, para_optim = False, if_logistic=T
         bandit.psychometric_mean_p_diff = mean_p_diff
         bandit.psychometric_mean_choice_R_frac = mean_choice_R_frac
         
-        # -- 2. Logistic regression --
+        # -- 2. WSLS --
+        choice = bandit.choice_history[0]   # choice: [0, 1, 1, 0]
+        reward = np.sum(bandit.reward_history, axis=0)      # reward: [0, 0, 0, 1]
+        bandit.p_wsls = win_stay_lose_shift(choice, reward)
+        
         if if_logistic:
-            choice = bandit.choice_history[0]   # choice: [0, 1, 1, 0]
-            reward = np.sum(bandit.reward_history, axis=0)      # reward: [0, 0, 0, 1]
+            # -- 3. Logistic regression --
             data, Y = prepare_logistic(choice, reward, trials_back=20)
             logistic_reg = logistic_regression(data, Y, solver='liblinear', penalty='l2')
             bandit.logistic_reg = logistic_reg
+
         
         # # -- 2. Blockwise statistics --
         # temp_nans = np.zeros(bandit.n_blocks)
