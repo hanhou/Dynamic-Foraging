@@ -13,7 +13,7 @@ from scipy import ndimage
 
 from matplotlib.gridspec import GridSpec
 from utils.helper_func import seaborn_style, sigmoid   
-from utils.descriptive_analysis import plot_logistic_regression, plot_wsls
+from utils.descriptive_analysis import plot_logistic_regression, plot_wsls, decode_betas
 
 
 plt.rcParams.update({'font.size': 13})
@@ -262,12 +262,15 @@ def plot_all_reps(results_all_reps):
         for beta in betas:
             cache = []
             for bandit in results_all_reps['bandits_all_sessions']:
-                cache.append(getattr(bandit.logistic_reg, beta))
+                cache.append(getattr(bandit.logistic_reg, beta)[0, :])
             
-            setattr(logistic_reg, beta, np.mean(cache, axis=0))
-            setattr(logistic_reg, beta + '_CI', np.std(cache, axis=0)/np.sqrt(results_all_reps['n_reps']))
+            mean = np.mean(cache, axis=0)
+            sem = np.std(cache, axis=0) / np.sqrt(results_all_reps['n_reps']) * 1.96
+            setattr(logistic_reg, beta, np.atleast_2d(mean))
+            setattr(logistic_reg, beta + '_CI', 
+                    np.stack([mean - sem, mean + sem]))
             
-        logistic_reg.scores_ = {1.0: [bandit.logistic_reg.test_score for bandit in results_all_reps['bandits_all_sessions']]}
+        #logistic_reg.scores_ = {1.0: [bandit.logistic_reg.test_score for bandit in results_all_reps['bandits_all_sessions']]}
             
         plot_logistic_regression(logistic_reg, ax=ax2)
         

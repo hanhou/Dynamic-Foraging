@@ -90,32 +90,27 @@ def prepare_logistic(choice, reward, trials_back=15):
     
     return data, Y
 
-    
 
 def logistic_regression(data, Y, solver='liblinear', penalty='l2', C=1, test_size=0.10):
     '''
-    logistic regression (Reward trials + Unreward trials + Choice + bias)
+    Run one logistic regression fit
+    (Reward trials + Unreward trials + Choice + bias)
     Han 20230208
     '''
     trials_back = int(data.shape[1] / 3)
     
     # Do training
-    x_train, x_test, y_train, y_test = train_test_split(data, Y, test_size=test_size)
-    logistic_reg = LogisticRegression(solver=solver, fit_intercept=True, penalty='l2', C=1, n_jobs=1)
-    logistic_reg.fit(x_train, y_train)
+    # x_train, x_test, y_train, y_test = train_test_split(data, Y, test_size=test_size)
+    logistic_reg = LogisticRegression(solver=solver, fit_intercept=True, penalty=penalty, C=C, n_jobs=1)
+    logistic_reg.fit(data, Y)
+    output = np.concatenate([logistic_reg.coef_[0], logistic_reg.intercept_])
     
-    # Decode fitted betas
-    coef = logistic_reg.coef_[0]
-    logistic_reg.b_RewC = coef[trials_back - 1::-1]
-    logistic_reg.b_UnrC = coef[2 * trials_back - 1: trials_back - 1:-1]
-    logistic_reg.b_C = coef[3 * trials_back - 1:2 * trials_back - 1:-1]
-    logistic_reg.bias = logistic_reg.intercept_
-
-    logistic_reg.train_score = logistic_reg.score(x_train, y_train)
-    logistic_reg.test_score = logistic_reg.score(x_test, y_test)
+    (logistic_reg.b_RewC, 
+    logistic_reg.b_UnrC, 
+    logistic_reg.b_C, 
+    logistic_reg.bias) = decode_betas(output)
     
-    return logistic_reg
-
+    return output, logistic_reg
 
 
 def logistic_regression_CV(data, Y, Cs=10, cv=10, solver='liblinear', penalty='l2', n_jobs=-1):
@@ -133,38 +128,77 @@ def logistic_regression_CV(data, Y, Cs=10, cv=10, solver='liblinear', penalty='l
     
     Han 20230208
     '''
-    trials_back = int(data.shape[1] / 3)  # Hard-coded
-
     # Do cross validation, try different Cs
     logistic_reg_cv = LogisticRegressionCV(solver=solver, fit_intercept=True, penalty=penalty, Cs=Cs, cv=cv, n_jobs=n_jobs)
     logistic_reg_cv.fit(data, Y)
 
-    # Rerun using the best C (average over multiple best Cs, if any)
-    best_C = logistic_reg_cv.C_
-    logistic_reg_refit = LogisticRegressionCV(solver=solver, fit_intercept=True, penalty=penalty, Cs=[best_C], cv=cv, n_jobs=n_jobs)
-    logistic_reg_refit.fit(data, Y)
+    return logistic_reg_cv
 
+
+def bootstrap(func, data, Y, n_bootstrap=1000, **kwargs):
+    # Generate bootstrap samples
+    indices = np.random.choice(range(Y.shape[0]), size=(n_bootstrap, Y.shape[0]), replace=True)
+    bootstrap_Y = [Y[index] for index in indices]
+    bootstrap_data = [data[index, :] for index in indices]
+    
+    # Fit the logistic regression model to each bootstrap sample
+    outputs = np.array([func(data, Y, **kwargs)[0] for data, Y in zip(bootstrap_data, bootstrap_Y)])
+    
+    # Get bootstrap mean, std, and CI
+    bs = {'raw': outputs,
+          'mean': np.mean(outputs, axis=0),
+          'std': np.std(outputs, axis=0),
+          'CI_lower': np.percentile(outputs, 2.5, axis=0),
+          'CI_upper': np.percentile(outputs, 97.5, axis=0)}
+    
+    return bs
+    
+    
+def decode_betas(coef):
     # Decode fitted betas
-    coefs_paths = logistic_reg_refit.coefs_paths_[1.0][:, 0, :]
-    coefs_mean = np.mean(coefs_paths, axis=0)
-    coefs_CI = np.std(coefs_paths, axis=0) * 1.96
+    coef = np.atleast_2d(coef)
+    trials_back = int((coef.shape[1] - 1) / 3)  # Hard-coded
+    b_RewC = coef[:, trials_back - 1::-1]
+    b_UnrC = coef[:, 2 * trials_back - 1: trials_back - 1:-1]
+    b_C = coef[:, 3 * trials_back - 1:2 * trials_back - 1:-1]
+    bias = coef[:, -1:]
+    return b_RewC, b_UnrC, b_C, bias
+
+
+def logistic_regression_bootstrap(data, Y, n_bootstrap=1000, **kwargs):
+    '''
+    1. use cross-validataion to determine the best L2 penality parameter, C
+    2. use bootstrap to determine the CI and std
+    '''
+    
+    # Cross validation
+    logistic_reg = logistic_regression_CV(data, Y, **kwargs)
+    best_C = logistic_reg.C_
+    para_mean = np.hstack([logistic_reg.coef_[0], logistic_reg.intercept_])
+    
+    (logistic_reg.b_RewC, 
+     logistic_reg.b_UnrC, 
+     logistic_reg.b_C, 
+     logistic_reg.bias) = decode_betas(para_mean)
+    
+    # Bootstrap
+    if n_bootstrap > 0:
+        bs = bootstrap(logistic_regression, data, Y, n_bootstrap=n_bootstrap, C=best_C[0], **kwargs)
         
-    logistic_reg_refit.b_RewC = coefs_mean[trials_back - 1::-1]
-    logistic_reg_refit.b_RewC_CI = coefs_CI[trials_back - 1::-1]
+        logistic_reg.coefs_bootstrap = bs
+        (logistic_reg.b_RewC_CI, 
+        logistic_reg.b_UnrC_CI, 
+        logistic_reg.b_C_CI, 
+        logistic_reg.bias_CI) = decode_betas(np.vstack([bs['CI_lower'], bs['CI_upper']]))
+
+        # # Override with bootstrap mean
+        # (logistic_reg.b_RewC, 
+        # logistic_reg.b_UnrC, 
+        # logistic_reg.b_C, 
+        # logistic_reg.bias) = decode_betas(np.vstack([bs['mean'], bs['mean']]))
     
-    logistic_reg_refit.b_UnrC = coefs_mean[2 * trials_back - 1:trials_back - 1:-1]
-    logistic_reg_refit.b_UnrC_CI = coefs_CI[2 * trials_back - 1:trials_back - 1:-1]
+    return logistic_reg
     
-    logistic_reg_refit.b_C = coefs_mean[3 * trials_back - 1:2 * trials_back - 1:-1]
-    logistic_reg_refit.b_C_CI = coefs_CI[3 * trials_back - 1:2 * trials_back - 1:-1]
-    
-    logistic_reg_refit.bias = coefs_mean[-1]
-    logistic_reg_refit.bias_CI = coefs_CI[-1]
-
-    return logistic_reg_refit, logistic_reg_cv
-
-
-
 
 # ----- Plotting functions -----
             
@@ -172,30 +206,32 @@ def plot_logistic_regression(logistic_reg, ax=None, ls='-o'):
     if ax is None:
         fig, ax = plt.subplots(1, 1)
         
+    # return 
     if_CV = hasattr(logistic_reg, 'b_RewC_CI') # If cross-validated
-    x = range(1, len(logistic_reg.b_RewC) + 1)    
+    x = np.arange(1, logistic_reg.b_RewC.shape[1] + 1)
     plot_spec = {'b_RewC': 'g', 'b_UnrC': 'r', 'b_C': 'b', 'bias': 'k'}    
 
     for name, col in plot_spec.items():
         mean = getattr(logistic_reg, name)
-        ax.plot(x if name != 'bias' else 1, mean, ls + col, label=name + ' $\pm$ CI')
+        ax.plot(x if name != 'bias' else 1, np.atleast_2d(mean)[0, :], ls + col, label=name + ' $\pm$ CI')
 
         if if_CV:  # From cross validation
-            CI = getattr(logistic_reg, name + '_CI')
+            CI = np.atleast_2d(getattr(logistic_reg, name + '_CI'))
             ax.fill_between(x=x if name != 'bias' else [1], 
-                            y1=mean - CI, 
-                            y2=mean + CI,
+                            y1=CI[0, :], 
+                            y2=CI[1, :],
                             color=col,
                             alpha=0.3)
         
-    if if_CV:
+    if if_CV and hasattr(logistic_reg, "scores_"):
         score_mean = np.mean(logistic_reg.scores_[1.0])
         score_std = np.std(logistic_reg.scores_[1.0])
         if hasattr(logistic_reg, 'cv'):
             ax.set(title=f'{logistic_reg.cv}-fold CV, score $\pm$ std = {score_mean:.3g} $\pm$ {score_std:.2g}\n'
-                    f'best C = {logistic_reg.C_[0]}')
+                    f'best C = {logistic_reg.C_[0]:.3g}')
     else:
-        ax.set(title=f'train: {logistic_reg.train_score:.3g}, test: {logistic_reg.test_score:.3g}')
+        pass
+        # ax.set(title=f'train: {logistic_reg.train_score:.3g}, test: {logistic_reg.test_score:.3g}')
     
     ax.legend()
     ax.set(xlabel='Past trials', xticks=x, ylabel='Logistic regression coeffs')
