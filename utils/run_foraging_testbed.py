@@ -80,7 +80,7 @@ def run_one_session(bandit, para_scan = False, para_optim = False, if_logistic=T
         if if_logistic:
             # -- 3. Logistic regression --
             data, Y = prepare_logistic(choice, reward, trials_back=20)
-            logistic_reg = logistic_regression(data, Y, solver='liblinear', penalty='l2')
+            logistic_reg = logistic_regression(data, Y, solver='liblinear', penalty='l2')[1]
             bandit.logistic_reg = logistic_reg
 
         
