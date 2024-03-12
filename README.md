@@ -21,6 +21,11 @@ You can run it online [![Binder](https://mybinder.org/badge_logo.svg)](https://m
 [Behavior Model Comparison](https://nbviewer.jupyter.org/github/hanhou/Dynamic-Foraging/blob/master/Behavior_Model_Comparison.ipynb)<br>
 [Behavior Model Comparison more](https://nbviewer.jupyter.org/github/hanhou/Dynamic-Foraging/blob/master/Behavior_Model_Comparison_more.ipynb)
 
+## 4. Slides
+1. [Simulations](https://alleninstitute.sharepoint.com/:p:/s/NeuralDynamics/EZh0Zc5bieFBmCypeKhX7TgBH853E0kxmkt9W9mr802W8w?e=Zdi3gE)
+2. [Fitting animal data](https://alleninstitute.sharepoint.com/:p:/s/NeuralDynamics/EcpH2EqFjYVGn9vv4QeLO8YBJvBK6siFEN20N_tmZA80mw?e=DlKIgi)
+3. [Optimal forager and foraging efficiency](https://alleninstitute.sharepoint.com/:p:/s/NeuralDynamics/EejfBIEvFA5DjmfOZV8atWgBjLAFlERSdEGnonIAaIuG_w?e=kyPWcP)
+
 ---
 I'm new to Python, so please let me know if you find any bugs:)
 
