@@ -63,6 +63,9 @@ import numpy as np
 from models.full_state_Q import FullStateQ
 from utils.helper_func import softmax, choose_ps
 
+from models.random_walk import RandomWalkReward
+
+
 LEFT = 0
 RIGHT = 1
 
@@ -94,6 +97,7 @@ class Bandit:
                  p_reward_seed_override = '',  # If true, use the same random seed for generating p_reward!!
                  p_reward_sum = 0.45,   # Gain of reward. Default = 0.45
                  p_reward_pairs = None,  # Full control of reward prob
+                 block_size_base = 80,
                  
                  m_AmB1 = 1,  # For choice pattern {AmB1}
                  
@@ -107,6 +111,8 @@ class Bandit:
                  if_record_Q = '',
 
                  ):     
+        
+        self.task = 'Bandit_block'
         
         self.block_size_mean = block_size_mean
         self.block_size_sd = block_size_sd
@@ -125,7 +131,7 @@ class Bandit:
         self.loss_count_threshold_std = loss_count_threshold_std
         self.p_reward_seed_override = p_reward_seed_override
         self.p_reward_sum = p_reward_sum
-        self.p_reward_pairs = p_reward_pairs
+        self.p_reward_pairs = p_reward_pairs if p_reward_pairs is not None else [[.4,.05],[.3857,.0643],[.3375,.1125],[.225,.225]]
         self.m_AmB1 = m_AmB1
         
         self.pattern_meliorate_threshold = pattern_meliorate_threshold
@@ -184,7 +190,7 @@ class Bandit:
         self.reward_history = np.zeros([self.k, self.n_trials])    # Reward history, separated for each port (Corrado Newsome 2005)
         
         # Generate baiting prob in block structure
-        self.generate_p_reward(self.block_size_mean, self.block_size_sd)
+        self.generate_p_reward()
         
         # Prepare reward for the first trial
         if not self.if_varying_amplitude:  # Varying reward prob.
@@ -241,19 +247,14 @@ class Bandit:
         else:
             self.description = self.forager
             
-    def generate_p_reward(self, block_size_base = 80, block_size_sd = 20,
-                                p_reward_pairs = [[.4,.05],[.3857,.0643],[.3375,.1125],[.225,.225]],  # (Bari-Cohen 2019)  
-                         ):  
+    def generate_p_reward(self):  
         
         # If para_optim, fix the random seed to ensure that p_reward schedule is fixed for all candidate parameters
         # However, we should make it random during a session (see the last line of this function)
         if self.p_reward_seed_override != '':
             np.random.seed(self.p_reward_seed_override)
             
-        if self.p_reward_pairs == None:            
-            p_reward_pairs = np.array(p_reward_pairs) / 0.45 * self.p_reward_sum
-        else:  # Full override of p_reward
-            p_reward_pairs = self.p_reward_pairs
+        p_reward_pairs = self.p_reward_pairs
                 
         # Adapted from Marton's code
         n_trials_now = 0
@@ -268,7 +269,7 @@ class Bandit:
         
             # Number of trials in each block (Gaussian distribution)
             # I treat p_reward[0,1] as the ENTIRE lists of reward probability. RIGHT = 0, LEFT = 1. HH
-            n_trials_this_block = np.rint(np.random.normal(block_size_base, block_size_sd)).astype(int) 
+            n_trials_this_block = np.rint(np.random.normal(self.block_size_mean, self.block_size_sd)).astype(int) 
             n_trials_this_block = min(n_trials_this_block, self.n_trials - n_trials_now)
             
             block_size.append(n_trials_this_block)
@@ -681,4 +682,91 @@ class Bandit:
         for t in range(self.n_trials):        
             action = self.act()
             self.step(action)
+            
+    def compute_foraging_eff(self, para_optim):
+        # -- 1. Foraging efficiency = Sum of actual rewards / Maximum number of rewards that could have been collected --
+        self.actual_rewards = np.sum(self.reward_history)
+        
+        '''Don't know which one is the fairest''' #???
+        # Method 1: Average of max(p_reward) 
+        # self.maximum_rewards = np.sum(np.max(self.p_reward, axis = 0)) 
+        # Method 2: Average of sum(p_reward).   [Corrado et al 2005: efficienty = 50% for choosing only one color]
+        # self.maximum_rewards = np.sum(np.sum(self.p_reward, axis = 0)) 
+        # Method 3: Maximum reward given the actual reward_available (one choice per trial constraint)
+        # self.maximum_rewards = np.sum(np.any(self.reward_available, axis = 0))  # Equivalent to sum(max())
+        # Method 4: Sum of all ever-baited rewards (not fair)  
+        # self.maximum_rewards = np.sum(np.sum(self.reward_available, axis = 0))
+        
+        ''' Use ideal-p^-optimal'''
+        # self.maximum_rewards = self.rewards_IdealpHatGreedy
+        if not para_optim: 
+            self.maximum_rewards = self.rewards_IdealpHatOptimal
+        else:  # If in optimization, fast and good
+            self.maximum_rewards = self.rewards_IdealpHatGreedy
+            
+        self.foraging_efficiency = self.actual_rewards / self.maximum_rewards
  
+
+
+
+class BanditRestless(Bandit):
+    
+    def __init__(self, p_min=0.01, p_max=1, sigma=0.15, mean=0, **kwargs):
+        super().__init__(**kwargs)
+        
+        self.task = 'Bandit_restless'
+        self.p_min = p_min
+        self.p_max = p_max
+        self.sigma = sigma
+        self.mean = mean
+        
+        self.if_baited = False
+        
+
+    def generate_p_reward(self):
+
+        restless_bandit = RandomWalkReward(p_min=self.p_min, p_max=self.p_max, sigma=self.sigma, mean=self.mean)
+
+        # If para_optim, fix the random seed to ensure that p_reward schedule is fixed for all candidate parameters
+        # However, we should make it random during a session (see the last line of this function)
+        if self.p_reward_seed_override != '':
+            np.random.seed(self.p_reward_seed_override)
+
+        while restless_bandit.trial_now < self.n_trials - 1:     
+            restless_bandit.next_trial()
+
+        p_reward = np.vstack([restless_bandit.trial_rwd_prob['L'],
+                              restless_bandit.trial_rwd_prob['R']])
+
+        self.n_blocks = 0
+        self.p_reward = p_reward
+        self.block_size = []
+        self.p_reward_fraction = p_reward[RIGHT, :] / \
+            (np.sum(p_reward, axis=0))   # For future use
+        self.p_reward_ratio = p_reward[RIGHT, :] / \
+            p_reward[LEFT, :]   # For future use
+
+        # We should make it random afterwards
+        np.random.seed()
+        
+        self.rewards_IdealpHatOptimal = 1
+        self.rewards_IdealpHatGreedy = 1
+        
+
+    def compute_foraging_eff(self, para_optim):
+        
+        # -- 1. Foraging efficiency = Sum of actual rewards / Maximum number of rewards that could have been collected --
+        self.actual_rewards = np.sum(self.reward_history)
+        
+        '''Don't know which one is the fairest''' #???
+        # Method 1: Average of max(p_reward) 
+        self.maximum_rewards = np.sum(np.max(self.p_reward, axis = 0))
+        
+        # Method 2: Average of sum(p_reward).   [Corrado et al 2005: efficienty = 50% for choosing only one color]
+        # self.maximum_rewards = np.sum(np.sum(self.p_reward, axis = 0)) 
+        # Method 3: Maximum reward given the actual reward_available (one choice per trial constraint)
+        # self.maximum_rewards = np.sum(np.any(self.reward_available, axis = 0))  # Equivalent to sum(max())
+        # Method 4: Sum of all ever-baited rewards (not fair)  
+        # self.maximum_rewards = np.sum(np.sum(self.reward_available, axis = 0))
+            
+        self.foraging_efficiency = self.actual_rewards / self.maximum_rewards
